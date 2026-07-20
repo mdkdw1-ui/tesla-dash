@@ -6,9 +6,6 @@
   <title>Tesla Driving Control Dashboard</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Leaflet.js CSS & JS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- CryptoJS CDN -->
@@ -16,8 +13,16 @@
   <!-- Firebase SDK Compat v10 -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  
+  <!-- 🗺️ Leaflet Open-Source Map Engine CSS & JS (별도 API 키 절대 필요 없음) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
   <style>
     #map { height: 500px; z-index: 1; }
+    /* 오픈소스 지도 팝업 말풍선 내부 가시성 개선 */
+    .leaflet-popup-custom { color: #111827; font-size: 12px; line-height: 1.4; font-family: sans-serif; }
+    .leaflet-container { background: #1f2937 !important; }
   </style>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans min-h-screen flex items-center justify-center m-0 p-0">
@@ -55,35 +60,34 @@
 
   <!-- 2. 메인 관제 시스템 레이어 -->
   <div id="appDashboard" class="hidden w-full min-h-screen flex flex-col md:flex-row bg-gray-900 text-gray-100">
-    <!-- 사이드바 고도화 -->
+    <!-- 사이드바 -->
     <div class="w-full md:w-64 bg-gray-800 p-5 flex flex-col justify-between border-r border-gray-700 space-y-6">
       <div class="space-y-5">
         <h1 class="text-xl font-bold text-red-500 flex items-center gap-2">⚡ Tesla 관제 시스템</h1>
         
-        <!-- 🗺️ 지도 스타일 체인저 추가 -->
+        <!-- 🎨 오픈 지도 디자인 뷰 스위처 -->
         <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">🗺️ 지도 스타일 선호도</label>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">🗺️ 지도 배경 디자인</label>
           <select id="mapStyleSelect" onchange="changeMapStyle()" class="w-full bg-gray-700 text-white rounded p-2 text-sm border border-gray-600 focus:outline-none focus:border-red-500">
-            <option value="voyager" selected>🎨 화사한 컬러 지도 (추천)</option>
-            <option value="positron">⚪ 깔끔한 라이트 지도</option>
-            <option value="dark">🕶️ 시크한 다크 지도</option>
+            <option value="dark" selected>🌌 테슬라 다크 모드 (추천)</option>
+            <option value="voyager">🏙️ 모던 보야저 (라이트)</option>
+            <option value="osm">🗺️ 표준 오픈스트리트맵</option>
           </select>
         </div>
 
         <hr class="border-gray-700">
 
-        <!-- ⏱️ 원하는 시기별 조회 필터 추가 -->
+        <!-- 시기별 조회 필터 시스템 -->
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">🔍 주행 데이터 조회 모드</label>
           <select id="viewModeSelect" onchange="renderDynamicFilters()" class="w-full bg-gray-700 text-white rounded p-2 text-sm border border-gray-600 focus:outline-none focus:border-red-500">
-            <option value="individual">🏁 개별 주행기록별</option>
+            <option value="individual" selected>🏁 개별 주행기록별</option>
             <option value="daily">📅 일별 경로 합산</option>
             <option value="weekly">🗓️ 주간별 경로 합산</option>
             <option value="custom">⏳ 원하는 기간 지정</option>
           </select>
         </div>
 
-        <!-- 동적 조건 컨트롤러 컨테이너 -->
         <div id="dynamicFilterContainer" class="space-y-3"></div>
       </div>
       
@@ -102,9 +106,9 @@
       <!-- 지도 탭 -->
       <div id="mapTab" class="tab-content block space-y-5">
         <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
-          <div id="map" class="rounded bg-gray-700 mb-4"></div>
+          <!-- 오픈소스 지도 렌더링 컨테이너 -->
+          <div id="map" class="rounded bg-gray-700 mb-4 shadow-inner"></div>
           
-          <!-- 실시간 HUD 종합 정보창 -->
           <div class="grid grid-cols-3 gap-4 text-center">
             <div class="bg-gray-700 p-3 rounded shadow-inner"><span class="block text-xs text-gray-400">선택 기간 총 거리</span><span id="hud-distance" class="text-xl font-bold text-green-400">0.00 km</span></div>
             <div class="bg-gray-700 p-3 rounded shadow-inner"><span class="block text-xs text-gray-400">선택 기간 주행 횟수</span><span id="hud-battery" class="text-xl font-bold text-blue-400">0회</span></div>
@@ -112,7 +116,7 @@
           </div>
         </div>
 
-        <!-- 🚀 새로 추가된 고급 정보: 스마트 인사이츠 분석 리포트 -->
+        <!-- 스마트 인사이츠 분석 리포트 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="bg-gray-800 p-4 rounded-lg shadow-md border border-gray-700">
             <h3 class="text-sm font-semibold text-red-400 mb-2">💡 전비 효율 스마트 팁</h3>
@@ -144,7 +148,7 @@
 
   <script>
     const STORAGE_KEY = "secure_tesla_dashboard_tokens";
-    let db, allTrips = [], map, tileLayer, routeLayers = [], markers = [], effChart, tempChart;
+    let db, allTrips = [], map, tileLayer, routePolylines = [], mapMarkers = [], effChart, tempChart;
 
     window.onload = function() {
       if (!localStorage.getItem(STORAGE_KEY)) {
@@ -193,25 +197,34 @@
       }
     }
 
-    // 🗺️ 밝기 조절이 완벽히 지원되는 지도 엔진 초기화
+    // 🗺️ 오픈소스 Leaflet 지도 초기화
     function initMap() {
       if (map) return;
-      map = L.map('map').setView([37.5665, 126.9780], 11);
+      map = L.map('map', {
+        center: [37.5665, 126.9780],
+        zoom: 12,
+        zoomControl: true
+      });
       changeMapStyle();
     }
 
+    // 🎨 테마 타일 실시간 변경 교체 로직
     function changeMapStyle() {
-      if (tileLayer) map.removeLayer(tileLayer);
       const style = document.getElementById('mapStyleSelect').value;
-      
-      let tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'; // 🎨 기본값: 밝고 컬러풀한 프리미엄 테마
-      if (style === 'positron') tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'; // ⚪ 라이트 테마
-      if (style === 'dark') tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'; // 🕶️ 다크 테마
+      if (tileLayer) map.removeLayer(tileLayer);
 
-      tileLayer = L.tileLayer(tileUrl, { attribution: '&copy; CARTO' }).addTo(map);
+      let url = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'; // 기본: 다크 테마
+      let attr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+      if (style === 'voyager') {
+        url = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+      } else if (style === 'osm') {
+        url = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      }
+
+      tileLayer = L.tileLayer(url, { attribution: attr, maxZoom: 19 }).addTo(map);
     }
 
-    // 전체 DB 데이터를 가져와 고성능 객체배열 구조로 선원 파싱
     async function loadData() {
       try {
         const snapshot = await db.collection('driving').orderBy('date', 'desc').get();
@@ -270,7 +283,6 @@
       }
     }
 
-    // ⏳ 선택한 주기 모드(일별, 주간별, 기간별)에 따라 사이드바 세부 드롭다운 동적 생성
     function renderDynamicFilters() {
       const mode = document.getElementById('viewModeSelect').value;
       const container = document.getElementById('dynamicFilterContainer');
@@ -281,8 +293,7 @@
         select.id = "tripSelect";
         select.className = "w-full bg-gray-700 text-white rounded p-2 text-xs border border-gray-600 focus:outline-none";
         allTrips.forEach(t => {
-          const opt = document.createElement('option');
-          opt.value = t.id;
+          const opt = document.createElement('option'); opt.value = t.id;
           opt.innerText = t.dateObj.toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' 주행';
           select.appendChild(opt);
         });
@@ -291,8 +302,7 @@
       } 
       else if (mode === 'daily') {
         const days = [...new Set(allTrips.map(t => t.dateObj.toLocaleDateString('ko-KR')))];
-        const select = document.createElement('select');
-        select.id = "dateSelect";
+        const select = document.createElement('select'); select.id = "dateSelect";
         select.className = "w-full bg-gray-700 text-white rounded p-2 text-xs border border-gray-600 focus:outline-none";
         days.forEach(d => {
           const opt = document.createElement('option'); opt.value = d; opt.innerText = d;
@@ -303,15 +313,12 @@
       } 
       else if (mode === 'weekly') {
         const getWeekNumber = (d) => {
-          const date = new Date(d.getTime());
-          date.setHours(0,0,0,0);
+          const date = new Date(d.getTime()); date.setHours(0,0,0,0);
           date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
-          const week1 = new Date(date.getFullYear(), 0, 4);
-          return date.getFullYear() + "년 " + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7 + 1) + "주차";
+          return date.getFullYear() + "년 " + Math.round(((date.getTime() - new Date(date.getFullYear(), 0, 4).getTime()) / 86400000 - 3 + (new Date(date.getFullYear(), 0, 4).getDay() + 6) % 7) / 7 + 1) + "주차";
         };
         const weeks = [...new Set(allTrips.map(t => getWeekNumber(t.dateObj)))];
-        const select = document.createElement('select');
-        select.id = "weekSelect";
+        const select = document.createElement('select'); select.id = "weekSelect";
         select.className = "w-full bg-gray-700 text-white rounded p-2 text-xs border border-gray-600 focus:outline-none";
         weeks.forEach(w => {
           const opt = document.createElement('option'); opt.value = w; opt.innerText = w;
@@ -334,7 +341,7 @@
       updateDashboard();
     }
 
-    // 🏁 핵심 렌더러 연산: 다중 주행 묶음 선 꼬임 방지 연산 매핑 기술 탑재
+    // 🏁 동선 및 오토포커스 바운드 처리 핵심 연산부
     function updateDashboard() {
       const mode = document.getElementById('viewModeSelect').value;
       let targetTrips = [];
@@ -357,37 +364,46 @@
         const sStr = document.getElementById('startDateInput')?.value;
         const eStr = document.getElementById('endDateInput')?.value;
         if (sStr && eStr) {
-          const sDate = new Date(sStr + "T00:00:00");
-          const eDate = new Date(eStr + "T23:59:59");
+          const sDate = new Date(sStr + "T00:00:00"); const eDate = new Date(eStr + "T23:59:59");
           targetTrips = allTrips.filter(t => t.dateObj >= sDate && t.dateObj <= eDate);
         }
       }
 
-      // 맵 리셋
-      routeLayers.forEach(l => map.removeLayer(l)); routeLayers = [];
-      markers.forEach(m => map.removeLayer(m)); markers = [];
+      // 🧹 지도 위의 이전 레이어 제거 클리닝
+      routePolylines.forEach(p => map.removeLayer(p)); routePolylines = [];
+      mapMarkers.forEach(m => map.removeLayer(m)); mapMarkers = [];
 
       let totalKM = 0, totalBatUsed = 0, combinedWaypoints = [];
+      let boundsLatLngs = [];
 
-      // 여러 주행 기록이 묶였을 때, 서로 다른 목적지끼리 일직선으로 이어지는 오류 차단 (개별 레이어로 드로잉)
       targetTrips.forEach(trip => {
         totalKM += trip.moveKM;
         totalBatUsed += trip.useBattery;
 
-        const coords = trip.waypoints.map(wp => [wp.lat, wp.lng]);
-        if (coords.length > 0) {
-          const line = L.polyline(coords, { color: '#ef4444', weight: 5, opacity: 0.85 }).addTo(map);
-          routeLayers.push(line);
+        // Leaflet 전용 포맷 좌표 변환 ([lat, lng] 배열 구조)
+        const linePath = trip.waypoints.map(wp => [wp.lat, wp.lng]);
+        
+        if (linePath.length > 0) {
+          // 실선 오버레이 탑재
+          const polyline = L.polyline(linePath, {
+            color: '#ef4444',
+            weight: 5,
+            opacity: 0.85
+          }).addTo(map);
+          routePolylines.push(polyline);
 
-          // 출발/도착 지점별 상세 팝업 마커 부착
-          const sM = L.circleMarker(coords[0], { radius: 6, color: '#10b981', fillColor: '#10b981', fillOpacity: 1 }).addTo(map)
-            .bindPopup(`<b>🏁 출발</b> [${trip.dateObj.toLocaleDateString('ko-KR', {month:'short', day:'numeric'})} ${trip.dateObj.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'})}]`);
-          markers.push(sM);
+          linePath.forEach(coord => boundsLatLngs.push(coord));
 
-          if (coords.length > 1) {
-            const eM = L.circleMarker(coords[coords.length - 1], { radius: 6, color: '#f43f5e', fillColor: '#f43f5e', fillOpacity: 1 }).addTo(map)
-              .bindPopup(`<b>🏁 도착</b><br>거리: ${trip.moveKM.toFixed(2)} km<br>소모: ${trip.useBattery}%`);
-            markers.push(eM);
+          // 출발지 마커 핀 주입
+          const startMarker = L.marker(linePath[0]).addTo(map);
+          startMarker.bindPopup(`<div class="leaflet-popup-custom"><b>🟢 출발</b><br>${trip.dateObj.toLocaleDateString('ko-KR', {month:'short', day:'numeric'})} ${trip.dateObj.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'})}</div>`);
+          mapMarkers.push(startMarker);
+
+          // 도착지 마커 핀 주입
+          if (linePath.length > 1) {
+            const endMarker = L.marker(linePath[linePath.length - 1]).addTo(map);
+            endMarker.bindPopup(`<div class="leaflet-popup-custom"><b>🔴 도착</b><br>거리: ${trip.moveKM.toFixed(2)} km<br>소모: ${trip.useBattery}%</div>`);
+            mapMarkers.push(endMarker);
           }
         }
 
@@ -399,13 +415,13 @@
         });
       });
 
-      // 전체 경로가 한 눈에 들어오도록 오토 포커스 카메라 줌 연산
-      if (routeLayers.length > 0) {
-        const group = L.featureGroup(routeLayers);
-        map.fitBounds(group.getBounds(), { padding: [40, 40] });
+      // 🔍 최적의 바운더리로 카메라 자동 스케일 맞춤 포커싱
+      if (boundsLatLngs.length > 0) {
+        const bounds = L.latLngBounds(boundsLatLngs);
+        map.fitBounds(bounds, { padding: [40, 40] });
       }
 
-      // HUD 계계판 계산기 가동
+      // HUD 통계 계산 연산
       let avgEff = 0;
       if (totalKM > 0 && totalBatUsed > 0) {
         avgEff = Math.round((75000 * (totalBatUsed / 100)) / totalKM);
@@ -415,7 +431,7 @@
       document.getElementById('hud-battery').innerText = `${targetTrips.length}회 주행 묶음`;
       document.getElementById('hud-eff').innerText = `${totalBatUsed.toFixed(1)}% 소모 (${avgEff > 0 ? avgEff : '-'} Wh/km)`;
 
-      // 💡 [새 기능] 실시간 수집 인사이츠 요약 리포트 매칭 작성
+      // 스마트 텍스트 인사이츠 업데이트 리포팅
       const insEff = document.getElementById('insight-efficiency');
       const insDist = document.getElementById('insight-distance');
       
@@ -434,7 +450,7 @@
         insDist.innerHTML = `📍 이 기간 중 1회 최장 주행 거리는 <b>${maxSingleTrip.toFixed(2)} km</b>이며,<br>🌡️ 평균 외부 기온 환경은 <b>${avgOutTemp}°C</b> 조건이었습니다.`;
       }
 
-      // 테이블 뷰 작성
+      // 하단 데이터 테이블 표 갱신
       const logBody = document.getElementById('logTableBody');
       logBody.innerHTML = '';
       combinedWaypoints.forEach(wp => {
@@ -490,7 +506,14 @@
       document.getElementById(tabId).classList.remove('hidden');
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('border-red-500', 'text-red-500'));
       document.getElementById('btn-' + tabId).classList.add('border-red-500', 'text-red-500');
-      if (tabId === 'mapTab' && map) setTimeout(() => map.invalidateSize(), 50);
+      
+      // 🗺️ Leaflet 지도가 탭 전환 시 보이지 않거나 작게 깨지는 현상 방지용 리사이즈 갱신 트리거
+      if (tabId === 'mapTab' && map) {
+        setTimeout(() => {
+          map.invalidateSize();
+          updateDashboard();
+        }, 100);
+      }
     }
   </script>
 </body>
