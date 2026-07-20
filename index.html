@@ -3,14 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla Driving Control Dashboard (Kakao Map)</title>
+  <title>Tesla Matrix System</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   
   <style>
-    #map { height: calc(100vh - 180px); min-height: 500px; }
+    #map { height: calc(100vh - 240px); min-height: 480px; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1f2937; }
+    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
   </style>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans min-h-screen flex items-center justify-center m-0 p-0">
@@ -53,75 +56,176 @@
 
   <!-- 2. 메인 관제 시스템 레이어 -->
   <div id="appDashboard" class="hidden w-full min-h-screen flex flex-col md:flex-row bg-gray-900 text-gray-100">
+    
+    <!-- 좌측 공통 사이드바 -->
     <div class="w-full md:w-72 bg-gray-800 p-5 flex flex-col justify-between border-r border-gray-700 space-y-6">
       <div class="space-y-5">
-        <h1 class="text-xl font-bold text-yellow-500 flex items-center gap-2">⚡ Tesla 카카오 관제</h1>
+        <h1 class="text-xl font-bold text-yellow-500 flex items-center gap-2">⚡ Tesla Matrix</h1>
         
-        <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">🗺️ 지도 스타일 변경</label>
-          <select id="mapStyleSelect" onchange="changeMapStyle()" class="w-full bg-gray-700 text-white rounded p-2 text-sm border border-gray-600 focus:outline-none">
-            <option value="roadmap" selected>🗺️ 카카오 표준 지도</option>
-            <option value="skyview">🛰️ 고해상도 스카이뷰</option>
-            <option value="hybrid">🏙️ 하이브리드 중첩뷰</option>
-          </select>
+        <!-- 메인 탭 네비게이션 스위치 -->
+        <div class="grid grid-cols-2 gap-1 bg-gray-950 p-1 rounded-lg border border-gray-700">
+          <button id="btn-tab-driving" onclick="switchTab('driving')" class="py-2 text-xs font-bold rounded bg-gray-800 text-yellow-400 transition">주행 정보</button>
+          <button id="btn-tab-vehicle" onclick="switchTab('vehicle')" class="py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition">내 차량 정보</button>
         </div>
 
-        <hr class="border-gray-700">
+        <!-- 주행 정보전용 필터 컨트롤러 영역 -->
+        <div id="drivingFilterSection" class="space-y-4">
+          <hr class="border-gray-700">
+          <label class="block text-xs font-semibold text-gray-400 uppercase">📅 필터 대분류</label>
+          <div class="grid grid-cols-3 gap-1 text-[11px] font-bold">
+            <button id="btn-mode-daily" onclick="setFilterMode('daily')" class="p-1.5 rounded bg-gray-700 text-white text-center">일별</button>
+            <button id="btn-mode-weekly" onclick="setFilterMode('weekly')" class="p-1.5 rounded bg-gray-900 text-gray-400 text-center">주별</button>
+            <button id="btn-mode-monthly" onclick="setFilterMode('monthly')" class="p-1.5 rounded bg-gray-900 text-gray-400 text-center">월별</button>
+          </div>
+          <div class="grid grid-cols-2 gap-1 text-[11px] font-bold">
+            <button id="btn-mode-yearly" onclick="setFilterMode('yearly')" class="p-1.5 rounded bg-gray-900 text-gray-400 text-center">년별</button>
+            <button id="btn-mode-custom" onclick="setFilterMode('custom')" class="p-1.5 rounded bg-gray-900 text-gray-400 text-center">기간별</button>
+          </div>
 
-        <!-- 📅 년/월 드랍다운 선택기 -->
-        <div class="space-y-3">
-          <label class="block text-xs font-semibold text-gray-400 uppercase">📅 조회 기간 설정</label>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <span class="text-[11px] text-gray-400 block mb-0.5">시작 년도</span>
-              <select id="startYear" onchange="updateDashboardView()" class="w-full bg-gray-700 text-sm text-white rounded p-1.5 border border-gray-600 focus:outline-none"></select>
-            </div>
-            <div>
-              <span class="text-[11px] text-gray-400 block mb-0.5">시작 월</span>
-              <select id="startMonth" onchange="updateDashboardView()" class="w-full bg-gray-700 text-sm text-white rounded p-1.5 border border-gray-600 focus:outline-none"></select>
-            </div>
+          <div class="bg-gray-900/60 p-3 rounded-lg border border-gray-700 space-y-2">
+            <label class="block text-xs font-semibold text-gray-400 uppercase">🔍 세부 조건 선택</label>
+            <div id="dynamicDateInputs" class="space-y-2"></div>
           </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <span class="text-[11px] text-gray-400 block mb-0.5">종료 년도</span>
-              <select id="endYear" onchange="updateDashboardView()" class="w-full bg-gray-700 text-sm text-white rounded p-1.5 border border-gray-600 focus:outline-none"></select>
-            </div>
-            <div>
-              <span class="text-[11px] text-gray-400 block mb-0.5">종료 월</span>
-              <select id="endMonth" onchange="updateDashboardView()" class="w-full bg-gray-700 text-sm text-white rounded p-1.5 border border-gray-600 focus:outline-none"></select>
-            </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">🗺️ 지도 스타일</label>
+            <select id="mapStyleSelect" onchange="changeMapStyle()" class="w-full bg-gray-700 text-white rounded p-2 text-sm border border-gray-600 focus:outline-none">
+              <option value="roadmap" selected>🗺️ 카카오 표준 지도</option>
+              <option value="skyview">🛰️ 고해상도 스카이뷰</option>
+              <option value="hybrid">🏙️ 하이브리드 중첩뷰</option>
+            </select>
           </div>
+        </div>
+        
+        <!-- 차량 정보 전용 상태 요약 요약판 -->
+        <div id="vehicleBriefSection" class="hidden bg-gray-900/60 p-3 rounded-lg border border-gray-700 space-y-2 text-xs">
+          <div class="flex justify-between"><span class="text-gray-400">차량 상태</span><span id="brief-state" class="font-bold text-green-400">-</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">배터리</span><span id="brief-battery" class="font-bold text-yellow-400">-</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">버전</span><span id="brief-version" class="font-mono text-gray-300">-</span></div>
         </div>
 
         <div class="pt-2">
-          <div id="syncStatus" class="text-xs text-yellow-400 bg-gray-900/50 p-2 rounded border border-gray-700 font-mono text-center">대기 중...</div>
+          <div id="syncStatus" class="text-xs text-yellow-400 bg-gray-900/50 p-2 rounded border border-gray-700 font-mono text-center">데이터 로드 중...</div>
         </div>
       </div>
       
       <button onclick="resetAppConfig()" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-2 rounded transition">🔑 인증 정보 초기화</button>
     </div>
 
-    <!-- 메인 대화면 지도 관제 탭 -->
-    <div class="flex-1 p-4 flex flex-col space-y-4">
-      <div class="bg-gray-800 p-4 rounded-xl shadow-lg flex-1 flex flex-col justify-between">
-        <div id="map" class="rounded-lg bg-gray-700 shadow-inner flex-1 mb-4"></div>
-        
-        <!-- HUD 통계 알림판 -->
-        <div class="grid grid-cols-3 gap-4 text-center">
-          <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">선택 기간 총 거리</span><span id="hud-distance" class="text-lg font-bold text-green-400">0.00 km</span></div>
-          <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">선택 기간 주행 횟수</span><span id="hud-count" class="text-lg font-bold text-blue-400">0회</span></div>
-          <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">배터리 총 사용량</span><span id="hud-battery" class="text-lg font-bold text-yellow-400">0%</span></div>
+    <!-- 우측 메인 콘텐츠 화면 -->
+    <div class="flex-1 p-4 flex flex-col space-y-4 overflow-y-auto">
+      
+      <!-- [탭 1] 주행 정보 관제 패널 -->
+      <div id="panel-driving" class="flex-1 flex flex-col space-y-4">
+        <div class="bg-gray-800 p-4 rounded-xl shadow-lg flex-1 flex flex-col justify-between">
+          <div id="map" class="rounded-lg bg-gray-700 shadow-inner flex-1 mb-4"></div>
+          
+          <!-- HUD 통계 알림판 -->
+          <div class="grid grid-cols-3 gap-4 text-center">
+            <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">선택 기간 총 거리</span><span id="hud-distance" class="text-lg font-bold text-green-400">0.00 km</span></div>
+            <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">선택 기간 주행 횟수</span><span id="hud-count" class="text-lg font-bold text-blue-400">0회</span></div>
+            <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">배터리 총 사용량</span><span id="hud-battery" class="text-lg font-bold text-yellow-400">0%</span></div>
+          </div>
         </div>
       </div>
+
+      <!-- [탭 2] 내 차량 정보 패널 -->
+      <div id="panel-vehicle" class="hidden flex-1 space-y-4">
+        <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold text-yellow-400 flex items-center gap-2">🚗 하드웨어 및 실시간 원격 제어 상태</h2>
+            <span id="v-last-update" class="text-xs text-gray-400 font-mono">업데이트 시점: -</span>
+          </div>
+
+          <!-- 메인 지표 그리드 -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700">
+              <span class="text-xs text-gray-400 block mb-1">차량 모델명 / 이름</span>
+              <span id="v-name" class="text-lg font-bold text-white">-</span>
+            </div>
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700">
+              <span class="text-xs text-gray-400 block mb-1">총 누적 주행거리 (Odo)</span>
+              <span id="v-odometer" class="text-lg font-bold text-green-400">-</span>
+            </div>
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700">
+              <span class="text-xs text-gray-400 block mb-1">배터리 잔량 / 주행가능</span>
+              <span id="v-battery" class="text-lg font-bold text-yellow-400">-</span>
+            </div>
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700">
+              <span class="text-xs text-gray-400 block mb-1">차량 섀시 번호 (VIN)</span>
+              <span id="v-vin" class="text-sm font-mono font-bold text-blue-400 truncate block mt-1">-</span>
+            </div>
+          </div>
+
+          <!-- 세부 서브 모듈 정보판 -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- 공조 및 하드웨어 상태 -->
+            <div class="bg-gray-900/50 p-4 rounded-lg border border-gray-700 space-y-3">
+              <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-700 pb-2">🌡️ 공조 제어 및 실내외 상태</h3>
+              <div class="grid grid-cols-2 gap-2 text-sm">
+                <div><span class="text-gray-500 text-xs">실내 온도:</span> <span id="v-temp-in" class="font-bold text-white">-</span></div>
+                <div><span class="text-gray-500 text-xs">실외 온도:</span> <span id="v-temp-out" class="font-bold text-white">-</span></div>
+                <div><span class="text-gray-500 text-xs">공조 가동 상태:</span> <span id="v-climate-on" class="font-bold">-</span></div>
+                <div><span class="text-gray-500 text-xs">스티어링 열선:</span> <span id="v-wheel-heat" class="font-bold">-</span></div>
+              </div>
+            </div>
+
+            <!-- 충전 텔레메트리 -->
+            <div class="bg-gray-900/50 p-4 rounded-lg border border-gray-700 space-y-3">
+              <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-700 pb-2">⚡ 충전 상태 인디케이터</h3>
+              <div class="grid grid-cols-2 gap-2 text-sm">
+                <div><span class="text-gray-500 text-xs">충전 상태:</span> <span id="v-charge-state" class="font-bold text-white">-</span></div>
+                <div><span class="text-gray-500 text-xs">충전 전류/전압:</span> <span id="v-charge-power" class="font-mono text-white">-</span></div>
+                <div><span class="text-gray-500 text-xs">목표 충전량:</span> <span id="v-charge-limit" class="font-bold text-white">-</span></div>
+                <div><span class="text-gray-500 text-xs">완충 남은시간:</span> <span id="v-charge-time" class="font-bold text-yellow-400">-</span></div>
+              </div>
+            </div>
+
+            <!-- 타이어 및 도어 보안 상태 -->
+            <div class="bg-gray-900/50 p-4 rounded-lg border border-gray-700 space-y-3">
+              <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-700 pb-2">🔒 보안 및 도어 상태</h3>
+              <div class="grid grid-cols-2 gap-2 text-sm">
+                <div><span class="text-gray-500 text-xs">차량 도어 잠금:</span> <span id="v-lock" class="font-bold">-</span></div>
+                <div><span class="text-gray-500 text-xs">드라이브 기어:</span> <span id="v-gear" class="font-mono font-bold text-white">-</span></div>
+                <div><span class="text-gray-500 text-xs">전면 트렁크:</span> <span id="v-frunk" class="font-bold">-</span></div>
+                <div><span class="text-gray-500 text-xs">후면 트렁크:</span> <span id="v-trunk" class="font-bold">-</span></div>
+              </div>
+            </div>
+
+            <!-- 시스템 운영 사양 -->
+            <div class="bg-gray-900/50 p-4 rounded-lg border border-gray-700 space-y-3">
+              <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-700 pb-2">🤖 운영체제 및 핵심 모듈 사양</h3>
+              <div class="grid grid-cols-2 gap-2 text-sm">
+                <div><span class="text-gray-500 text-xs">S/W 버전:</span> <span id="v-version" class="font-mono text-xs text-white">-</span></div>
+                <div><span class="text-gray-500 text-xs">업데이트 버전:</span> <span id="v-update-version" class="font-mono text-xs text-gray-400">-</span></div>
+                <div><span class="text-gray-500 text-xs">센트리 모드:</span> <span id="v-sentry" class="font-bold">-</span></div>
+                <div><span class="text-gray-500 text-xs">현재 속도:</span> <span id="v-speed" class="font-bold text-white">-</span></div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- 로우 레벨 JSON 인스펙터 보조 패널 -->
+          <div class="mt-6">
+            <details class="bg-gray-900 rounded-lg border border-gray-700">
+              <summary class="text-xs text-gray-400 font-bold p-3 cursor-pointer select-none hover:text-white">💾 수신된 데이터베이스 원본 JSON 보기 (데이터 정밀 디버깅용)</summary>
+              <pre id="v-raw-json" class="p-4 text-xs font-mono text-green-400 overflow-x-auto max-h-60 bg-black/40"></pre>
+            </details>
+          </div>
+
+        </div>
+      </div>
+
     </div>
   </div>
 
   <script>
     const STORAGE_CONFIG_KEY = "secure_tesla_dashboard_local_tokens";
-    let db, allTrips = [], map, routePolylines = [], mapMarkers = [];
+    let db, allTrips = [], rawVehicleObj = null, map, routePolylines = [], mapMarkers = [];
+    let currentFilterMode = 'daily'; // daily, weekly, monthly, yearly, custom
 
     window.onload = function() {
-      initDateDropdowns();
       if (!localStorage.getItem(STORAGE_CONFIG_KEY)) {
         document.getElementById('setupView').classList.remove('hidden');
       } else {
@@ -129,31 +233,14 @@
       }
     };
 
-    function initDateDropdowns() {
-      const currentYear = 2026;
-      const sYear = document.getElementById('startYear'), eYear = document.getElementById('endYear');
-      const sMonth = document.getElementById('startMonth'), eMonth = document.getElementById('endMonth');
-      
-      for(let y = currentYear; y >= 2024; y--) {
-        sYear.add(new Option(`${y}년`, y)); eYear.add(new Option(`${y}년`, y));
-      }
-      for(let m = 1; m <= 12; m++) {
-        sMonth.add(new Option(`${m}월`, m)); eMonth.add(new Option(`${m}월`, m));
-      }
-      sYear.value = currentYear; sMonth.value = 1;
-      eYear.value = currentYear; eMonth.value = new Date().getMonth() + 1;
-    }
-
-    // 카카오 맵 스크립트를 동적으로 안전하게 주입하는 함수
+    // 카카오 맵 스크립트 동적 인젝션
     function loadKakaoScript(appKey, callback) {
       if (window.kakao && window.kakao.maps) { callback(); return; }
       const script = document.createElement('script');
       script.type = 'text/javascript';
       script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false`;
       script.charset = 'utf-8';
-      script.onload = () => {
-        kakao.maps.load(callback);
-      };
+      script.onload = () => kakao.maps.load(callback);
       document.head.appendChild(script);
     }
 
@@ -192,76 +279,179 @@
       });
       db = firebase.firestore();
       
-      // 카카오 스크립트 로드 완료 후 맵 로직 가동
       loadKakaoScript(config.kakaoKey, async () => {
         initMap();
         await loadViewerData();
       });
     }
 
+    // 메인 데이터 로더 (기존 driving 로직 분리 및 vehicle 통합 탐색)
     async function loadViewerData() {
       const statusEl = document.getElementById('syncStatus');
-      statusEl.innerText = "📥 우리집 DB 데이터 읽는 중...";
+      statusEl.innerText = "📥 DB 구조 분석 및 로드 중...";
       allTrips = [];
+      rawVehicleObj = null;
 
-      const collections = ['driving', 'vehicle'];
-      for (const colName of collections) {
-        const snap = await db.collection(colName).get();
-        snap.docs.forEach(doc => {
-          const data = doc.data();
-          const timestamp = data.date || parseInt(doc.id);
-          const waypoints = [];
+      // 1. driving 컬렉션 로딩
+      const drivingSnap = await db.collection('driving').get();
+      drivingSnap.docs.forEach(doc => {
+        const data = doc.data();
+        const timestamp = data.date || parseInt(doc.id);
+        const waypoints = [];
 
-          function deepScan(obj) {
-            if (!obj || typeof obj !== 'object') return;
-            if (Array.isArray(obj)) { obj.forEach(item => deepScan(item)); return; }
-            let lat = null, lng = null, odometer = null;
-            Object.keys(obj).forEach(k => {
-              const kl = k.toLowerCase();
-              if (kl === 'lat' || kl === 'latitude') lat = Number(obj[k]);
-              if (kl === 'lng' || kl === 'longitude' || kl === 'lon') lng = Number(obj[k]);
-              if (kl.includes('odometer') || kl === 'odo') odometer = Number(obj[k]);
-            });
-            if (lat && lng && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-              waypoints.push({ lat, lng, odometer });
-            }
-            Object.keys(obj).forEach(k => { if (typeof obj[k] === 'object' && obj[k] !== null) deepScan(obj[k]); });
+        function deepScan(obj) {
+          if (!obj || typeof obj !== 'object') return;
+          if (Array.isArray(obj)) { obj.forEach(item => deepScan(item)); return; }
+          let lat = null, lng = null, odometer = null;
+          Object.keys(obj).forEach(k => {
+            const kl = k.toLowerCase();
+            if (kl === 'lat' || kl === 'latitude') lat = Number(obj[k]);
+            if (kl === 'lng' || kl === 'longitude' || kl === 'lon') lng = Number(obj[k]);
+            if (kl.includes('odometer') || kl === 'odo') odometer = Number(obj[k]);
+          });
+          if (lat && lng && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+            waypoints.push({ lat, lng, odometer });
           }
+          Object.keys(obj).forEach(k => { if (typeof obj[k] === 'object' && obj[k] !== null) deepScan(obj[k]); });
+        }
 
-          deepScan(data);
-          waypoints.sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
+        deepScan(data);
+        waypoints.sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
 
-          if (waypoints.length > 0) {
-            allTrips.push({
-              id: `${colName}_${doc.id}`,
-              timestamp,
-              moveKM: Number(data.moveKM || data.distance || 0),
-              useBattery: Number(data.useBattery || 0),
-              waypoints
-            });
-          }
-        });
-      }
+        if (waypoints.length > 0) {
+          allTrips.push({
+            id: `driving_${doc.id}`,
+            timestamp,
+            moveKM: Number(data.moveKM || data.distance || 0),
+            useBattery: Number(data.useBattery || 0),
+            waypoints
+          });
+        }
+      });
+
+      // 2. vehicle 컬렉션 로딩 (가장 가치가 높은 최신 정보 타겟팅)
+      const vehicleSnap = await db.collection('vehicle').get();
+      let maxTime = 0;
+      vehicleSnap.docs.forEach(doc => {
+        const data = doc.data();
+        const docTimestamp = data.date || parseInt(doc.id) || 0;
+        if (docTimestamp >= maxTime) {
+          maxTime = docTimestamp;
+          rawVehicleObj = data;
+        }
+      });
 
       allTrips.sort((a, b) => b.timestamp - a.timestamp);
-      statusEl.innerText = `✅ 로드 완료 (총 ${allTrips.length}개 주행기록)`;
+      statusEl.innerText = `✅ 로드 성공 (주행기록: ${allTrips.length}개)`;
+      
+      // 내 차량 정보 UI 렌더링 매핑
+      renderVehicleTab();
+      // 기본값 필터 세팅 가동 (일별)
+      setFilterMode('daily');
+    }
+
+    // 📅 대분류 필터 변경 제어 엔진
+    function setFilterMode(mode) {
+      currentFilterMode = mode;
+      
+      // 버큰 스타일 토글 변경 처리
+      ['daily', 'weekly', 'monthly', 'yearly', 'custom'].forEach(m => {
+        const btn = document.getElementById(`btn-mode-${m}`);
+        if (m === mode) {
+          btn.classList.remove('bg-gray-900', 'text-gray-400');
+          btn.classList.add('bg-gray-700', 'text-white');
+        } else {
+          btn.classList.remove('bg-gray-700', 'text-white');
+          btn.classList.add('bg-gray-900', 'text-gray-400');
+        }
+      });
+
+      const container = document.getElementById('dynamicDateInputs');
+      const todayStr = "2026-07-20"; // 기준시점 동적 기본 세팅
+
+      // 대분류 모드에 따른 세부 인풋 요소 그리기
+      if (mode === 'daily') {
+        container.innerHTML = `<input type="date" id="input-daily" value="${todayStr}" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-2 text-sm focus:outline-none">`;
+      } else if (mode === 'weekly') {
+        container.innerHTML = `
+          <input type="date" id="input-weekly" value="${todayStr}" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-2 text-sm focus:outline-none">
+          <span class="text-[10px] text-gray-400 block mt-1">* 선택한 날짜가 속한 월~일 주간 전체가 계산됩니다.</span>
+        `;
+      } else if (mode === 'monthly') {
+        container.innerHTML = `
+          <div class="grid grid-cols-2 gap-1">
+            <select id="input-month-year" onchange="updateDashboardView()" class="bg-gray-700 text-white p-2 text-sm rounded border border-gray-600"><option value="2026">2026년</option><option value="2025">2025년</option><option value="2024">2024년</option></select>
+            <select id="input-month-val" onchange="updateDashboardView()" class="bg-gray-700 text-white p-2 text-sm rounded border border-gray-600">
+              ${Array.from({length:12}, (_,i)=> `<option value="${i+1}" ${i===6?'selected':''}>${i+1}월</option>`).join('')}
+            </select>
+          </div>
+        `;
+      } else if (mode === 'yearly') {
+        container.innerHTML = `<select id="input-yearly-val" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white p-2 text-sm rounded border border-gray-600"><option value="2026">2026년 전체</option><option value="2025">2025년 전체</option><option value="2024">2024년 전체</option></select>`;
+      } else if (mode === 'custom') {
+        container.innerHTML = `
+          <div class="space-y-1">
+            <input type="date" id="input-custom-start" value="2026-07-01" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-1.5 text-xs focus:outline-none">
+            <div class="text-center text-gray-500 text-xs">~</div>
+            <input type="date" id="input-custom-end" value="${todayStr}" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-1.5 text-xs focus:outline-none">
+          </div>
+        `;
+      }
+
       updateDashboardView();
     }
 
+    // 🧮 선택한 필터 대분류 조건에 따라 주행 데이터를 선별하는 연산 엔진
     function updateDashboardView() {
       if (allTrips.length === 0 || !map) return;
 
-      const sYear = parseInt(document.getElementById('startYear').value);
-      const sMonth = parseInt(document.getElementById('startMonth').value);
-      const eYear = parseInt(document.getElementById('endYear').value);
-      const eMonth = parseInt(document.getElementById('endMonth').value);
+      let startMs = 0, endMs = 0;
 
-      const startDate = new Date(sYear, sMonth - 1, 1, 0, 0, 0).getTime();
-      const endDate = new Date(eYear, eMonth, 1, 23, 59, 59).getTime();
+      if (currentFilterMode === 'daily') {
+        const dStr = document.getElementById('input-daily').value;
+        if(!dStr) return;
+        startMs = new Date(dStr + "T00:00:00").getTime();
+        endMs = new Date(dStr + "T23:59:59").getTime();
+      } 
+      else if (currentFilterMode === 'weekly') {
+        const wStr = document.getElementById('input-weekly').value;
+        if(!wStr) return;
+        const refDate = new Date(wStr);
+        const day = refDate.getDay();
+        // 월요일 기준 주간 범위 획정 알고리즘
+        const diffToMon = refDate.getDate() - day + (day === 0 ? -6 : 1);
+        const monDate = new Date(refDate.setDate(diffToMon));
+        monDate.setHours(0,0,0,0);
+        startMs = monDate.getTime();
+        
+        const sunDate = new Date(monDate);
+        sunDate.setDate(monDate.getDate() + 6);
+        sunDate.setHours(23,59,59,999);
+        endMs = sunDate.getTime();
+      } 
+      else if (currentFilterMode === 'monthly') {
+        const y = document.getElementById('input-month-year').value;
+        const m = document.getElementById('input-month-val').value;
+        startMs = new Date(y, m - 1, 1, 0, 0, 0).getTime();
+        endMs = new Date(y, m, 0, 23, 59, 59).getTime();
+      } 
+      else if (currentFilterMode === 'yearly') {
+        const y = document.getElementById('input-yearly-val').value;
+        startMs = new Date(y, 0, 1, 0, 0, 0).getTime();
+        endMs = new Date(y, 11, 31, 23, 59, 59).getTime();
+      } 
+      else if (currentFilterMode === 'custom') {
+        const s = document.getElementById('input-custom-start').value;
+        const e = document.getElementById('input-custom-end').value;
+        if(!s || !e) return;
+        startMs = new Date(s + "T00:00:00").getTime();
+        endMs = new Date(e + "T23:59:59").getTime();
+      }
 
-      const targetTrips = allTrips.filter(t => t.timestamp >= startDate && t.timestamp <= endDate);
+      // 기간 필터링 적용
+      const targetTrips = allTrips.filter(t => t.timestamp >= startMs && t.timestamp <= endMs);
 
-      // 기존 카카오 요소 지도에서 제거
+      // 지도 레이어 초기화
       routePolylines.forEach(p => p.setMap(null)); routePolylines = [];
       mapMarkers.forEach(m => m.setMap(null)); mapMarkers = [];
 
@@ -273,7 +463,6 @@
         totalKM += trip.moveKM;
         totalBatUsed += trip.useBattery;
 
-        // 카카오 LatLng 배열 생성
         const linePath = trip.waypoints.map(wp => new kakao.maps.LatLng(wp.lat, wp.lng));
         const timeLabel = new Date(trip.timestamp).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         
@@ -282,19 +471,13 @@
             path: linePath,
             strokeWidth: 5,
             strokeColor: '#ef4444',
-            strokeOpacity: 0.8,
-            strokeStyle: 'solid'
+            strokeOpacity: 0.8
           });
-          
           polyline.setMap(map);
           routePolylines.push(polyline);
           
-          linePath.forEach(coord => {
-            bounds.extend(coord);
-            hasPoints = true;
-          });
+          linePath.forEach(coord => { bounds.extend(coord); hasPoints = true; });
 
-          // 🖱️ 주행 경로 클릭 시 커스텀 정보창 출력 연동
           kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
             const infowindow = new kakao.maps.InfoWindow({
               content: `
@@ -310,46 +493,144 @@
             infowindow.open(map);
           });
 
-          // 출발지 마커 표기
-          const marker = new kakao.maps.Marker({
-            position: linePath[0]
-          });
+          const marker = new kakao.maps.Marker({ position: linePath[0] });
           marker.setMap(map);
           mapMarkers.push(marker);
         }
       });
 
-      if (hasPoints) {
-        map.setBounds(bounds);
-      }
+      if (hasPoints) map.setBounds(bounds);
 
+      // HUD 계기판 수치 반영
       document.getElementById('hud-distance').innerText = `${totalKM.toFixed(2)} km`;
       document.getElementById('hud-count').innerText = `${targetTrips.length}회 주행`;
       document.getElementById('hud-battery').innerText = `${totalBatUsed.toFixed(0)}%`;
     }
 
+    // 🚗 [내 차량 정보 탭] 렌더링 엔진 (Nested JSON 필드 다이렉트 바인딩)
+    function renderVehicleTab() {
+      if (!rawVehicleObj) return;
+
+      // 객체 깊은 곳 안전 조회 매퍼 헬퍼 함수
+      function findKey(path, def = '-') {
+        const keys = path.split('.');
+        let current = rawVehicleObj;
+        for (const key of keys) {
+          if (current && current[key] !== undefined) current = current[key];
+          else return def;
+        }
+        return (current !== null && current !== undefined) ? current : def;
+      }
+
+      // 1. 타임스탬프 변환
+      const vDate = rawVehicleObj.date ? new Date(rawVehicleObj.date) : new Date();
+      document.getElementById('v-last-update').innerText = `마지막 수신: ${vDate.toLocaleString('ko-KR')}`;
+
+      // 2. 기본 하드웨어 지표 지도화
+      const carName = findKey('display_name') || findKey('vehicle_config.car_type', 'Tesla Model');
+      document.getElementById('v-name').innerText = carName;
+      
+      const rawOdo = findKey('vehicle_state.odometer');
+      const odoStr = rawOdo !== '-' ? `${(Number(rawOdo) * 1.60934).toFixed(1)} km` : '-'; // 마일 단위 환산 보정 규칙 적용
+      document.getElementById('v-odometer').innerText = odoStr;
+
+      const batLvl = findKey('charge_state.battery_level');
+      const batRange = findKey('charge_state.battery_range');
+      const batStr = batLvl !== '-' ? `${batLvl}% (${(Number(batRange) * 1.60934).toFixed(0)} km 주행가능)` : '-';
+      document.getElementById('v-battery').innerText = batStr;
+      document.getElementById('v-vin').innerText = findKey('vin');
+
+      // 3. 공조 및 온도 상태 바인딩
+      document.getElementById('v-temp-in').innerText = `${findKey('climate_state.inside_temp')} °C`;
+      document.getElementById('v-temp-out').innerText = `${findKey('climate_state.outside_temp')} °C`;
+      const isClimateOn = findKey('climate_state.is_climate_on');
+      setBooleanBadge('v-climate-on', isClimateOn, '가동 중', '꺼짐', 'text-green-400', 'text-gray-500');
+      setBooleanBadge('v-wheel-heat', findKey('climate_state.steering_wheel_heater'), 'ON', 'OFF', 'text-red-400', 'text-gray-500');
+
+      // 4. 충전 상태 인디케이터 바인딩
+      document.getElementById('v-charge-state').innerText = findKey('charge_state.charging_state');
+      const cVolts = findKey('charge_state.charger_voltage');
+      const cAmps = findKey('charge_state.charger_actual_current');
+      document.getElementById('v-charge-power').innerText = (cVolts !== '-' && cAmps !== '-') ? `${cVolts}V / ${cAmps}A` : '-';
+      document.getElementById('v-charge-limit').innerText = `${findKey('charge_state.charge_limit_soc')}%`;
+      const timeToFull = findKey('charge_state.time_to_full_charge');
+      document.getElementById('v-charge-time').innerText = timeToFull !== '-' ? `${timeToFull}시간` : '충전 중 아님';
+
+      // 5. 보안 및 락킹 바인딩
+      setBooleanBadge('v-lock', findKey('vehicle_state.locked'), '🔒 잠김', '🔓 열림', 'text-green-400', 'text-red-400');
+      document.getElementById('v-gear').innerText = findKey('drive_state.gear') || 'N/A (주차)';
+      setBooleanBadge('v-frunk', findKey('vehicle_state.ft'), '열림', '닫힘', 'text-red-400', 'text-gray-500');
+      setBooleanBadge('v-trunk', findKey('vehicle_state.rt'), '열림', '닫힘', 'text-red-400', 'text-gray-500');
+
+      // 6. 시스템 스펙 매핑
+      document.getElementById('v-version').innerText = findKey('vehicle_state.car_version');
+      document.getElementById('v-update-version').innerText = findKey('vehicle_state.software_update.version');
+      setBooleanBadge('v-sentry', findKey('vehicle_state.sentry_mode'), '활성화', '비활성화', 'text-red-400', 'text-gray-500');
+      const rawSpeed = findKey('drive_state.speed');
+      document.getElementById('v-speed').innerText = rawSpeed !== '-' ? `${(Number(rawSpeed) * 1.60934).toFixed(0)} km/h` : '0 km/h';
+
+      // 7. 사이드바 요약 패널 업데이트
+      document.getElementById('brief-state').innerText = findKey('state');
+      document.getElementById('brief-battery').innerText = `${findKey('charge_state.battery_level')}%`;
+      document.getElementById('brief-version').innerText = (findKey('vehicle_state.car_version') || '-').substring(0, 12);
+
+      // 8. 디버깅용 로우 레벨 데이터 출력
+      document.getElementById('v-raw-json').innerText = JSON.stringify(rawVehicleObj, null, 2);
+    }
+
+    function setBooleanBadge(id, value, trueText, falseText, trueColor, falseColor) {
+      const el = document.getElementById(id);
+      if (value === true || value > 0) {
+        el.innerText = trueText; el.className = `font-bold ${trueColor}`;
+      } else {
+        el.innerText = falseText; el.className = `font-bold ${falseColor}`;
+      }
+    }
+
+    // 🔀 메인 패널 탭 스위칭 컨트롤러
+    function switchTab(tabName) {
+      const btnDriving = document.getElementById('btn-tab-driving');
+      const btnVehicle = document.getElementById('btn-tab-vehicle');
+      const panelDriving = document.getElementById('panel-driving');
+      const panelVehicle = document.getElementById('panel-vehicle');
+      const sideDrivingControls = document.getElementById('drivingFilterSection');
+      const sideVehicleControls = document.getElementById('vehicleBriefSection');
+
+      if (tabName === 'driving') {
+        btnDriving.className = "py-2 text-xs font-bold rounded bg-gray-800 text-yellow-400 transition";
+        btnVehicle.className = "py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition";
+        panelDriving.classList.remove('hidden');
+        panelVehicle.classList.add('hidden');
+        sideDrivingControls.classList.remove('hidden');
+        sideVehicleControls.classList.add('hidden');
+        // 카카오맵 윈도우 리사이즈 판정 유도 버그 방지
+        if (map) map.relayout();
+      } else {
+        btnDriving.className = "py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition";
+        btnVehicle.className = "py-2 text-xs font-bold rounded bg-gray-800 text-yellow-400 transition";
+        panelDriving.classList.add('hidden');
+        panelVehicle.classList.remove('hidden');
+        sideDrivingControls.classList.add('hidden');
+        sideVehicleControls.classList.remove('hidden');
+      }
+    }
+
     function initMap() {
       if (map) return;
       const container = document.getElementById('map');
-      const options = {
+      map = new kakao.maps.Map(container, {
         center: new kakao.maps.LatLng(37.5665, 126.9780),
         level: 5
-      };
-      map = new kakao.maps.Map(container, options);
+      });
       changeMapStyle();
     }
 
     function changeMapStyle() {
       const style = document.getElementById('mapStyleSelect').value;
       if (!map) return;
-
-      if (style === 'skyview') {
-        map.setMapTypeId(kakao.maps.MapTypeId.SKYVIEW);
-      } else if (style === 'hybrid') {
-        map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
-      } else {
-        map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
-      }
+      if (style === 'skyview') map.setMapTypeId(kakao.maps.MapTypeId.SKYVIEW);
+      else if (style === 'hybrid') map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
+      else map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
     }
 
     function resetAppConfig() {
