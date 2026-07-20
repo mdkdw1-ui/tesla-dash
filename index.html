@@ -348,25 +348,28 @@
         }
       });
 
-      // 2. vehicle 컬렉션 정밀 필터 추출 (차량 ID 형태의 거대 상수를 걸러내고 순수 13자리 타임스탬프 스냅샷 타겟팅)
+      // 2. vehicle 컬렉션 추출
       const vehicleSnap = await db.collection('vehicle').get();
       let maxTime = 0;
 
       vehicleSnap.docs.forEach(doc => {
         const data = doc.data();
-        let docTimestamp = 0;
         
+        // 💡 핵심 검증: 단순 스케줄 로그 등을 제외하고, 진짜 차량 정보 필드가 존재하는 문서인지 검사
+        const jsonStr = JSON.stringify(data).toLowerCase();
+        const hasCarSpecs = jsonStr.includes('vin') || jsonStr.includes('odometer') || jsonStr.includes('battery') || jsonStr.includes('climate') || jsonStr.includes('state');
+        if (!hasCarSpecs) return; // 차량 관련 데이터가 없으면 패스
+
+        let docTimestamp = 0;
         if (data.date) {
           docTimestamp = Number(data.date);
         } else {
           const parsedId = parseInt(doc.id);
-          // 💡 핵심 픽스: 13자리 타임스탬프 규격(2000년 ~ 2040년 사이 범위)만 인정
           if (!isNaN(parsedId) && parsedId > 946684800000 && parsedId < 2208988800000) {
             docTimestamp = parsedId;
           }
         }
 
-        // 정상적인 시간 기반 데이터가 발견되었거나, 아직 아무것도 선택되지 않았을 때 백업 바인딩
         if (docTimestamp > maxTime || !rawVehicleObj) {
           maxTime = docTimestamp;
           rawVehicleObj = data;
@@ -394,13 +397,11 @@
         for (const k of Object.keys(obj)) {
           const kLower = k.toLowerCase();
           
-          // 키 매칭 판정
           if (searchKeys.includes(kLower)) {
             foundValue = obj[k];
             return;
           }
 
-          // 💡 핵심 픽스: 하위 노드가 string화된 JSON Text일 경우 디코딩하여 탐색 지속
           if (typeof obj[k] === 'string' && obj[k].trim().startsWith('{')) {
             try {
               const parsed = JSON.parse(obj[k]);
@@ -409,7 +410,6 @@
             } catch(e) {}
           }
 
-          // 재귀 깊은 탐색
           if (typeof obj[k] === 'object' && obj[k] !== null) {
             deepSearch(obj[k]);
             if (foundValue !== null) return;
@@ -616,11 +616,9 @@
         return;
       }
 
-      // 수신 시각 라벨링화 보정
       const targetDate = detectedTime > 0 ? new Date(detectedTime) : new Date();
       document.getElementById('v-last-update').innerText = `마지막 수신: ${targetDate.toLocaleString('ko-KR')} (ID: ${latestVehicleDocId})`;
 
-      // 1. 핵심 인디케이터 데이터 추출 매핑
       const carName = findKeyAdaptive('display_name', ['car_type', 'vehicle_config.car_type', 'car_name']);
       document.getElementById('v-name').innerText = carName;
       
@@ -634,7 +632,6 @@
       document.getElementById('v-battery').innerText = batStr;
       document.getElementById('v-vin').innerText = findKeyAdaptive('vin', ['vin_code']);
 
-      // 2. 공조 및 온도 센서 디코딩
       const inTemp = findKeyAdaptive('inside_temp', ['climate_state.inside_temp', 'inside']);
       const outTemp = findKeyAdaptive('outside_temp', ['climate_state.outside_temp', 'outside']);
       document.getElementById('v-temp-in').innerText = inTemp !== '-' ? `${inTemp} °C` : '-';
@@ -643,7 +640,6 @@
       setBooleanBadge('v-climate-on', findKeyAdaptive('is_climate_on', ['climate_state.is_climate_on', 'climate_on']), '가동 중', '꺼짐', 'text-green-400', 'text-gray-500');
       setBooleanBadge('v-wheel-heat', findKeyAdaptive('steering_wheel_heater', ['climate_state.steering_wheel_heater', 'wheel_heat']), 'ON', 'OFF', 'text-red-400', 'text-gray-500');
 
-      // 3. 파워 충전기 인디케이터
       document.getElementById('v-charge-state').innerText = findKeyAdaptive('charging_state', ['charge_state.charging_state']) || 'N/A';
       const cVolts = findKeyAdaptive('charger_voltage', ['charge_state.charger_voltage', 'voltage']);
       const cAmps = findKeyAdaptive('charger_actual_current', ['charge_state.charger_actual_current', 'current']);
@@ -653,25 +649,21 @@
       const timeToFull = findKeyAdaptive('time_to_full_charge', ['charge_state.time_to_full_charge']);
       document.getElementById('v-charge-time').innerText = (timeToFull !== '-' && Number(timeToFull) > 0) ? `${timeToFull}시간` : '충전 중 아님';
 
-      // 4. 차량 락 및 도어 섀시 상태
       setBooleanBadge('v-lock', findKeyAdaptive('locked', ['vehicle_state.locked', 'is_locked']), '🔒 잠김', '🔓 열림', 'text-green-400', 'text-red-400');
       document.getElementById('v-gear').innerText = findKeyAdaptive('gear', ['drive_state.gear', 'shift_state']) || 'P (주차)';
       setBooleanBadge('v-frunk', findKeyAdaptive('ft', ['vehicle_state.ft', 'frunk_state']), '열림', '닫힘', 'text-red-400', 'text-gray-500');
       setBooleanBadge('v-trunk', findKeyAdaptive('rt', ['vehicle_state.rt', 'trunk_state']), '열림', '닫힘', 'text-red-400', 'text-gray-500');
 
-      // 5. 시스템 OS 정보 바인딩
       document.getElementById('v-version').innerText = findKeyAdaptive('car_version', ['vehicle_state.car_version', 'version']);
       document.getElementById('v-update-version').innerText = findKeyAdaptive('version', ['vehicle_state.software_update.version']) || '최신 상태';
       setBooleanBadge('v-sentry', findKeyAdaptive('sentry_mode', ['vehicle_state.sentry_mode', 'sentry']), '활성화', '비활성화', 'text-red-400', 'text-gray-500');
       const rawSpeed = findKeyAdaptive('speed', ['drive_state.speed']);
       document.getElementById('v-speed').innerText = rawSpeed !== '-' ? `${(Number(rawSpeed) * 1.60934).toFixed(0)} km/h` : '0 km/h';
 
-      // 6. 왼쪽 미니 사이드바 요약 패널 데이터 전송
       document.getElementById('brief-state').innerText = findKeyAdaptive('state') || '대기';
       document.getElementById('brief-battery').innerText = batLvl !== '-' ? `${batLvl}%` : '-';
       document.getElementById('brief-version').innerText = (findKeyAdaptive('car_version') || '-').substring(0, 12);
 
-      // 로우 레벨 원본 실시간 매핑 데이터 전체 노출
       document.getElementById('v-raw-json').innerText = JSON.stringify(rawVehicleObj, null, 2);
     }
 
@@ -710,6 +702,7 @@
       }
     }
 
+    // 지도 초기화
     function initMap() {
       if (map) return;
       const container = document.getElementById('map');
