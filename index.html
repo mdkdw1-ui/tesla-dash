@@ -6,70 +6,92 @@
   <title>Tesla Driving Control Dashboard</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- CryptoJS CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
   <!-- Firebase SDK Compat v10 -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   
-  <!-- 🗺️ Leaflet Open-Source Map Engine CSS & JS (별도 API 키 절대 필요 없음) -->
+  <!-- 🗺️ Leaflet Map Engine -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   
+  <!-- ⚡ 동기화 엔진 외부 백엔드 스크립트 로드 -->
+  <script src="sync.js"></script>
+  
   <style>
-    #map { height: 500px; z-index: 1; }
-    /* 오픈소스 지도 팝업 말풍선 내부 가시성 개선 */
-    .leaflet-popup-custom { color: #111827; font-size: 12px; line-height: 1.4; font-family: sans-serif; }
+    #map { height: calc(100vh - 180px); min-height: 500px; z-index: 1; }
+    .leaflet-popup-custom { color: #111827; font-size: 12px; line-height: 1.5; font-family: sans-serif; padding: 2px; }
     .leaflet-container { background: #1f2937 !important; }
   </style>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans min-h-screen flex items-center justify-center m-0 p-0">
 
-  <!-- 1. 보안 인증 레이어 -->
-  <div id="authContainer" class="w-full max-w-md p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 mx-4">
+  <!-- 1. 보안 인증 및 환경설정 레이어 -->
+  <div id="authContainer" class="w-full max-w-xl p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 mx-4">
     <div id="setupView" class="hidden">
-      <h2 class="text-2xl font-bold text-red-500 mb-2 text-center">⚡ 최초 앱 보안 설정</h2>
-      <div class="space-y-4">
-        <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">1. API Key</label>
-          <input type="text" id="cfg-apiKey" placeholder="AIzaSy... 키 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none">
+      <h2 class="text-2xl font-bold text-red-500 mb-4 text-center">⚡ 최초 앱 보안 및 동기화 설정</h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- 소스 정보 (myteslabot / 메일로그 기반) -->
+        <div class="space-y-3 p-4 bg-gray-700/40 rounded-lg border border-gray-600">
+          <h3 class="text-sm font-bold text-blue-400 border-b border-gray-600 pb-1">📥 1. 수집 소스 DB 정보</h3>
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-400 uppercase mb-0.5">API Key</label>
+            <input type="text" id="src-apiKey" placeholder="AIzaSy... 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-white text-xs focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-400 uppercase mb-0.5">Project ID</label>
+            <input type="text" id="src-projectId" value="teslacam-93532" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-white text-xs focus:outline-none font-mono">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-400 uppercase mb-0.5">App ID</label>
+            <input type="text" id="src-appId" value="1:574811884188:web:a825d3e916e924aabdfb59" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-white text-[10px] focus:outline-none font-mono">
+          </div>
         </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">2. Project ID</label>
-          <input type="text" id="cfg-projectId" value="teslaapp-a6415" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+
+        <!-- 목적지 정보 (우리 앱용 개인 DB) -->
+        <div class="space-y-3 p-4 bg-gray-700/40 rounded-lg border border-gray-600">
+          <h3 class="text-sm font-bold text-green-400 border-b border-gray-600 pb-1">📤 2. 저장 목적지 DB 정보</h3>
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-400 uppercase mb-0.5">API Key</label>
+            <input type="text" id="dest-apiKey" placeholder="AIzaSy... 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-white text-xs focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-400 uppercase mb-0.5">Project ID</label>
+            <input type="text" id="dest-projectId" value="teslaapp-a6415" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-white text-xs focus:outline-none font-mono">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-400 uppercase mb-0.5">App ID</label>
+            <input type="text" id="dest-appId" placeholder="1:xxxx:web:xxxx 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-white text-[10px] focus:outline-none font-mono">
+          </div>
         </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">3. App ID</label>
-          <input type="text" id="cfg-appId" value="1:246766153687:web:127a19264e2d94aca72592" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-xs focus:outline-none font-mono">
-        </div>
-        <button onclick="saveAndEncryptConfig()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition mt-4">보안 저장 및 로그인</button>
       </div>
+
+      <button onclick="saveAndEncryptConfig()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-4 rounded transition mt-6">보안 암호화 저장 및 로그인</button>
     </div>
 
     <div id="loginView" class="hidden">
       <h2 class="text-2xl font-bold text-center mb-6">Tesla Dashboard 로그인</h2>
       <div class="space-y-4">
-        <input type="password" id="loginPassword" placeholder="비밀번호 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-3 text-white font-mono text-center text-lg focus:outline-none">
+        <input type="password" id="loginPassword" onkeydown="if(event.key === 'Enter') handleLogin()" placeholder="보안 마스터 비밀번호 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-3 text-white font-mono text-center text-lg focus:outline-none">
         <div id="loginError" class="text-red-500 text-xs text-center hidden">❌ 비밀번호 오류 또는 복호화 실패</div>
-        <button onclick="handleLogin()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded transition">접속하기</button>
+        <button onclick="handleLogin()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded transition">접속 및 데이터 갱신</button>
       </div>
     </div>
   </div>
 
-  <!-- 2. 메인 관제 시스템 레이어 -->
+  <!-- 2. 메인 관제 대시보드 레이어 -->
   <div id="appDashboard" class="hidden w-full min-h-screen flex flex-col md:flex-row bg-gray-900 text-gray-100">
-    <!-- 사이드바 -->
-    <div class="w-full md:w-64 bg-gray-800 p-5 flex flex-col justify-between border-r border-gray-700 space-y-6">
+    <!-- 사이드바 패널 -->
+    <div class="w-full md:w-72 bg-gray-800 p-5 flex flex-col justify-between border-r border-r-gray-700 space-y-6">
       <div class="space-y-5">
         <h1 class="text-xl font-bold text-red-500 flex items-center gap-2">⚡ Tesla 관제 시스템</h1>
         
-        <!-- 🎨 오픈 지도 디자인 뷰 스위처 -->
         <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">🗺️ 지도 배경 디자인</label>
-          <select id="mapStyleSelect" onchange="changeMapStyle()" class="w-full bg-gray-700 text-white rounded p-2 text-sm border border-gray-600 focus:outline-none focus:border-red-500">
-            <option value="dark" selected>🌌 테슬라 다크 모드 (추천)</option>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">🗺️ 지도 배경 스타일</label>
+          <select id="mapStyleSelect" onchange="changeMapStyle()" class="w-full bg-gray-700 text-white rounded p-2 text-sm border border-gray-600 focus:outline-none">
+            <option value="dark" selected>🌌 테슬라 다크 모드</option>
             <option value="voyager">🏙️ 모던 보야저 (라이트)</option>
             <option value="osm">🗺️ 표준 오픈스트리트맵</option>
           </select>
@@ -77,442 +99,278 @@
 
         <hr class="border-gray-700">
 
-        <!-- 시기별 조회 필터 시스템 -->
-        <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">🔍 주행 데이터 조회 모드</label>
-          <select id="viewModeSelect" onchange="renderDynamicFilters()" class="w-full bg-gray-700 text-white rounded p-2 text-sm border border-gray-600 focus:outline-none focus:border-red-500">
-            <option value="individual" selected>🏁 개별 주행기록별</option>
-            <option value="daily">📅 일별 경로 합산</option>
-            <option value="weekly">🗓️ 주간별 경로 합산</option>
-            <option value="custom">⏳ 원하는 기간 지정</option>
-          </select>
+        <!-- 드랍다운식 기간 필터 -->
+        <div class="space-y-3">
+          <label class="block text-xs font-semibold text-gray-400 uppercase">📅 조회 기간 설정</label>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <span class="text-[11px] text-gray-400 block mb-0.5">시작 년도</span>
+              <select id="startYear" onchange="updateDashboardView()" class="w-full bg-gray-700 text-sm text-white rounded p-1.5 border border-gray-600 focus:outline-none"></select>
+            </div>
+            <div>
+              <span class="text-[11px] text-gray-400 block mb-0.5">시작 월</span>
+              <select id="startMonth" onchange="updateDashboardView()" class="w-full bg-gray-700 text-sm text-white rounded p-1.5 border border-gray-600 focus:outline-none"></select>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <span class="text-[11px] text-gray-400 block mb-0.5">종료 년도</span>
+              <select id="endYear" onchange="updateDashboardView()" class="w-full bg-gray-700 text-sm text-white rounded p-1.5 border border-gray-600 focus:outline-none"></select>
+            </div>
+            <div>
+              <span class="text-[11px] text-gray-400 block mb-0.5">종료 월</span>
+              <select id="endMonth" onchange="updateDashboardView()" class="w-full bg-gray-700 text-sm text-white rounded p-1.5 border border-gray-600 focus:outline-none"></select>
+            </div>
+          </div>
         </div>
 
-        <div id="dynamicFilterContainer" class="space-y-3"></div>
+        <div class="pt-2">
+          <div id="syncStatus" class="text-xs text-yellow-400 bg-gray-900/50 p-2.5 rounded border border-gray-700 font-mono leading-relaxed">대기 중...</div>
+        </div>
       </div>
       
-      <button onclick="resetAppConfig()" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-2 rounded transition">🔑 인증 정보 초기화</button>
+      <button onclick="resetAppConfig()" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-2 rounded transition">🔑 설정 전체 초기화</button>
     </div>
 
-    <!-- 메인 뷰 -->
-    <div class="flex-1 p-5 md:p-8 overflow-y-auto">
-      <div class="flex border-b border-gray-700 mb-5">
-        <button onclick="switchTab('mapTab')" id="btn-mapTab" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-red-500 text-red-500">🗺️ 주행 경로 및 분석</button>
-        <button onclick="switchTab('chartTab')" id="btn-chartTab" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white">🔋 전비 및 배터리</button>
-        <button onclick="switchTab('tempTab')" id="btn-tempTab" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white">🌡️ 온도 상관관계</button>
-        <button onclick="switchTab('logTab')" id="btn-logTab" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white">📑 경로 상세 로그</button>
-      </div>
-
-      <!-- 지도 탭 -->
-      <div id="mapTab" class="tab-content block space-y-5">
-        <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
-          <!-- 오픈소스 지도 렌더링 컨테이너 -->
-          <div id="map" class="rounded bg-gray-700 mb-4 shadow-inner"></div>
-          
-          <div class="grid grid-cols-3 gap-4 text-center">
-            <div class="bg-gray-700 p-3 rounded shadow-inner"><span class="block text-xs text-gray-400">선택 기간 총 거리</span><span id="hud-distance" class="text-xl font-bold text-green-400">0.00 km</span></div>
-            <div class="bg-gray-700 p-3 rounded shadow-inner"><span class="block text-xs text-gray-400">선택 기간 주행 횟수</span><span id="hud-battery" class="text-xl font-bold text-blue-400">0회</span></div>
-            <div class="bg-gray-700 p-3 rounded shadow-inner"><span class="block text-xs text-gray-400">배터리 소모 (평균 전비)</span><span id="hud-eff" class="text-sm font-bold text-yellow-400">0% (0 Wh/km)</span></div>
-          </div>
-        </div>
-
-        <!-- 스마트 인사이츠 분석 리포트 -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="bg-gray-800 p-4 rounded-lg shadow-md border border-gray-700">
-            <h3 class="text-sm font-semibold text-red-400 mb-2">💡 전비 효율 스마트 팁</h3>
-            <p id="insight-efficiency" class="text-xs text-gray-300 leading-relaxed">데이터를 분석 중입니다...</p>
-          </div>
-          <div class="bg-gray-800 p-4 rounded-lg shadow-md border border-gray-700">
-            <h3 class="text-sm font-semibold text-blue-400 mb-2">🚗 선택 구간 최장 주행 및 환경 정보</h3>
-            <p id="insight-distance" class="text-xs text-gray-300 leading-relaxed">데이터를 수집하고 있습니다...</p>
-          </div>
-        </div>
-      </div>
-
-      <div id="chartTab" class="tab-content hidden"><div class="bg-gray-800 p-6 rounded-lg h-[450px]"><canvas id="efficiencyChart"></canvas></div></div>
-      <div id="tempTab" class="tab-content hidden"><div class="bg-gray-800 p-6 rounded-lg h-[450px]"><canvas id="tempScatterChart"></canvas></div></div>
-
-      <!-- 상세 로그 테이블 탭 -->
-      <div id="logTab" class="tab-content hidden">
-        <div class="bg-gray-800 p-6 rounded-lg shadow-lg overflow-x-auto">
-          <table class="w-full text-left text-sm text-gray-300">
-            <thead class="bg-gray-700 text-gray-400 uppercase text-xs">
-              <tr><th class="p-3">주행 시각 및 포인트</th><th class="p-3">누적 거리(ODO)</th><th class="p-3">외기/내기 온도</th><th class="p-3">현재 배터리</th></tr>
-            </thead>
-            <tbody id="logTableBody"></tbody>
-          </table>
+    <!-- 대화면 지도 출력부 -->
+    <div class="flex-1 p-4 flex flex-col space-y-4">
+      <div class="bg-gray-800 p-4 rounded-xl shadow-lg flex-1 flex flex-col justify-between">
+        <div id="map" class="rounded-lg bg-gray-700 shadow-inner flex-1 mb-4"></div>
+        
+        <!-- 하단 실시간 통계 HUD 계기판 -->
+        <div class="grid grid-cols-3 gap-4 text-center">
+          <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">선택 기간 총 거리</span><span id="hud-distance" class="text-lg font-bold text-green-400">0.00 km</span></div>
+          <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">선택 기간 주행 횟수</span><span id="hud-count" class="text-lg font-bold text-blue-400">0회</span></div>
+          <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">배터리 총 사용량</span><span id="hud-battery" class="text-lg font-bold text-yellow-400">0%</span></div>
         </div>
       </div>
     </div>
   </div>
 
   <script>
-    const STORAGE_KEY = "secure_tesla_dashboard_tokens";
-    let db, allTrips = [], map, tileLayer, routePolylines = [], mapMarkers = [], effChart, tempChart;
+    const STORAGE_CONFIG_KEY = "secure_tesla_pipeline_tokens";
+    let destDb, allRenderTrips = [], map, tileLayer, routePolylines = [], mapMarkers = [];
 
     window.onload = function() {
-      if (!localStorage.getItem(STORAGE_KEY)) {
+      initDateDropdowns();
+      if (!localStorage.getItem(STORAGE_CONFIG_KEY)) {
         document.getElementById('setupView').classList.remove('hidden');
       } else {
         document.getElementById('loginView').classList.remove('hidden');
       }
     };
 
+    function initDateDropdowns() {
+      const currentYear = 2026;
+      const sYear = document.getElementById('startYear'), eYear = document.getElementById('endYear');
+      const sMonth = document.getElementById('startMonth'), eMonth = document.getElementById('endMonth');
+      
+      for(let y = currentYear; y >= 2024; y--) {
+        sYear.add(new Option(`${y}년`, y));
+        eYear.add(new Option(`${y}년`, y));
+      }
+      for(let m = 1; m <= 12; m++) {
+        sMonth.add(new Option(`${m}월`, m));
+        eMonth.add(new Option(`${m}월`, m));
+      }
+      sYear.value = currentYear; sMonth.value = 1;
+      eYear.value = currentYear; eMonth.value = new Date().getMonth() + 1;
+    }
+
     function saveAndEncryptConfig() {
       const config = {
-        apiKey: document.getElementById('cfg-apiKey').value.trim(),
-        projectId: document.getElementById('cfg-projectId').value.trim(),
-        appId: document.getElementById('cfg-appId').value.trim()
+        source: {
+          apiKey: document.getElementById('src-apiKey').value.trim(),
+          projectId: document.getElementById('src-projectId').value.trim(),
+          appId: document.getElementById('src-appId').value.trim()
+        },
+        dest: {
+          apiKey: document.getElementById('dest-apiKey').value.trim(),
+          projectId: document.getElementById('dest-projectId').value.trim(),
+          appId: document.getElementById('dest-appId').value.trim()
+        }
       };
-      if (!config.apiKey || !config.projectId || !config.appId) return alert("❌ 키를 모두 입력해 주세요.");
-      localStorage.setItem(STORAGE_KEY, CryptoJS.AES.encrypt(JSON.stringify(config), "emillie00").toString());
-      initializeAppDashboard(config);
+      
+      if (!config.source.apiKey || !config.dest.apiKey || !config.dest.appId) {
+        return alert("❌ 필수 API Key 및 App ID 값을 입력해 주세요.");
+      }
+
+      localStorage.setItem(STORAGE_CONFIG_KEY, CryptoJS.AES.encrypt(JSON.stringify(config), "emillie00").toString());
+      startApplication(config);
     }
 
     function handleLogin() {
       try {
-        const bytes = CryptoJS.AES.decrypt(localStorage.getItem(STORAGE_KEY), document.getElementById('loginPassword').value.trim());
+        const bytes = CryptoJS.AES.decrypt(localStorage.getItem(STORAGE_CONFIG_KEY), document.getElementById('loginPassword').value.trim());
         const config = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
         document.getElementById('loginError').classList.add('hidden');
-        initializeAppDashboard(config);
+        startApplication(config);
       } catch (e) {
         document.getElementById('loginError').classList.remove('hidden');
       }
     }
 
-    function initializeAppDashboard(config) {
+    async function startApplication(config) {
       document.body.classList.remove('items-center', 'justify-center');
       document.getElementById('authContainer').classList.add('hidden');
       document.getElementById('appDashboard').classList.remove('hidden');
-      if (!firebase.apps.length) firebase.initializeApp(config);
-      db = firebase.firestore();
+      
       initMap();
-      loadData();
-    }
 
-    function resetAppConfig() {
-      if (confirm("🚨 인증 정보를 초기화하시겠습니까?")) {
-        localStorage.removeItem(STORAGE_KEY);
-        location.reload();
-      }
-    }
-
-    // 🗺️ 오픈소스 Leaflet 지도 초기화
-    function initMap() {
-      if (map) return;
-      map = L.map('map', {
-        center: [37.5665, 126.9780],
-        zoom: 12,
-        zoomControl: true
-      });
-      changeMapStyle();
-    }
-
-    // 🎨 테마 타일 실시간 변경 교체 로직
-    function changeMapStyle() {
-      const style = document.getElementById('mapStyleSelect').value;
-      if (tileLayer) map.removeLayer(tileLayer);
-
-      let url = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'; // 기본: 다크 테마
-      let attr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
-
-      if (style === 'voyager') {
-        url = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-      } else if (style === 'osm') {
-        url = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-      }
-
-      tileLayer = L.tileLayer(url, { attribution: attr, maxZoom: 19 }).addTo(map);
-    }
-
-    async function loadData() {
+      const statusEl = document.getElementById('syncStatus');
+      
       try {
-        const snapshot = await db.collection('driving').orderBy('date', 'desc').get();
-        if (snapshot.empty) return;
+        // 1. 외부 동기화 엔진(sync.js) 호출하여 소스 -> 목적지(teslaapp-a6415) 업로드 파이프라인 가동
+        if (window.TeslaSyncEngine) {
+          await window.TeslaSyncEngine.runSync(config.source, config.dest, (msg) => {
+            statusEl.innerText = msg;
+          });
+        }
+        
+        // 2. 동기화가 끝나면 오직 내 목적지 DB(teslaapp-a6415)용 기본 인스턴스 활성화
+        if (!firebase.apps.length || !firebase.app().name === '[DEFAULT]') {
+          firebase.initializeApp(config.dest);
+        }
+        destDb = firebase.firestore();
 
-        allTrips = [];
-        snapshot.docs.forEach(doc => {
+        // 3. 내 DB에서 뷰어용 전체 데이터 로드
+        await loadFromDestinationDB();
+      } catch (err) {
+        statusEl.innerText = "⚠️ 관제 데이터 로드 중 오류가 발생했습니다.";
+      }
+    }
+
+    async function loadFromDestinationDB() {
+      const statusEl = document.getElementById('syncStatus');
+      statusEl.innerText = "📥 내 DB(teslaapp-a6415)에서 화면 로딩 중...";
+      
+      allRenderTrips = [];
+      
+      // 내 목적지 DB의 두 컬렉션을 통합 가공하여 맵에 바인딩
+      const collections = ['driving', 'vehicle_state'];
+      
+      for (const colName of collections) {
+        const snap = await destDb.collection(colName).get();
+        snap.docs.forEach(doc => {
           const data = doc.data();
           const timestamp = data.date || parseInt(doc.id);
-          const dateObj = new Date(timestamp);
           const waypoints = [];
 
           function deepScan(obj) {
             if (!obj || typeof obj !== 'object') return;
             if (Array.isArray(obj)) { obj.forEach(item => deepScan(item)); return; }
-            let lat = null, lng = null, battery = null, odometer = null, inside_temp = null, outside_temp = null;
+            let lat = null, lng = null, odometer = null;
             Object.keys(obj).forEach(k => {
               const kl = k.toLowerCase();
               if (kl === 'lat' || kl === 'latitude') lat = Number(obj[k]);
               if (kl === 'lng' || kl === 'longitude' || kl === 'lon') lng = Number(obj[k]);
-              if (kl.includes('battery')) battery = parseInt(obj[k]);
               if (kl.includes('odometer') || kl === 'odo') odometer = Number(obj[k]);
-              if (kl.includes('inside_temp')) inside_temp = obj[k];
-              if (kl.includes('outside_temp')) outside_temp = obj[k];
             });
             if (lat && lng && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-              if (!waypoints.some(wp => Math.abs(wp.lat - lat) < 0.0001 && Math.abs(wp.lng - lng) < 0.0001)) {
-                waypoints.push({ lat, lng, battery, odometer, inside_temp, outside_temp });
-              }
+              waypoints.push({ lat, lng, odometer });
             }
             Object.keys(obj).forEach(k => { if (typeof obj[k] === 'object' && obj[k] !== null) deepScan(obj[k]); });
           }
 
           deepScan(data);
           waypoints.sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
-          waypoints.forEach((wp, i) => wp.idx = i);
 
-          allTrips.push({
-            id: doc.id,
-            timestamp,
-            dateObj,
-            moveKM: Number(data.moveKM || data.distance || 0),
-            useBattery: Number(data.useBattery || 0),
-            battery_level: data.battery_level,
-            nowBattery: data.nowBattery,
-            outside_temp: data.outside_temp,
-            waypoints
-          });
+          if (waypoints.length > 0) {
+            allRenderTrips.push({
+              id: `${colName}_${doc.id}`,
+              timestamp,
+              moveKM: Number(data.moveKM || data.distance || 0),
+              useBattery: Number(data.useBattery || 0),
+              waypoints
+            });
+          }
         });
-
-        allTrips.sort((a, b) => b.timestamp - a.timestamp);
-        renderDynamicFilters();
-        renderGlobalCharts();
-      } catch (error) {
-        console.error(error);
       }
+
+      allRenderTrips.sort((a, b) => b.timestamp - a.timestamp);
+      statusEl.innerText = `✅ 로드 완료 (총 ${allRenderTrips.length}개 트랙)`;
+      
+      updateDashboardView();
     }
 
-    function renderDynamicFilters() {
-      const mode = document.getElementById('viewModeSelect').value;
-      const container = document.getElementById('dynamicFilterContainer');
-      container.innerHTML = '';
+    function updateDashboardView() {
+      if (allRenderTrips.length === 0) return;
 
-      if (mode === 'individual') {
-        const select = document.createElement('select');
-        select.id = "tripSelect";
-        select.className = "w-full bg-gray-700 text-white rounded p-2 text-xs border border-gray-600 focus:outline-none";
-        allTrips.forEach(t => {
-          const opt = document.createElement('option'); opt.value = t.id;
-          opt.innerText = t.dateObj.toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' 주행';
-          select.appendChild(opt);
-        });
-        select.addEventListener('change', updateDashboard);
-        container.appendChild(select);
-      } 
-      else if (mode === 'daily') {
-        const days = [...new Set(allTrips.map(t => t.dateObj.toLocaleDateString('ko-KR')))];
-        const select = document.createElement('select'); select.id = "dateSelect";
-        select.className = "w-full bg-gray-700 text-white rounded p-2 text-xs border border-gray-600 focus:outline-none";
-        days.forEach(d => {
-          const opt = document.createElement('option'); opt.value = d; opt.innerText = d;
-          select.appendChild(opt);
-        });
-        select.addEventListener('change', updateDashboard);
-        container.appendChild(select);
-      } 
-      else if (mode === 'weekly') {
-        const getWeekNumber = (d) => {
-          const date = new Date(d.getTime()); date.setHours(0,0,0,0);
-          date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
-          return date.getFullYear() + "년 " + Math.round(((date.getTime() - new Date(date.getFullYear(), 0, 4).getTime()) / 86400000 - 3 + (new Date(date.getFullYear(), 0, 4).getDay() + 6) % 7) / 7 + 1) + "주차";
-        };
-        const weeks = [...new Set(allTrips.map(t => getWeekNumber(t.dateObj)))];
-        const select = document.createElement('select'); select.id = "weekSelect";
-        select.className = "w-full bg-gray-700 text-white rounded p-2 text-xs border border-gray-600 focus:outline-none";
-        weeks.forEach(w => {
-          const opt = document.createElement('option'); opt.value = w; opt.innerText = w;
-          select.appendChild(opt);
-        });
-        select.addEventListener('change', updateDashboard);
-        container.appendChild(select);
-      } 
-      else if (mode === 'custom') {
-        container.innerHTML = `
-          <input type="date" id="startDateInput" class="w-full bg-gray-700 text-white rounded p-1.5 text-xs border border-gray-600 focus:outline-none">
-          <input type="date" id="endDateInput" class="w-full bg-gray-700 text-white rounded p-1.5 text-xs border border-gray-600 focus:outline-none">
-          <button onclick="updateDashboard()" class="w-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1.5 rounded transition">조회하기</button>
-        `;
-        if (allTrips.length > 0) {
-          document.getElementById('startDateInput').value = allTrips[allTrips.length - 1].dateObj.toISOString().split('T')[0];
-          document.getElementById('endDateInput').value = allTrips[0].dateObj.toISOString().split('T')[0];
-        }
-      }
-      updateDashboard();
-    }
+      const sYear = parseInt(document.getElementById('startYear').value);
+      const sMonth = parseInt(document.getElementById('startMonth').value);
+      const eYear = parseInt(document.getElementById('endYear').value);
+      const eMonth = parseInt(document.getElementById('endMonth').value);
 
-    // 🏁 동선 및 오토포커스 바운드 처리 핵심 연산부
-    function updateDashboard() {
-      const mode = document.getElementById('viewModeSelect').value;
-      let targetTrips = [];
+      const startDate = new Date(sYear, sMonth - 1, 1, 0, 0, 0).getTime();
+      const endDate = new Date(eYear, eMonth, 1, 23, 59, 59).getTime();
 
-      if (mode === 'individual') {
-        const val = document.getElementById('tripSelect')?.value;
-        targetTrips = allTrips.filter(t => t.id === val);
-      } else if (mode === 'daily') {
-        const val = document.getElementById('dateSelect')?.value;
-        targetTrips = allTrips.filter(t => t.dateObj.toLocaleDateString('ko-KR') === val);
-      } else if (mode === 'weekly') {
-        const val = document.getElementById('weekSelect')?.value;
-        const getWeekNumber = (d) => {
-          const date = new Date(d.getTime()); date.setHours(0,0,0,0);
-          date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
-          return date.getFullYear() + "년 " + Math.round(((date.getTime() - new Date(date.getFullYear(), 0, 4).getTime()) / 86400000 - 3 + (new Date(date.getFullYear(), 0, 4).getDay() + 6) % 7) / 7 + 1) + "주차";
-        };
-        targetTrips = allTrips.filter(t => getWeekNumber(t.dateObj) === val);
-      } else if (mode === 'custom') {
-        const sStr = document.getElementById('startDateInput')?.value;
-        const eStr = document.getElementById('endDateInput')?.value;
-        if (sStr && eStr) {
-          const sDate = new Date(sStr + "T00:00:00"); const eDate = new Date(eStr + "T23:59:59");
-          targetTrips = allTrips.filter(t => t.dateObj >= sDate && t.dateObj <= eDate);
-        }
-      }
+      const targetTrips = allRenderTrips.filter(t => t.timestamp >= startDate && t.timestamp <= endDate);
 
-      // 🧹 지도 위의 이전 레이어 제거 클리닝
       routePolylines.forEach(p => map.removeLayer(p)); routePolylines = [];
       mapMarkers.forEach(m => map.removeLayer(m)); mapMarkers = [];
 
-      let totalKM = 0, totalBatUsed = 0, combinedWaypoints = [];
+      let totalKM = 0, totalBatUsed = 0;
       let boundsLatLngs = [];
 
       targetTrips.forEach(trip => {
         totalKM += trip.moveKM;
         totalBatUsed += trip.useBattery;
 
-        // Leaflet 전용 포맷 좌표 변환 ([lat, lng] 배열 구조)
         const linePath = trip.waypoints.map(wp => [wp.lat, wp.lng]);
+        const timeLabel = new Date(trip.timestamp).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         
         if (linePath.length > 0) {
-          // 실선 오버레이 탑재
-          const polyline = L.polyline(linePath, {
-            color: '#ef4444',
-            weight: 5,
-            opacity: 0.85
-          }).addTo(map);
-          routePolylines.push(polyline);
+          const polyline = L.polyline(linePath, { color: '#ef4444', weight: 5, opacity: 0.75 }).addTo(map);
 
+          // 🖱️ 평소엔 안 보이다가 오직 경로 선을 클릭했을 때만 팝업 컨텍스트 노출
+          polyline.bindPopup(`
+            <div class="leaflet-popup-custom">
+              <b>📅 주행 일시:</b> ${timeLabel}<br>
+              <b>🏁 주행 거리:</b> ${trip.moveKM.toFixed(2)} km<br>
+              <b>🔋 배터리 소모:</b> ${trip.useBattery}%
+            </div>
+          `);
+
+          routePolylines.push(polyline);
           linePath.forEach(coord => boundsLatLngs.push(coord));
 
-          // 출발지 마커 핀 주입
-          const startMarker = L.marker(linePath[0]).addTo(map);
-          startMarker.bindPopup(`<div class="leaflet-popup-custom"><b>🟢 출발</b><br>${trip.dateObj.toLocaleDateString('ko-KR', {month:'short', day:'numeric'})} ${trip.dateObj.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'})}</div>`);
+          const startMarker = L.circleMarker(linePath[0], { radius: 5, color: '#10b981', fillColor: '#10b981', fillOpacity: 1 }).addTo(map);
           mapMarkers.push(startMarker);
-
-          // 도착지 마커 핀 주입
-          if (linePath.length > 1) {
-            const endMarker = L.marker(linePath[linePath.length - 1]).addTo(map);
-            endMarker.bindPopup(`<div class="leaflet-popup-custom"><b>🔴 도착</b><br>거리: ${trip.moveKM.toFixed(2)} km<br>소모: ${trip.useBattery}%</div>`);
-            mapMarkers.push(endMarker);
-          }
         }
-
-        trip.waypoints.forEach(wp => {
-          combinedWaypoints.push({
-            ...wp,
-            timeLabel: trip.dateObj.toLocaleDateString('ko-KR', {month:'short', day:'numeric'}) + ' ' + trip.dateObj.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'})
-          });
-        });
       });
 
-      // 🔍 최적의 바운더리로 카메라 자동 스케일 맞춤 포커싱
       if (boundsLatLngs.length > 0) {
-        const bounds = L.latLngBounds(boundsLatLngs);
-        map.fitBounds(bounds, { padding: [40, 40] });
-      }
-
-      // HUD 통계 계산 연산
-      let avgEff = 0;
-      if (totalKM > 0 && totalBatUsed > 0) {
-        avgEff = Math.round((75000 * (totalBatUsed / 100)) / totalKM);
+        map.fitBounds(L.latLngBounds(boundsLatLngs), { padding: [40, 40] });
       }
 
       document.getElementById('hud-distance').innerText = `${totalKM.toFixed(2)} km`;
-      document.getElementById('hud-battery').innerText = `${targetTrips.length}회 주행 묶음`;
-      document.getElementById('hud-eff').innerText = `${totalBatUsed.toFixed(1)}% 소모 (${avgEff > 0 ? avgEff : '-'} Wh/km)`;
-
-      // 스마트 텍스트 인사이츠 업데이트 리포팅
-      const insEff = document.getElementById('insight-efficiency');
-      const insDist = document.getElementById('insight-distance');
-      
-      if (avgEff > 0) {
-        if (avgEff < 150) insEff.innerHTML = `🟢 현재 선택 주기 평균 전비는 <b>${avgEff} Wh/km</b>로 <b>최상급 효율</b>을 기록 중입니다. 연비 운전의 달인이시군요!`;
-        else if (avgEff < 210) insEff.innerHTML = `🟡 현재 선택 주기 평균 전비는 <b>${avgEff} Wh/km</b>로 표준 범주에 속합니다. 냉난방 공조 장치 사용에 따른 최적화 상태입니다.`;
-        else insEff.innerHTML = `🔴 현재 선택 주기 평균 전비는 <b>${avgEff} Wh/km</b>로 다소 높은 편입니다. 급가속 빈도가 높거나 외기 온도의 영향(한파/폭염)이 있었는지 체크해 보세요.`;
-      } else {
-        insEff.innerText = "조회된 통계 데이터 요약이 충분하지 않습니다.";
-      }
-
-      if (targetTrips.length > 0) {
-        const maxSingleTrip = Math.max(...targetTrips.map(t => t.moveKM));
-        const temps = targetTrips.map(t => parseFloat(t.outside_temp)).filter(t => !isNaN(t));
-        const avgOutTemp = temps.length > 0 ? (temps.reduce((a,b)=>a+b,0)/temps.length).toFixed(1) : '-';
-        insDist.innerHTML = `📍 이 기간 중 1회 최장 주행 거리는 <b>${maxSingleTrip.toFixed(2)} km</b>이며,<br>🌡️ 평균 외부 기온 환경은 <b>${avgOutTemp}°C</b> 조건이었습니다.`;
-      }
-
-      // 하단 데이터 테이블 표 갱신
-      const logBody = document.getElementById('logTableBody');
-      logBody.innerHTML = '';
-      combinedWaypoints.forEach(wp => {
-        const tr = document.createElement('tr');
-        tr.className = "border-b border-gray-700 hover:bg-gray-700/50 text-xs text-gray-200";
-        tr.innerHTML = `
-          <td class="p-3 font-mono text-gray-400">${wp.timeLabel} (#${wp.idx})</td>
-          <td class="p-3">${wp.odometer ? wp.odometer.toFixed(2) + ' km' : '-'}</td>
-          <td class="p-3"><span class="text-blue-400">${wp.outside_temp || '-'}°C</span> / <span class="text-orange-400">${wp.inside_temp || '-'}°C</span></td>
-          <td class="p-3 text-cyan-400 font-mono">${wp.battery ? wp.battery + '%' : '-'}</td>
-        `;
-        logBody.appendChild(tr);
-      });
+      document.getElementById('hud-count').innerText = `${targetTrips.length}회 주행`;
+      document.getElementById('hud-battery').innerText = `${totalBatUsed.toFixed(0)}%`;
     }
 
-    function renderGlobalCharts() {
-      const tripLabels = allTrips.map(t => t.dateObj.toLocaleDateString('ko-KR', {month:'short', day:'numeric'})).reverse();
-      const distances = allTrips.map(t => t.moveKM).reverse();
-      const batteryUses = allTrips.map(t => t.useBattery).reverse();
-      const scatterData = [];
-
-      allTrips.forEach(data => {
-        const temp = parseFloat(data.outside_temp);
-        if (!isNaN(temp) && data.moveKM > 0 && data.useBattery > 0) {
-          const eff = Math.round((75000 * (data.useBattery / 100)) / data.moveKM);
-          if(eff < 500) scatterData.push({ x: temp, y: eff });
-        }
-      });
-
-      if (effChart) effChart.destroy();
-      effChart = new Chart(document.getElementById('efficiencyChart').getContext('2d'), {
-        type: 'bar',
-        data: {
-          labels: tripLabels,
-          datasets: [
-            { label: '주행거리 (km)', data: distances, backgroundColor: 'rgba(59, 130, 246, 0.6)', yAxisID: 'y' },
-            { label: '배터리 소모 (%)', data: batteryUses, backgroundColor: 'rgba(239, 68, 68, 0.6)', yAxisID: 'y1' }
-          ]
-        },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { position: 'left' }, y1: { position: 'right', grid: { drawOnChartArea: false } } } }
-      });
-
-      if (tempChart) tempChart.destroy();
-      tempChart = new Chart(document.getElementById('tempScatterChart').getContext('2d'), {
-        type: 'scatter',
-        data: { datasets: [{ label: '외기온도별 환산전비(Wh/km)', data: scatterData, backgroundColor: 'rgba(16, 185, 129, 0.7)' }] },
-        options: { responsive: true, maintainAspectRatio: false }
-      });
+    function initMap() {
+      if (map) return;
+      map = L.map('map', { center: [37.5665, 126.9780], zoom: 11 });
+      changeMapStyle();
     }
 
-    function switchTab(tabId) {
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-      document.getElementById(tabId).classList.remove('hidden');
-      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('border-red-500', 'text-red-500'));
-      document.getElementById('btn-' + tabId).classList.add('border-red-500', 'text-red-500');
-      
-      // 🗺️ Leaflet 지도가 탭 전환 시 보이지 않거나 작게 깨지는 현상 방지용 리사이즈 갱신 트리거
-      if (tabId === 'mapTab' && map) {
-        setTimeout(() => {
-          map.invalidateSize();
-          updateDashboard();
-        }, 100);
+    function changeMapStyle() {
+      const style = document.getElementById('mapStyleSelect').value;
+      if (tileLayer) map.removeLayer(tileLayer);
+
+      let url = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+      let attr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributor &copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+      if (style === 'voyager') url = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+      else if (style === 'osm') url = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+      tileLayer = L.tileLayer(url, { attribution: attr, maxZoom: 19 }).addTo(map);
+    }
+
+    function resetAppConfig() {
+      if (confirm("🚨 인증 자격 증명 정보를 모두 초기화하시겠습니까?")) {
+        localStorage.removeItem(STORAGE_CONFIG_KEY);
+        location.reload();
       }
     }
   </script>
