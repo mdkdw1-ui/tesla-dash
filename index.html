@@ -83,7 +83,7 @@
           </div>
 
           <div class="bg-gray-900/60 p-3 rounded-lg border border-gray-700 space-y-2">
-            <label class="block text-xs font-semibold text-gray-400 uppercase">🔍 세부 조건 선택</label>
+            <label class="block text-xs font-semibold text-gray-400 uppercase">🔍 세부 데이터 존재 기한</label>
             <div id="dynamicDateInputs" class="space-y-2"></div>
           </div>
 
@@ -223,7 +223,7 @@
   <script>
     const STORAGE_CONFIG_KEY = "secure_tesla_dashboard_local_tokens";
     let db, allTrips = [], rawVehicleObj = null, map, routePolylines = [], mapMarkers = [];
-    let currentFilterMode = 'daily'; // daily, weekly, monthly, yearly, custom
+    let currentFilterMode = 'daily';
 
     window.onload = function() {
       if (!localStorage.getItem(STORAGE_CONFIG_KEY)) {
@@ -233,7 +233,6 @@
       }
     };
 
-    // 카카오 맵 스크립트 동적 인젝션
     function loadKakaoScript(appKey, callback) {
       if (window.kakao && window.kakao.maps) { callback(); return; }
       const script = document.createElement('script');
@@ -285,14 +284,33 @@
       });
     }
 
-    // 메인 데이터 로더 (기존 driving 로직 분리 및 vehicle 통합 탐색)
+    // 🕒 시각 포맷 헬퍼 함수
+    function formatDateString(timestamp, format) {
+      const d = new Date(timestamp);
+      const ye = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const da = String(d.getDate()).padStart(2, '0');
+      if (format === 'YYYY-MM-DD') return `${ye}-${mo}-${da}`;
+      if (format === 'YYYY-MM') return `${ye}-${mo}`;
+      if (format === 'YYYY') return `${ye}`;
+      return `${ye}-${mo}-${da}`;
+    }
+
+    // 📅 월요일 구하기 헬퍼 함수
+    function getMondayDateString(timestamp) {
+      const d = new Date(timestamp);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const mon = new Date(d.setDate(diff));
+      return formatDateString(mon.getTime(), 'YYYY-MM-DD');
+    }
+
     async function loadViewerData() {
       const statusEl = document.getElementById('syncStatus');
       statusEl.innerText = "📥 DB 구조 분석 및 로드 중...";
       allTrips = [];
       rawVehicleObj = null;
 
-      // 1. driving 컬렉션 로딩
       const drivingSnap = await db.collection('driving').get();
       drivingSnap.docs.forEach(doc => {
         const data = doc.data();
@@ -329,7 +347,6 @@
         }
       });
 
-      // 2. vehicle 컬렉션 로딩 (가장 가치가 높은 최신 정보 타겟팅)
       const vehicleSnap = await db.collection('vehicle').get();
       let maxTime = 0;
       vehicleSnap.docs.forEach(doc => {
@@ -344,17 +361,68 @@
       allTrips.sort((a, b) => b.timestamp - a.timestamp);
       statusEl.innerText = `✅ 로드 성공 (주행기록: ${allTrips.length}개)`;
       
-      // 내 차량 정보 UI 렌더링 매핑
       renderVehicleTab();
-      // 기본값 필터 세팅 가동 (일별)
-      setFilterMode('daily');
+      setFilterMode('daily'); // 기본 일별 모드 초기 실행
     }
 
-    // 📅 대분류 필터 변경 제어 엔진
+    // 💡 지능형 필드 자율 검색 탐색 엔진
+    function findKeyAdaptive(targetKey, fallbackKeys = []) {
+      if (!rawVehicleObj) return '-';
+      
+      // 1. 점(.) 형태의 엄격 경로 검색 우선 시도
+      if (targetKey.includes('.')) {
+        let current = rawVehicleObj;
+        const parts = targetKey.split('.');
+        for (const p of parts) {
+          if (current && current[p] !== undefined) current = current[p];
+          else { current = null; break; }
+        }
+        if (current !== null && current !== undefined) return current;
+      }
+      
+      const simpleKey = targetKey.split('.').pop();
+      if (rawVehicleObj[simpleKey] !== undefined && rawVehicleObj[simpleKey] !== null) {
+        return rawVehicleObj[simpleKey];
+      }
+
+      for (const fk of fallbackKeys) {
+        if (rawVehicleObj[fk] !== undefined && rawVehicleObj[fk] !== null) return rawVehicleObj[fk];
+      }
+
+      // 2. 스키마가 다른 경우를 대비해 하위 깊은 노드까지 전체 재귀 스캔
+      let foundValue = null;
+      function deepSearch(obj) {
+        if (foundValue !== null || !obj || typeof obj !== 'object') return;
+        
+        if (obj[simpleKey] !== undefined && obj[simpleKey] !== null) {
+          foundValue = obj[simpleKey];
+          return;
+        }
+        for (const fk of fallbackKeys) {
+          if (obj[fk] !== undefined && obj[fk] !== null) {
+            foundValue = obj[fk];
+            return;
+          }
+        }
+        
+        const targetLower = simpleKey.toLowerCase();
+        for (const k of Object.keys(obj)) {
+          if (k.toLowerCase() === targetLower || k.toLowerCase().includes(targetLower)) {
+            foundValue = obj[k];
+            return;
+          }
+          if (typeof obj[k] === 'object') deepSearch(obj[k]);
+        }
+      }
+      
+      deepSearch(rawVehicleObj);
+      return foundValue !== null ? foundValue : '-';
+    }
+
+    // 📅 데이터가 존재하는 기간만 인젝션하는 동적 선택기 엔진
     function setFilterMode(mode) {
       currentFilterMode = mode;
       
-      // 버큰 스타일 토글 변경 처리
       ['daily', 'weekly', 'monthly', 'yearly', 'custom'].forEach(m => {
         const btn = document.getElementById(`btn-mode-${m}`);
         if (m === mode) {
@@ -367,33 +435,81 @@
       });
 
       const container = document.getElementById('dynamicDateInputs');
-      const todayStr = "2026-07-20"; // 기준시점 동적 기본 세팅
+      if (allTrips.length === 0) {
+        container.innerHTML = `<div class="text-xs text-gray-500">주행 데이터가 없습니다.</div>`;
+        return;
+      }
 
-      // 대분류 모드에 따른 세부 인풋 요소 그리기
       if (mode === 'daily') {
-        container.innerHTML = `<input type="date" id="input-daily" value="${todayStr}" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-2 text-sm focus:outline-none">`;
-      } else if (mode === 'weekly') {
+        const daysMap = {};
+        allTrips.forEach(t => {
+          const dStr = formatDateString(t.timestamp, 'YYYY-MM-DD');
+          daysMap[dStr] = (daysMap[dStr] || 0) + 1;
+        });
+        const uniqueDays = Object.keys(daysMap).sort((a,b) => b.localeCompare(a));
+        
         container.innerHTML = `
-          <input type="date" id="input-weekly" value="${todayStr}" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-2 text-sm focus:outline-none">
-          <span class="text-[10px] text-gray-400 block mt-1">* 선택한 날짜가 속한 월~일 주간 전체가 계산됩니다.</span>
+          <select id="input-daily" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-2 text-sm focus:outline-none">
+            ${uniqueDays.map(d => `<option value="${d}">${d} (${daysMap[d]}회 주행)</option>`).join('')}
+          </select>
         `;
-      } else if (mode === 'monthly') {
+      } 
+      else if (mode === 'weekly') {
+        const weeksMap = {};
+        allTrips.forEach(t => {
+          const monStr = getMondayDateString(t.timestamp);
+          weeksMap[monStr] = (weeksMap[monStr] || 0) + 1;
+        });
+        const uniqueWeeks = Object.keys(weeksMap).sort((a,b) => b.localeCompare(a));
+        
         container.innerHTML = `
-          <div class="grid grid-cols-2 gap-1">
-            <select id="input-month-year" onchange="updateDashboardView()" class="bg-gray-700 text-white p-2 text-sm rounded border border-gray-600"><option value="2026">2026년</option><option value="2025">2025년</option><option value="2024">2024년</option></select>
-            <select id="input-month-val" onchange="updateDashboardView()" class="bg-gray-700 text-white p-2 text-sm rounded border border-gray-600">
-              ${Array.from({length:12}, (_,i)=> `<option value="${i+1}" ${i===6?'selected':''}>${i+1}월</option>`).join('')}
-            </select>
-          </div>
+          <select id="input-weekly" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-2 text-sm focus:outline-none">
+            ${uniqueWeeks.map(w => {
+              const mon = new Date(w);
+              const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+              return `<option value="${w}">${w} 주간 (${mon.getMonth()+1}/${mon.getDate()}~${sun.getMonth()+1}/${sun.getDate()})</option>`;
+            }).join('')}
+          </select>
         `;
-      } else if (mode === 'yearly') {
-        container.innerHTML = `<select id="input-yearly-val" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white p-2 text-sm rounded border border-gray-600"><option value="2026">2026년 전체</option><option value="2025">2025년 전체</option><option value="2024">2024년 전체</option></select>`;
-      } else if (mode === 'custom') {
+      } 
+      else if (mode === 'monthly') {
+        const monthsMap = {};
+        allTrips.forEach(t => {
+          const mStr = formatDateString(t.timestamp, 'YYYY-MM');
+          monthsMap[mStr] = (monthsMap[mStr] || 0) + 1;
+        });
+        const uniqueMonths = Object.keys(monthsMap).sort((a,b) => b.localeCompare(a));
+        
+        container.innerHTML = `
+          <select id="input-monthly" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-2 text-sm focus:outline-none">
+            ${uniqueMonths.map(m => `<option value="${m}">${m.split('-')[0]}년 ${m.split('-')[1]}월 (${monthsMap[m]}회)</option>`).join('')}
+          </select>
+        `;
+      } 
+      else if (mode === 'yearly') {
+        const yearsMap = {};
+        allTrips.forEach(t => {
+          const yStr = formatDateString(t.timestamp, 'YYYY');
+          yearsMap[yStr] = (yearsMap[yStr] || 0) + 1;
+        });
+        const uniqueYears = Object.keys(yearsMap).sort((a,b) => b.localeCompare(a));
+        
+        container.innerHTML = `
+          <select id="input-yearly" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-2 text-sm focus:outline-none">
+            ${uniqueYears.map(y => `<option value="${y}">${y}년 전체 (${yearsMap[y]}회)</option>`).join('')}
+          </select>
+        `;
+      } 
+      else if (mode === 'custom') {
+        const timestamps = allTrips.map(t => t.timestamp);
+        const minDate = formatDateString(Math.min(...timestamps), 'YYYY-MM-DD');
+        const maxDate = formatDateString(Math.max(...timestamps), 'YYYY-MM-DD');
+        
         container.innerHTML = `
           <div class="space-y-1">
-            <input type="date" id="input-custom-start" value="2026-07-01" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-1.5 text-xs focus:outline-none">
+            <input type="date" id="input-custom-start" min="${minDate}" max="${maxDate}" value="${minDate}" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-1.5 text-xs focus:outline-none">
             <div class="text-center text-gray-500 text-xs">~</div>
-            <input type="date" id="input-custom-end" value="${todayStr}" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-1.5 text-xs focus:outline-none">
+            <input type="date" id="input-custom-end" min="${minDate}" max="${maxDate}" value="${maxDate}" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-1.5 text-xs focus:outline-none">
           </div>
         `;
       }
@@ -401,7 +517,6 @@
       updateDashboardView();
     }
 
-    // 🧮 선택한 필터 대분류 조건에 따라 주행 데이터를 선별하는 연산 엔진
     function updateDashboardView() {
       if (allTrips.length === 0 || !map) return;
 
@@ -416,29 +531,24 @@
       else if (currentFilterMode === 'weekly') {
         const wStr = document.getElementById('input-weekly').value;
         if(!wStr) return;
-        const refDate = new Date(wStr);
-        const day = refDate.getDay();
-        // 월요일 기준 주간 범위 획정 알고리즘
-        const diffToMon = refDate.getDate() - day + (day === 0 ? -6 : 1);
-        const monDate = new Date(refDate.setDate(diffToMon));
-        monDate.setHours(0,0,0,0);
+        const monDate = new Date(wStr + "T00:00:00");
         startMs = monDate.getTime();
-        
         const sunDate = new Date(monDate);
-        sunDate.setDate(monDate.getDate() + 6);
-        sunDate.setHours(23,59,59,999);
-        endMs = sunDate.getTime();
+        sunDate.setDate(monDate.getDate() + 7);
+        endMs = sunDate.getTime() - 1;
       } 
       else if (currentFilterMode === 'monthly') {
-        const y = document.getElementById('input-month-year').value;
-        const m = document.getElementById('input-month-val').value;
+        const mStr = document.getElementById('input-monthly').value;
+        if(!mStr) return;
+        const [y, m] = mStr.split('-');
         startMs = new Date(y, m - 1, 1, 0, 0, 0).getTime();
         endMs = new Date(y, m, 0, 23, 59, 59).getTime();
       } 
       else if (currentFilterMode === 'yearly') {
-        const y = document.getElementById('input-yearly-val').value;
-        startMs = new Date(y, 0, 1, 0, 0, 0).getTime();
-        endMs = new Date(y, 11, 31, 23, 59, 59).getTime();
+        const yStr = document.getElementById('input-yearly').value;
+        if(!yStr) return;
+        startMs = new Date(yStr, 0, 1, 0, 0, 0).getTime();
+        endMs = new Date(yStr, 11, 31, 23, 59, 59).getTime();
       } 
       else if (currentFilterMode === 'custom') {
         const s = document.getElementById('input-custom-start').value;
@@ -448,10 +558,8 @@
         endMs = new Date(e + "T23:59:59").getTime();
       }
 
-      // 기간 필터링 적용
       const targetTrips = allTrips.filter(t => t.timestamp >= startMs && t.timestamp <= endMs);
 
-      // 지도 레이어 초기화
       routePolylines.forEach(p => p.setMap(null)); routePolylines = [];
       mapMarkers.forEach(m => m.setMap(null)); mapMarkers = [];
 
@@ -501,93 +609,72 @@
 
       if (hasPoints) map.setBounds(bounds);
 
-      // HUD 계기판 수치 반영
       document.getElementById('hud-distance').innerText = `${totalKM.toFixed(2)} km`;
       document.getElementById('hud-count').innerText = `${targetTrips.length}회 주행`;
       document.getElementById('hud-battery').innerText = `${totalBatUsed.toFixed(0)}%`;
     }
 
-    // 🚗 [내 차량 정보 탭] 렌더링 엔진 (Nested JSON 필드 다이렉트 바인딩)
     function renderVehicleTab() {
       if (!rawVehicleObj) return;
 
-      // 객체 깊은 곳 안전 조회 매퍼 헬퍼 함수
-      function findKey(path, def = '-') {
-        const keys = path.split('.');
-        let current = rawVehicleObj;
-        for (const key of keys) {
-          if (current && current[key] !== undefined) current = current[key];
-          else return def;
-        }
-        return (current !== null && current !== undefined) ? current : def;
-      }
-
-      // 1. 타임스탬프 변환
       const vDate = rawVehicleObj.date ? new Date(rawVehicleObj.date) : new Date();
       document.getElementById('v-last-update').innerText = `마지막 수신: ${vDate.toLocaleString('ko-KR')}`;
 
-      // 2. 기본 하드웨어 지표 지도화
-      const carName = findKey('display_name') || findKey('vehicle_config.car_type', 'Tesla Model');
+      // 지능형 추적 엔진을 활용한 데이터 파싱 가동
+      const carName = findKeyAdaptive('display_name', ['vehicle_config.car_type', 'car_type']);
       document.getElementById('v-name').innerText = carName;
       
-      const rawOdo = findKey('vehicle_state.odometer');
-      const odoStr = rawOdo !== '-' ? `${(Number(rawOdo) * 1.60934).toFixed(1)} km` : '-'; // 마일 단위 환산 보정 규칙 적용
+      const rawOdo = findKeyAdaptive('vehicle_state.odometer', ['odometer', 'odo', 'total_distance']);
+      const odoStr = rawOdo !== '-' ? `${(Number(rawOdo) * 1.60934).toFixed(1)} km` : '-';
       document.getElementById('v-odometer').innerText = odoStr;
 
-      const batLvl = findKey('charge_state.battery_level');
-      const batRange = findKey('charge_state.battery_range');
+      const batLvl = findKeyAdaptive('charge_state.battery_level', ['battery_level', 'soc', 'battery']);
+      const batRange = findKeyAdaptive('charge_state.battery_range', ['battery_range', 'range']);
       const batStr = batLvl !== '-' ? `${batLvl}% (${(Number(batRange) * 1.60934).toFixed(0)} km 주행가능)` : '-';
       document.getElementById('v-battery').innerText = batStr;
-      document.getElementById('v-vin').innerText = findKey('vin');
+      document.getElementById('v-vin').innerText = findKeyAdaptive('vin', ['vin_code']);
 
-      // 3. 공조 및 온도 상태 바인딩
-      document.getElementById('v-temp-in').innerText = `${findKey('climate_state.inside_temp')} °C`;
-      document.getElementById('v-temp-out').innerText = `${findKey('climate_state.outside_temp')} °C`;
-      const isClimateOn = findKey('climate_state.is_climate_on');
-      setBooleanBadge('v-climate-on', isClimateOn, '가동 중', '꺼짐', 'text-green-400', 'text-gray-500');
-      setBooleanBadge('v-wheel-heat', findKey('climate_state.steering_wheel_heater'), 'ON', 'OFF', 'text-red-400', 'text-gray-500');
+      document.getElementById('v-temp-in').innerText = `${findKeyAdaptive('climate_state.inside_temp', ['inside_temp', 'inside'])} °C`;
+      document.getElementById('v-temp-out').innerText = `${findKeyAdaptive('climate_state.outside_temp', ['outside_temp', 'outside'])} °C`;
+      
+      setBooleanBadge('v-climate-on', findKeyAdaptive('climate_state.is_climate_on', ['is_climate_on', 'climate_on']), '가동 중', '꺼짐', 'text-green-400', 'text-gray-500');
+      setBooleanBadge('v-wheel-heat', findKeyAdaptive('climate_state.steering_wheel_heater', ['steering_wheel_heater', 'wheel_heat']), 'ON', 'OFF', 'text-red-400', 'text-gray-500');
 
-      // 4. 충전 상태 인디케이터 바인딩
-      document.getElementById('v-charge-state').innerText = findKey('charge_state.charging_state');
-      const cVolts = findKey('charge_state.charger_voltage');
-      const cAmps = findKey('charge_state.charger_actual_current');
+      document.getElementById('v-charge-state').innerText = findKeyAdaptive('charge_state.charging_state', ['charging_state']);
+      const cVolts = findKeyAdaptive('charge_state.charger_voltage', ['charger_voltage', 'voltage']);
+      const cAmps = findKeyAdaptive('charge_state.charger_actual_current', ['charger_actual_current', 'current']);
       document.getElementById('v-charge-power').innerText = (cVolts !== '-' && cAmps !== '-') ? `${cVolts}V / ${cAmps}A` : '-';
-      document.getElementById('v-charge-limit').innerText = `${findKey('charge_state.charge_limit_soc')}%`;
-      const timeToFull = findKey('charge_state.time_to_full_charge');
-      document.getElementById('v-charge-time').innerText = timeToFull !== '-' ? `${timeToFull}시간` : '충전 중 아님';
+      document.getElementById('v-charge-limit').innerText = `${findKeyAdaptive('charge_state.charge_limit_soc', ['charge_limit_soc', 'charge_limit'])}%`;
+      document.getElementById('v-charge-time').innerText = `${findKeyAdaptive('charge_state.time_to_full_charge', ['time_to_full_charge'])}시간`;
 
-      // 5. 보안 및 락킹 바인딩
-      setBooleanBadge('v-lock', findKey('vehicle_state.locked'), '🔒 잠김', '🔓 열림', 'text-green-400', 'text-red-400');
-      document.getElementById('v-gear').innerText = findKey('drive_state.gear') || 'N/A (주차)';
-      setBooleanBadge('v-frunk', findKey('vehicle_state.ft'), '열림', '닫힘', 'text-red-400', 'text-gray-500');
-      setBooleanBadge('v-trunk', findKey('vehicle_state.rt'), '열림', '닫힘', 'text-red-400', 'text-gray-500');
+      setBooleanBadge('v-lock', findKeyAdaptive('vehicle_state.locked', ['locked', 'is_locked']), '🔒 잠김', '🔓 열림', 'text-green-400', 'text-red-400');
+      document.getElementById('v-gear').innerText = findKeyAdaptive('drive_state.gear', ['gear', 'shift_state']) || 'P (주차)';
+      setBooleanBadge('v-frunk', findKeyAdaptive('vehicle_state.ft', ['ft', 'frunk']), '열림', '닫힘', 'text-red-400', 'text-gray-500');
+      setBooleanBadge('v-trunk', findKeyAdaptive('vehicle_state.rt', ['rt', 'trunk']), '열림', '닫힘', 'text-red-400', 'text-gray-500');
 
-      // 6. 시스템 스펙 매핑
-      document.getElementById('v-version').innerText = findKey('vehicle_state.car_version');
-      document.getElementById('v-update-version').innerText = findKey('vehicle_state.software_update.version');
-      setBooleanBadge('v-sentry', findKey('vehicle_state.sentry_mode'), '활성화', '비활성화', 'text-red-400', 'text-gray-500');
-      const rawSpeed = findKey('drive_state.speed');
+      document.getElementById('v-version').innerText = findKeyAdaptive('vehicle_state.car_version', ['car_version', 'version']);
+      document.getElementById('v-update-version').innerText = findKeyAdaptive('vehicle_state.software_update.version', ['version']);
+      setBooleanBadge('v-sentry', findKeyAdaptive('vehicle_state.sentry_mode', ['sentry_mode', 'sentry']), '활성화', '비활성화', 'text-red-400', 'text-gray-500');
+      const rawSpeed = findKeyAdaptive('drive_state.speed', ['speed']);
       document.getElementById('v-speed').innerText = rawSpeed !== '-' ? `${(Number(rawSpeed) * 1.60934).toFixed(0)} km/h` : '0 km/h';
 
-      // 7. 사이드바 요약 패널 업데이트
-      document.getElementById('brief-state').innerText = findKey('state');
-      document.getElementById('brief-battery').innerText = `${findKey('charge_state.battery_level')}%`;
-      document.getElementById('brief-version').innerText = (findKey('vehicle_state.car_version') || '-').substring(0, 12);
+      // 사이드바 속성 바인딩
+      document.getElementById('brief-state').innerText = findKeyAdaptive('state', ['state']) || '정지';
+      document.getElementById('brief-battery').innerText = `${batLvl}%`;
+      document.getElementById('brief-version').innerText = (findKeyAdaptive('vehicle_state.car_version', ['car_version']) || '-').substring(0, 12);
 
-      // 8. 디버깅용 로우 레벨 데이터 출력
       document.getElementById('v-raw-json').innerText = JSON.stringify(rawVehicleObj, null, 2);
     }
 
     function setBooleanBadge(id, value, trueText, falseText, trueColor, falseColor) {
       const el = document.getElementById(id);
-      if (value === true || value > 0) {
+      if (value === true || value > 0 || value === 'true') {
         el.innerText = trueText; el.className = `font-bold ${trueColor}`;
       } else {
         el.innerText = falseText; el.className = `font-bold ${falseColor}`;
       }
     }
 
-    // 🔀 메인 패널 탭 스위칭 컨트롤러
     function switchTab(tabName) {
       const btnDriving = document.getElementById('btn-tab-driving');
       const btnVehicle = document.getElementById('btn-tab-vehicle');
@@ -603,7 +690,6 @@
         panelVehicle.classList.add('hidden');
         sideDrivingControls.classList.remove('hidden');
         sideVehicleControls.classList.add('hidden');
-        // 카카오맵 윈도우 리사이즈 판정 유도 버그 방지
         if (map) map.relayout();
       } else {
         btnDriving.className = "py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition";
