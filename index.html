@@ -208,9 +208,9 @@
 
           <!-- 로우 레벨 JSON 인스펙터 보조 패널 -->
           <div class="mt-6">
-            <details class="bg-gray-900 rounded-lg border border-gray-700">
+            <details class="bg-gray-900 rounded-lg border border-gray-700" open>
               <summary class="text-xs text-gray-400 font-bold p-3 cursor-pointer select-none hover:text-white">💾 수신된 데이터베이스 원본 JSON 보기 (데이터 정밀 디버깅용)</summary>
-              <pre id="v-raw-json" class="p-4 text-xs font-mono text-green-400 overflow-x-auto max-h-60 bg-black/40"></pre>
+              <pre id="v-raw-json" class="p-4 text-xs font-mono text-green-400 overflow-x-auto max-h-60 bg-black/40">데이터 로드 완료 후 여기에 실시간 JSON 구조가 노출됩니다.</pre>
             </details>
           </div>
 
@@ -224,6 +224,7 @@
     const STORAGE_CONFIG_KEY = "secure_tesla_dashboard_local_tokens";
     let db, allTrips = [], rawVehicleObj = null, map, routePolylines = [], mapMarkers = [];
     let currentFilterMode = 'daily';
+    let latestVehicleDocId = "";
 
     window.onload = function() {
       if (!localStorage.getItem(STORAGE_CONFIG_KEY)) {
@@ -284,7 +285,6 @@
       });
     }
 
-    // 🕒 시각 포맷 헬퍼 함수
     function formatDateString(timestamp, format) {
       const d = new Date(timestamp);
       const ye = d.getFullYear();
@@ -296,7 +296,6 @@
       return `${ye}-${mo}-${da}`;
     }
 
-    // 📅 월요일 구하기 헬퍼 함수
     function getMondayDateString(timestamp) {
       const d = new Date(timestamp);
       const day = d.getDay();
@@ -310,7 +309,9 @@
       statusEl.innerText = "📥 DB 구조 분석 및 로드 중...";
       allTrips = [];
       rawVehicleObj = null;
+      latestVehicleDocId = "";
 
+      // 1. driving 컬렉션 추출
       const drivingSnap = await db.collection('driving').get();
       drivingSnap.docs.forEach(doc => {
         const data = doc.data();
@@ -347,79 +348,79 @@
         }
       });
 
+      // 2. vehicle 컬렉션 정밀 필터 추출 (차량 ID 형태의 거대 상수를 걸러내고 순수 13자리 타임스탬프 스냅샷 타겟팅)
       const vehicleSnap = await db.collection('vehicle').get();
       let maxTime = 0;
+
       vehicleSnap.docs.forEach(doc => {
         const data = doc.data();
-        const docTimestamp = data.date || parseInt(doc.id) || 0;
-        if (docTimestamp >= maxTime) {
+        let docTimestamp = 0;
+        
+        if (data.date) {
+          docTimestamp = Number(data.date);
+        } else {
+          const parsedId = parseInt(doc.id);
+          // 💡 핵심 픽스: 13자리 타임스탬프 규격(2000년 ~ 2040년 사이 범위)만 인정
+          if (!isNaN(parsedId) && parsedId > 946684800000 && parsedId < 2208988800000) {
+            docTimestamp = parsedId;
+          }
+        }
+
+        // 정상적인 시간 기반 데이터가 발견되었거나, 아직 아무것도 선택되지 않았을 때 백업 바인딩
+        if (docTimestamp > maxTime || !rawVehicleObj) {
           maxTime = docTimestamp;
           rawVehicleObj = data;
+          latestVehicleDocId = doc.id;
         }
       });
 
       allTrips.sort((a, b) => b.timestamp - a.timestamp);
       statusEl.innerText = `✅ 로드 성공 (주행기록: ${allTrips.length}개)`;
       
-      renderVehicleTab();
-      setFilterMode('daily'); // 기본 일별 모드 초기 실행
+      renderVehicleTab(maxTime);
+      setFilterMode('daily');
     }
 
-    // 💡 지능형 필드 자율 검색 탐색 엔진
+    // 💡 문자열화된 압축 JSON 및 케이스 인센시티브 통합 깊은 탐색 엔진
     function findKeyAdaptive(targetKey, fallbackKeys = []) {
       if (!rawVehicleObj) return '-';
       
-      // 1. 점(.) 형태의 엄격 경로 검색 우선 시도
-      if (targetKey.includes('.')) {
-        let current = rawVehicleObj;
-        const parts = targetKey.split('.');
-        for (const p of parts) {
-          if (current && current[p] !== undefined) current = current[p];
-          else { current = null; break; }
-        }
-        if (current !== null && current !== undefined) return current;
-      }
-      
-      const simpleKey = targetKey.split('.').pop();
-      if (rawVehicleObj[simpleKey] !== undefined && rawVehicleObj[simpleKey] !== null) {
-        return rawVehicleObj[simpleKey];
-      }
-
-      for (const fk of fallbackKeys) {
-        if (rawVehicleObj[fk] !== undefined && rawVehicleObj[fk] !== null) return rawVehicleObj[fk];
-      }
-
-      // 2. 스키마가 다른 경우를 대비해 하위 깊은 노드까지 전체 재귀 스캔
+      const searchKeys = [targetKey, ...fallbackKeys].map(k => k.toLowerCase().split('.').pop());
       let foundValue = null;
+
       function deepSearch(obj) {
         if (foundValue !== null || !obj || typeof obj !== 'object') return;
-        
-        if (obj[simpleKey] !== undefined && obj[simpleKey] !== null) {
-          foundValue = obj[simpleKey];
-          return;
-        }
-        for (const fk of fallbackKeys) {
-          if (obj[fk] !== undefined && obj[fk] !== null) {
-            foundValue = obj[fk];
-            return;
-          }
-        }
-        
-        const targetLower = simpleKey.toLowerCase();
+
         for (const k of Object.keys(obj)) {
-          if (k.toLowerCase() === targetLower || k.toLowerCase().includes(targetLower)) {
+          const kLower = k.toLowerCase();
+          
+          // 키 매칭 판정
+          if (searchKeys.includes(kLower)) {
             foundValue = obj[k];
             return;
           }
-          if (typeof obj[k] === 'object') deepSearch(obj[k]);
+
+          // 💡 핵심 픽스: 하위 노드가 string화된 JSON Text일 경우 디코딩하여 탐색 지속
+          if (typeof obj[k] === 'string' && obj[k].trim().startsWith('{')) {
+            try {
+              const parsed = JSON.parse(obj[k]);
+              deepSearch(parsed);
+              if (foundValue !== null) return;
+            } catch(e) {}
+          }
+
+          // 재귀 깊은 탐색
+          if (typeof obj[k] === 'object' && obj[k] !== null) {
+            deepSearch(obj[k]);
+            if (foundValue !== null) return;
+          }
         }
       }
       
       deepSearch(rawVehicleObj);
-      return foundValue !== null ? foundValue : '-';
+      return (foundValue !== null && foundValue !== undefined) ? foundValue : '-';
     }
 
-    // 📅 데이터가 존재하는 기간만 인젝션하는 동적 선택기 엔진
     function setFilterMode(mode) {
       currentFilterMode = mode;
       
@@ -447,7 +448,6 @@
           daysMap[dStr] = (daysMap[dStr] || 0) + 1;
         });
         const uniqueDays = Object.keys(daysMap).sort((a,b) => b.localeCompare(a));
-        
         container.innerHTML = `
           <select id="input-daily" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-2 text-sm focus:outline-none">
             ${uniqueDays.map(d => `<option value="${d}">${d} (${daysMap[d]}회 주행)</option>`).join('')}
@@ -461,7 +461,6 @@
           weeksMap[monStr] = (weeksMap[monStr] || 0) + 1;
         });
         const uniqueWeeks = Object.keys(weeksMap).sort((a,b) => b.localeCompare(a));
-        
         container.innerHTML = `
           <select id="input-weekly" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-2 text-sm focus:outline-none">
             ${uniqueWeeks.map(w => {
@@ -479,7 +478,6 @@
           monthsMap[mStr] = (monthsMap[mStr] || 0) + 1;
         });
         const uniqueMonths = Object.keys(monthsMap).sort((a,b) => b.localeCompare(a));
-        
         container.innerHTML = `
           <select id="input-monthly" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-2 text-sm focus:outline-none">
             ${uniqueMonths.map(m => `<option value="${m}">${m.split('-')[0]}년 ${m.split('-')[1]}월 (${monthsMap[m]}회)</option>`).join('')}
@@ -493,9 +491,8 @@
           yearsMap[yStr] = (yearsMap[yStr] || 0) + 1;
         });
         const uniqueYears = Object.keys(yearsMap).sort((a,b) => b.localeCompare(a));
-        
         container.innerHTML = `
-          <select id="input-yearly" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-2 text-sm focus:outline-none">
+          <select id="input-yearly" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white p-2 text-sm rounded border border-gray-600">
             ${uniqueYears.map(y => `<option value="${y}">${y}년 전체 (${yearsMap[y]}회)</option>`).join('')}
           </select>
         `;
@@ -504,7 +501,6 @@
         const timestamps = allTrips.map(t => t.timestamp);
         const minDate = formatDateString(Math.min(...timestamps), 'YYYY-MM-DD');
         const maxDate = formatDateString(Math.max(...timestamps), 'YYYY-MM-DD');
-        
         container.innerHTML = `
           <div class="space-y-1">
             <input type="date" id="input-custom-start" min="${minDate}" max="${maxDate}" value="${minDate}" onchange="updateDashboardView()" class="w-full bg-gray-700 text-white border border-gray-600 rounded p-1.5 text-xs focus:outline-none">
@@ -614,61 +610,74 @@
       document.getElementById('hud-battery').innerText = `${totalBatUsed.toFixed(0)}%`;
     }
 
-    function renderVehicleTab() {
-      if (!rawVehicleObj) return;
+    function renderVehicleTab(detectedTime) {
+      if (!rawVehicleObj) {
+        document.getElementById('v-last-update').innerText = "수신된 차량 텔레메트리 데이터가 존재하지 않습니다.";
+        return;
+      }
 
-      const vDate = rawVehicleObj.date ? new Date(rawVehicleObj.date) : new Date();
-      document.getElementById('v-last-update').innerText = `마지막 수신: ${vDate.toLocaleString('ko-KR')}`;
+      // 수신 시각 라벨링화 보정
+      const targetDate = detectedTime > 0 ? new Date(detectedTime) : new Date();
+      document.getElementById('v-last-update').innerText = `마지막 수신: ${targetDate.toLocaleString('ko-KR')} (ID: ${latestVehicleDocId})`;
 
-      // 지능형 추적 엔진을 활용한 데이터 파싱 가동
-      const carName = findKeyAdaptive('display_name', ['vehicle_config.car_type', 'car_type']);
+      // 1. 핵심 인디케이터 데이터 추출 매핑
+      const carName = findKeyAdaptive('display_name', ['car_type', 'vehicle_config.car_type', 'car_name']);
       document.getElementById('v-name').innerText = carName;
       
-      const rawOdo = findKeyAdaptive('vehicle_state.odometer', ['odometer', 'odo', 'total_distance']);
+      const rawOdo = findKeyAdaptive('odometer', ['vehicle_state.odometer', 'odo', 'total_distance']);
       const odoStr = rawOdo !== '-' ? `${(Number(rawOdo) * 1.60934).toFixed(1)} km` : '-';
       document.getElementById('v-odometer').innerText = odoStr;
 
-      const batLvl = findKeyAdaptive('charge_state.battery_level', ['battery_level', 'soc', 'battery']);
-      const batRange = findKeyAdaptive('charge_state.battery_range', ['battery_range', 'range']);
-      const batStr = batLvl !== '-' ? `${batLvl}% (${(Number(batRange) * 1.60934).toFixed(0)} km 주행가능)` : '-';
+      const batLvl = findKeyAdaptive('battery_level', ['charge_state.battery_level', 'soc', 'usable_battery_level']);
+      const batRange = findKeyAdaptive('battery_range', ['charge_state.battery_range', 'range']);
+      const batStr = batLvl !== '-' ? `${batLvl}%` + (batRange !== '-' ? ` (${(Number(batRange) * 1.60934).toFixed(0)} km 주행가능)` : '') : '-';
       document.getElementById('v-battery').innerText = batStr;
       document.getElementById('v-vin').innerText = findKeyAdaptive('vin', ['vin_code']);
 
-      document.getElementById('v-temp-in').innerText = `${findKeyAdaptive('climate_state.inside_temp', ['inside_temp', 'inside'])} °C`;
-      document.getElementById('v-temp-out').innerText = `${findKeyAdaptive('climate_state.outside_temp', ['outside_temp', 'outside'])} °C`;
+      // 2. 공조 및 온도 센서 디코딩
+      const inTemp = findKeyAdaptive('inside_temp', ['climate_state.inside_temp', 'inside']);
+      const outTemp = findKeyAdaptive('outside_temp', ['climate_state.outside_temp', 'outside']);
+      document.getElementById('v-temp-in').innerText = inTemp !== '-' ? `${inTemp} °C` : '-';
+      document.getElementById('v-temp-out').innerText = outTemp !== '-' ? `${outTemp} °C` : '-';
       
-      setBooleanBadge('v-climate-on', findKeyAdaptive('climate_state.is_climate_on', ['is_climate_on', 'climate_on']), '가동 중', '꺼짐', 'text-green-400', 'text-gray-500');
-      setBooleanBadge('v-wheel-heat', findKeyAdaptive('climate_state.steering_wheel_heater', ['steering_wheel_heater', 'wheel_heat']), 'ON', 'OFF', 'text-red-400', 'text-gray-500');
+      setBooleanBadge('v-climate-on', findKeyAdaptive('is_climate_on', ['climate_state.is_climate_on', 'climate_on']), '가동 중', '꺼짐', 'text-green-400', 'text-gray-500');
+      setBooleanBadge('v-wheel-heat', findKeyAdaptive('steering_wheel_heater', ['climate_state.steering_wheel_heater', 'wheel_heat']), 'ON', 'OFF', 'text-red-400', 'text-gray-500');
 
-      document.getElementById('v-charge-state').innerText = findKeyAdaptive('charge_state.charging_state', ['charging_state']);
-      const cVolts = findKeyAdaptive('charge_state.charger_voltage', ['charger_voltage', 'voltage']);
-      const cAmps = findKeyAdaptive('charge_state.charger_actual_current', ['charger_actual_current', 'current']);
+      // 3. 파워 충전기 인디케이터
+      document.getElementById('v-charge-state').innerText = findKeyAdaptive('charging_state', ['charge_state.charging_state']) || 'N/A';
+      const cVolts = findKeyAdaptive('charger_voltage', ['charge_state.charger_voltage', 'voltage']);
+      const cAmps = findKeyAdaptive('charger_actual_current', ['charge_state.charger_actual_current', 'current']);
       document.getElementById('v-charge-power').innerText = (cVolts !== '-' && cAmps !== '-') ? `${cVolts}V / ${cAmps}A` : '-';
-      document.getElementById('v-charge-limit').innerText = `${findKeyAdaptive('charge_state.charge_limit_soc', ['charge_limit_soc', 'charge_limit'])}%`;
-      document.getElementById('v-charge-time').innerText = `${findKeyAdaptive('charge_state.time_to_full_charge', ['time_to_full_charge'])}시간`;
+      document.getElementById('v-charge-limit').innerText = `${findKeyAdaptive('charge_limit_soc', ['charge_state.charge_limit_soc', 'charge_limit'])}%`;
+      
+      const timeToFull = findKeyAdaptive('time_to_full_charge', ['charge_state.time_to_full_charge']);
+      document.getElementById('v-charge-time').innerText = (timeToFull !== '-' && Number(timeToFull) > 0) ? `${timeToFull}시간` : '충전 중 아님';
 
-      setBooleanBadge('v-lock', findKeyAdaptive('vehicle_state.locked', ['locked', 'is_locked']), '🔒 잠김', '🔓 열림', 'text-green-400', 'text-red-400');
-      document.getElementById('v-gear').innerText = findKeyAdaptive('drive_state.gear', ['gear', 'shift_state']) || 'P (주차)';
-      setBooleanBadge('v-frunk', findKeyAdaptive('vehicle_state.ft', ['ft', 'frunk']), '열림', '닫힘', 'text-red-400', 'text-gray-500');
-      setBooleanBadge('v-trunk', findKeyAdaptive('vehicle_state.rt', ['rt', 'trunk']), '열림', '닫힘', 'text-red-400', 'text-gray-500');
+      // 4. 차량 락 및 도어 섀시 상태
+      setBooleanBadge('v-lock', findKeyAdaptive('locked', ['vehicle_state.locked', 'is_locked']), '🔒 잠김', '🔓 열림', 'text-green-400', 'text-red-400');
+      document.getElementById('v-gear').innerText = findKeyAdaptive('gear', ['drive_state.gear', 'shift_state']) || 'P (주차)';
+      setBooleanBadge('v-frunk', findKeyAdaptive('ft', ['vehicle_state.ft', 'frunk_state']), '열림', '닫힘', 'text-red-400', 'text-gray-500');
+      setBooleanBadge('v-trunk', findKeyAdaptive('rt', ['vehicle_state.rt', 'trunk_state']), '열림', '닫힘', 'text-red-400', 'text-gray-500');
 
-      document.getElementById('v-version').innerText = findKeyAdaptive('vehicle_state.car_version', ['car_version', 'version']);
-      document.getElementById('v-update-version').innerText = findKeyAdaptive('vehicle_state.software_update.version', ['version']);
-      setBooleanBadge('v-sentry', findKeyAdaptive('vehicle_state.sentry_mode', ['sentry_mode', 'sentry']), '활성화', '비활성화', 'text-red-400', 'text-gray-500');
-      const rawSpeed = findKeyAdaptive('drive_state.speed', ['speed']);
+      // 5. 시스템 OS 정보 바인딩
+      document.getElementById('v-version').innerText = findKeyAdaptive('car_version', ['vehicle_state.car_version', 'version']);
+      document.getElementById('v-update-version').innerText = findKeyAdaptive('version', ['vehicle_state.software_update.version']) || '최신 상태';
+      setBooleanBadge('v-sentry', findKeyAdaptive('sentry_mode', ['vehicle_state.sentry_mode', 'sentry']), '활성화', '비활성화', 'text-red-400', 'text-gray-500');
+      const rawSpeed = findKeyAdaptive('speed', ['drive_state.speed']);
       document.getElementById('v-speed').innerText = rawSpeed !== '-' ? `${(Number(rawSpeed) * 1.60934).toFixed(0)} km/h` : '0 km/h';
 
-      // 사이드바 속성 바인딩
-      document.getElementById('brief-state').innerText = findKeyAdaptive('state', ['state']) || '정지';
-      document.getElementById('brief-battery').innerText = `${batLvl}%`;
-      document.getElementById('brief-version').innerText = (findKeyAdaptive('vehicle_state.car_version', ['car_version']) || '-').substring(0, 12);
+      // 6. 왼쪽 미니 사이드바 요약 패널 데이터 전송
+      document.getElementById('brief-state').innerText = findKeyAdaptive('state') || '대기';
+      document.getElementById('brief-battery').innerText = batLvl !== '-' ? `${batLvl}%` : '-';
+      document.getElementById('brief-version').innerText = (findKeyAdaptive('car_version') || '-').substring(0, 12);
 
+      // 로우 레벨 원본 실시간 매핑 데이터 전체 노출
       document.getElementById('v-raw-json').innerText = JSON.stringify(rawVehicleObj, null, 2);
     }
 
     function setBooleanBadge(id, value, trueText, falseText, trueColor, falseColor) {
       const el = document.getElementById(id);
-      if (value === true || value > 0 || value === 'true') {
+      if (value === true || value > 0 || value === 'true' || value === 'ON') {
         el.innerText = trueText; el.className = `font-bold ${trueColor}`;
       } else {
         el.innerText = falseText; el.className = `font-bold ${falseColor}`;
