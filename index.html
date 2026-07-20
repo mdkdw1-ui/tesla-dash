@@ -3,103 +3,72 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla Driving Control Dashboard</title>
-  <!-- Tailwind CSS CDN -->
+  <title>Tesla Driving Control Dashboard (Kakao Map)</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- CryptoJS CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
-  <!-- Firebase SDK Compat v10 -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   
-  <!-- 🗺️ Leaflet Map Engine -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  
-  <!-- ⚡ 동기화 엔진 외부 백엔드 스크립트 로드 -->
-  <script src="sync.js"></script>
-  
   <style>
-    #map { height: calc(100vh - 180px); min-height: 500px; z-index: 1; }
-    .leaflet-popup-custom { color: #111827; font-size: 12px; line-height: 1.5; font-family: sans-serif; padding: 2px; }
-    .leaflet-container { background: #1f2937 !important; }
+    #map { height: calc(100vh - 180px); min-height: 500px; }
   </style>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans min-h-screen flex items-center justify-center m-0 p-0">
 
-  <!-- 1. 보안 인증 및 환경설정 레이어 -->
-  <div id="authContainer" class="w-full max-w-xl p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 mx-4">
+  <!-- 1. 보안 설정 및 로그인 레이어 -->
+  <div id="authContainer" class="w-full max-w-md p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 mx-4">
     <div id="setupView" class="hidden">
-      <h2 class="text-2xl font-bold text-red-500 mb-4 text-center">⚡ 최초 앱 보안 및 동기화 설정</h2>
-      
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- 소스 정보 (myteslabot / 메일로그 기반) -->
-        <div class="space-y-3 p-4 bg-gray-700/40 rounded-lg border border-gray-600">
-          <h3 class="text-sm font-bold text-blue-400 border-b border-gray-600 pb-1">📥 1. 수집 소스 DB 정보</h3>
-          <div>
-            <label class="block text-[11px] font-semibold text-gray-400 uppercase mb-0.5">API Key</label>
-            <input type="text" id="src-apiKey" placeholder="AIzaSy... 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-white text-xs focus:outline-none">
-          </div>
-          <div>
-            <label class="block text-[11px] font-semibold text-gray-400 uppercase mb-0.5">Project ID</label>
-            <input type="text" id="src-projectId" value="teslacam-93532" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-white text-xs focus:outline-none font-mono">
-          </div>
-          <div>
-            <label class="block text-[11px] font-semibold text-gray-400 uppercase mb-0.5">App ID</label>
-            <input type="text" id="src-appId" value="1:574811884188:web:a825d3e916e924aabdfb59" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-white text-[10px] focus:outline-none font-mono">
-          </div>
+      <h2 class="text-2xl font-bold text-yellow-500 mb-2 text-center">🗺️ 최초 앱 & 카카오맵 설정</h2>
+      <p class="text-xs text-gray-400 mb-4 text-center">우리집 DB 정보와 카카오 API 키를 입력하세요.</p>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Firebase Web API Key</label>
+          <input type="text" id="cfg-apiKey" placeholder="AIzaSy... 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none">
         </div>
-
-        <!-- 목적지 정보 (우리 앱용 개인 DB) -->
-        <div class="space-y-3 p-4 bg-gray-700/40 rounded-lg border border-gray-600">
-          <h3 class="text-sm font-bold text-green-400 border-b border-gray-600 pb-1">📤 2. 저장 목적지 DB 정보</h3>
-          <div>
-            <label class="block text-[11px] font-semibold text-gray-400 uppercase mb-0.5">API Key</label>
-            <input type="text" id="dest-apiKey" placeholder="AIzaSy... 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-white text-xs focus:outline-none">
-          </div>
-          <div>
-            <label class="block text-[11px] font-semibold text-gray-400 uppercase mb-0.5">Project ID</label>
-            <input type="text" id="dest-projectId" value="teslaapp-a6415" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-white text-xs focus:outline-none font-mono">
-          </div>
-          <div>
-            <label class="block text-[11px] font-semibold text-gray-400 uppercase mb-0.5">App ID</label>
-            <input type="text" id="dest-appId" placeholder="1:xxxx:web:xxxx 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-white text-[10px] focus:outline-none font-mono">
-          </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Firebase Project ID</label>
+          <input type="text" id="cfg-projectId" value="teslaapp-a6415" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
         </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Firebase App ID</label>
+          <input type="text" id="cfg-appId" placeholder="1:xxxx:web:xxxx 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-xs focus:outline-none font-mono">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Kakao JavaScript API Key</label>
+          <input type="text" id="cfg-kakaoKey" placeholder="카카오 디벨로퍼스 발급 JS 키 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+        </div>
+        <button onclick="saveAndEncryptConfig()" class="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded transition mt-4">설정 저장 및 로그인하기</button>
       </div>
-
-      <button onclick="saveAndEncryptConfig()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-4 rounded transition mt-6">보안 암호화 저장 및 로그인</button>
     </div>
 
     <div id="loginView" class="hidden">
       <h2 class="text-2xl font-bold text-center mb-6">Tesla Dashboard 로그인</h2>
       <div class="space-y-4">
-        <input type="password" id="loginPassword" onkeydown="if(event.key === 'Enter') handleLogin()" placeholder="보안 마스터 비밀번호 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-3 text-white font-mono text-center text-lg focus:outline-none">
+        <input type="password" id="loginPassword" onkeydown="if(event.key === 'Enter') handleLogin()" placeholder="비밀번호 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-3 text-white font-mono text-center text-lg focus:outline-none">
         <div id="loginError" class="text-red-500 text-xs text-center hidden">❌ 비밀번호 오류 또는 복호화 실패</div>
-        <button onclick="handleLogin()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded transition">접속 및 데이터 갱신</button>
+        <button onclick="handleLogin()" class="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-4 rounded transition">접속하기</button>
       </div>
     </div>
   </div>
 
-  <!-- 2. 메인 관제 대시보드 레이어 -->
+  <!-- 2. 메인 관제 시스템 레이어 -->
   <div id="appDashboard" class="hidden w-full min-h-screen flex flex-col md:flex-row bg-gray-900 text-gray-100">
-    <!-- 사이드바 패널 -->
-    <div class="w-full md:w-72 bg-gray-800 p-5 flex flex-col justify-between border-r border-r-gray-700 space-y-6">
+    <div class="w-full md:w-72 bg-gray-800 p-5 flex flex-col justify-between border-r border-gray-700 space-y-6">
       <div class="space-y-5">
-        <h1 class="text-xl font-bold text-red-500 flex items-center gap-2">⚡ Tesla 관제 시스템</h1>
+        <h1 class="text-xl font-bold text-yellow-500 flex items-center gap-2">⚡ Tesla 카카오 관제</h1>
         
         <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">🗺️ 지도 배경 스타일</label>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">🗺️ 지도 스타일 변경</label>
           <select id="mapStyleSelect" onchange="changeMapStyle()" class="w-full bg-gray-700 text-white rounded p-2 text-sm border border-gray-600 focus:outline-none">
-            <option value="dark" selected>🌌 테슬라 다크 모드</option>
-            <option value="voyager">🏙️ 모던 보야저 (라이트)</option>
-            <option value="osm">🗺️ 표준 오픈스트리트맵</option>
+            <option value="roadmap" selected>🗺️ 카카오 표준 지도</option>
+            <option value="skyview">🛰️ 고해상도 스카이뷰</option>
+            <option value="hybrid">🏙️ 하이브리드 중첩뷰</option>
           </select>
         </div>
 
         <hr class="border-gray-700">
 
-        <!-- 드랍다운식 기간 필터 -->
+        <!-- 📅 년/월 드랍다운 선택기 -->
         <div class="space-y-3">
           <label class="block text-xs font-semibold text-gray-400 uppercase">📅 조회 기간 설정</label>
           <div class="grid grid-cols-2 gap-2">
@@ -125,19 +94,19 @@
         </div>
 
         <div class="pt-2">
-          <div id="syncStatus" class="text-xs text-yellow-400 bg-gray-900/50 p-2.5 rounded border border-gray-700 font-mono leading-relaxed">대기 중...</div>
+          <div id="syncStatus" class="text-xs text-yellow-400 bg-gray-900/50 p-2 rounded border border-gray-700 font-mono text-center">대기 중...</div>
         </div>
       </div>
       
-      <button onclick="resetAppConfig()" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-2 rounded transition">🔑 설정 전체 초기화</button>
+      <button onclick="resetAppConfig()" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-2 rounded transition">🔑 인증 정보 초기화</button>
     </div>
 
-    <!-- 대화면 지도 출력부 -->
+    <!-- 메인 대화면 지도 관제 탭 -->
     <div class="flex-1 p-4 flex flex-col space-y-4">
       <div class="bg-gray-800 p-4 rounded-xl shadow-lg flex-1 flex flex-col justify-between">
         <div id="map" class="rounded-lg bg-gray-700 shadow-inner flex-1 mb-4"></div>
         
-        <!-- 하단 실시간 통계 HUD 계기판 -->
+        <!-- HUD 통계 알림판 -->
         <div class="grid grid-cols-3 gap-4 text-center">
           <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">선택 기간 총 거리</span><span id="hud-distance" class="text-lg font-bold text-green-400">0.00 km</span></div>
           <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">선택 기간 주행 횟수</span><span id="hud-count" class="text-lg font-bold text-blue-400">0회</span></div>
@@ -148,8 +117,8 @@
   </div>
 
   <script>
-    const STORAGE_CONFIG_KEY = "secure_tesla_pipeline_tokens";
-    let destDb, allRenderTrips = [], map, tileLayer, routePolylines = [], mapMarkers = [];
+    const STORAGE_CONFIG_KEY = "secure_tesla_dashboard_local_tokens";
+    let db, allTrips = [], map, routePolylines = [], mapMarkers = [];
 
     window.onload = function() {
       initDateDropdowns();
@@ -166,37 +135,38 @@
       const sMonth = document.getElementById('startMonth'), eMonth = document.getElementById('endMonth');
       
       for(let y = currentYear; y >= 2024; y--) {
-        sYear.add(new Option(`${y}년`, y));
-        eYear.add(new Option(`${y}년`, y));
+        sYear.add(new Option(`${y}년`, y)); eYear.add(new Option(`${y}년`, y));
       }
       for(let m = 1; m <= 12; m++) {
-        sMonth.add(new Option(`${m}월`, m));
-        eMonth.add(new Option(`${m}월`, m));
+        sMonth.add(new Option(`${m}월`, m)); eMonth.add(new Option(`${m}월`, m));
       }
       sYear.value = currentYear; sMonth.value = 1;
       eYear.value = currentYear; eMonth.value = new Date().getMonth() + 1;
     }
 
+    // 카카오 맵 스크립트를 동적으로 안전하게 주입하는 함수
+    function loadKakaoScript(appKey, callback) {
+      if (window.kakao && window.kakao.maps) { callback(); return; }
+      const script = document.createElement('script');
+      script.type = 'text/javascript';
+      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false`;
+      script.charset = 'utf-8';
+      script.onload = () => {
+        kakao.maps.load(callback);
+      };
+      document.head.appendChild(script);
+    }
+
     function saveAndEncryptConfig() {
       const config = {
-        source: {
-          apiKey: document.getElementById('src-apiKey').value.trim(),
-          projectId: document.getElementById('src-projectId').value.trim(),
-          appId: document.getElementById('src-appId').value.trim()
-        },
-        dest: {
-          apiKey: document.getElementById('dest-apiKey').value.trim(),
-          projectId: document.getElementById('dest-projectId').value.trim(),
-          appId: document.getElementById('dest-appId').value.trim()
-        }
+        apiKey: document.getElementById('cfg-apiKey').value.trim(),
+        projectId: document.getElementById('cfg-projectId').value.trim(),
+        appId: document.getElementById('cfg-appId').value.trim(),
+        kakaoKey: document.getElementById('cfg-kakaoKey').value.trim()
       };
-      
-      if (!config.source.apiKey || !config.dest.apiKey || !config.dest.appId) {
-        return alert("❌ 필수 API Key 및 App ID 값을 입력해 주세요.");
-      }
-
+      if (!config.apiKey || !config.projectId || !config.appId || !config.kakaoKey) return alert("❌ 모든 항목을 입력해 주세요.");
       localStorage.setItem(STORAGE_CONFIG_KEY, CryptoJS.AES.encrypt(JSON.stringify(config), "emillie00").toString());
-      startApplication(config);
+      initializeApp(config);
     }
 
     function handleLogin() {
@@ -204,53 +174,39 @@
         const bytes = CryptoJS.AES.decrypt(localStorage.getItem(STORAGE_CONFIG_KEY), document.getElementById('loginPassword').value.trim());
         const config = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
         document.getElementById('loginError').classList.add('hidden');
-        startApplication(config);
+        initializeApp(config);
       } catch (e) {
         document.getElementById('loginError').classList.remove('hidden');
       }
     }
 
-    async function startApplication(config) {
+    async function initializeApp(config) {
       document.body.classList.remove('items-center', 'justify-center');
       document.getElementById('authContainer').classList.add('hidden');
       document.getElementById('appDashboard').classList.remove('hidden');
       
-      initMap();
-
-      const statusEl = document.getElementById('syncStatus');
+      if (!firebase.apps.length) firebase.initializeApp({
+        apiKey: config.apiKey,
+        projectId: config.projectId,
+        appId: config.appId
+      });
+      db = firebase.firestore();
       
-      try {
-        // 1. 외부 동기화 엔진(sync.js) 호출하여 소스 -> 목적지(teslaapp-a6415) 업로드 파이프라인 가동
-        if (window.TeslaSyncEngine) {
-          await window.TeslaSyncEngine.runSync(config.source, config.dest, (msg) => {
-            statusEl.innerText = msg;
-          });
-        }
-        
-        // 2. 동기화가 끝나면 오직 내 목적지 DB(teslaapp-a6415)용 기본 인스턴스 활성화
-        if (!firebase.apps.length || !firebase.app().name === '[DEFAULT]') {
-          firebase.initializeApp(config.dest);
-        }
-        destDb = firebase.firestore();
-
-        // 3. 내 DB에서 뷰어용 전체 데이터 로드
-        await loadFromDestinationDB();
-      } catch (err) {
-        statusEl.innerText = "⚠️ 관제 데이터 로드 중 오류가 발생했습니다.";
-      }
+      // 카카오 스크립트 로드 완료 후 맵 로직 가동
+      loadKakaoScript(config.kakaoKey, async () => {
+        initMap();
+        await loadViewerData();
+      });
     }
 
-    async function loadFromDestinationDB() {
+    async function loadViewerData() {
       const statusEl = document.getElementById('syncStatus');
-      statusEl.innerText = "📥 내 DB(teslaapp-a6415)에서 화면 로딩 중...";
-      
-      allRenderTrips = [];
-      
-      // 내 목적지 DB의 두 컬렉션을 통합 가공하여 맵에 바인딩
-      const collections = ['driving', 'vehicle_state'];
-      
+      statusEl.innerText = "📥 우리집 DB 데이터 읽는 중...";
+      allTrips = [];
+
+      const collections = ['driving', 'vehicle'];
       for (const colName of collections) {
-        const snap = await destDb.collection(colName).get();
+        const snap = await db.collection(colName).get();
         snap.docs.forEach(doc => {
           const data = doc.data();
           const timestamp = data.date || parseInt(doc.id);
@@ -276,7 +232,7 @@
           waypoints.sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
 
           if (waypoints.length > 0) {
-            allRenderTrips.push({
+            allTrips.push({
               id: `${colName}_${doc.id}`,
               timestamp,
               moveKM: Number(data.moveKM || data.distance || 0),
@@ -287,14 +243,13 @@
         });
       }
 
-      allRenderTrips.sort((a, b) => b.timestamp - a.timestamp);
-      statusEl.innerText = `✅ 로드 완료 (총 ${allRenderTrips.length}개 트랙)`;
-      
+      allTrips.sort((a, b) => b.timestamp - a.timestamp);
+      statusEl.innerText = `✅ 로드 완료 (총 ${allTrips.length}개 주행기록)`;
       updateDashboardView();
     }
 
     function updateDashboardView() {
-      if (allRenderTrips.length === 0) return;
+      if (allTrips.length === 0 || !map) return;
 
       const sYear = parseInt(document.getElementById('startYear').value);
       const sMonth = parseInt(document.getElementById('startMonth').value);
@@ -304,43 +259,68 @@
       const startDate = new Date(sYear, sMonth - 1, 1, 0, 0, 0).getTime();
       const endDate = new Date(eYear, eMonth, 1, 23, 59, 59).getTime();
 
-      const targetTrips = allRenderTrips.filter(t => t.timestamp >= startDate && t.timestamp <= endDate);
+      const targetTrips = allTrips.filter(t => t.timestamp >= startDate && t.timestamp <= endDate);
 
-      routePolylines.forEach(p => map.removeLayer(p)); routePolylines = [];
-      mapMarkers.forEach(m => map.removeLayer(m)); mapMarkers = [];
+      // 기존 카카오 요소 지도에서 제거
+      routePolylines.forEach(p => p.setMap(null)); routePolylines = [];
+      mapMarkers.forEach(m => m.setMap(null)); mapMarkers = [];
 
       let totalKM = 0, totalBatUsed = 0;
-      let boundsLatLngs = [];
+      const bounds = new kakao.maps.LatLngBounds();
+      let hasPoints = false;
 
       targetTrips.forEach(trip => {
         totalKM += trip.moveKM;
         totalBatUsed += trip.useBattery;
 
-        const linePath = trip.waypoints.map(wp => [wp.lat, wp.lng]);
+        // 카카오 LatLng 배열 생성
+        const linePath = trip.waypoints.map(wp => new kakao.maps.LatLng(wp.lat, wp.lng));
         const timeLabel = new Date(trip.timestamp).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         
         if (linePath.length > 0) {
-          const polyline = L.polyline(linePath, { color: '#ef4444', weight: 5, opacity: 0.75 }).addTo(map);
-
-          // 🖱️ 평소엔 안 보이다가 오직 경로 선을 클릭했을 때만 팝업 컨텍스트 노출
-          polyline.bindPopup(`
-            <div class="leaflet-popup-custom">
-              <b>📅 주행 일시:</b> ${timeLabel}<br>
-              <b>🏁 주행 거리:</b> ${trip.moveKM.toFixed(2)} km<br>
-              <b>🔋 배터리 소모:</b> ${trip.useBattery}%
-            </div>
-          `);
-
+          const polyline = new kakao.maps.Polyline({
+            path: linePath,
+            strokeWidth: 5,
+            strokeColor: '#ef4444',
+            strokeOpacity: 0.8,
+            strokeStyle: 'solid'
+          });
+          
+          polyline.setMap(map);
           routePolylines.push(polyline);
-          linePath.forEach(coord => boundsLatLngs.push(coord));
+          
+          linePath.forEach(coord => {
+            bounds.extend(coord);
+            hasPoints = true;
+          });
 
-          const startMarker = L.circleMarker(linePath[0], { radius: 5, color: '#10b981', fillColor: '#10b981', fillOpacity: 1 }).addTo(map);
-          mapMarkers.push(startMarker);
+          // 🖱️ 주행 경로 클릭 시 커스텀 정보창 출력 연동
+          kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
+            const infowindow = new kakao.maps.InfoWindow({
+              content: `
+                <div style="padding:10px;color:#111827;font-size:12px;font-family:sans-serif;line-height:1.5;min-width:180px;">
+                  <b>📅 주행 일시:</b> ${timeLabel}<br>
+                  <b>🏁 주행 거리:</b> ${trip.moveKM.toFixed(2)} km<br>
+                  <b>🔋 배터리 소모:</b> ${trip.useBattery}%
+                </div>
+              `,
+              removable: true
+            });
+            infowindow.setPosition(mouseEvent.latLng);
+            infowindow.open(map);
+          });
+
+          // 출발지 마커 표기
+          const marker = new kakao.maps.Marker({
+            position: linePath[0]
+          });
+          marker.setMap(map);
+          mapMarkers.push(marker);
         }
       });
 
-      if (boundsLatLngs.length > 0) {
-        map.fitBounds(L.latLngBounds(boundsLatLngs), { padding: [40, 40] });
+      if (hasPoints) {
+        map.setBounds(bounds);
       }
 
       document.getElementById('hud-distance').innerText = `${totalKM.toFixed(2)} km`;
@@ -350,25 +330,30 @@
 
     function initMap() {
       if (map) return;
-      map = L.map('map', { center: [37.5665, 126.9780], zoom: 11 });
+      const container = document.getElementById('map');
+      const options = {
+        center: new kakao.maps.LatLng(37.5665, 126.9780),
+        level: 5
+      };
+      map = new kakao.maps.Map(container, options);
       changeMapStyle();
     }
 
     function changeMapStyle() {
       const style = document.getElementById('mapStyleSelect').value;
-      if (tileLayer) map.removeLayer(tileLayer);
+      if (!map) return;
 
-      let url = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-      let attr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributor &copy; <a href="https://carto.com/attributions">CARTO</a>';
-
-      if (style === 'voyager') url = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-      else if (style === 'osm') url = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-
-      tileLayer = L.tileLayer(url, { attribution: attr, maxZoom: 19 }).addTo(map);
+      if (style === 'skyview') {
+        map.setMapTypeId(kakao.maps.MapTypeId.SKYVIEW);
+      } else if (style === 'hybrid') {
+        map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
+      } else {
+        map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
+      }
     }
 
     function resetAppConfig() {
-      if (confirm("🚨 인증 자격 증명 정보를 모두 초기화하시겠습니까?")) {
+      if (confirm("🚨 저장된 개인 DB 설정을 초기화하시겠습니까?")) {
         localStorage.removeItem(STORAGE_CONFIG_KEY);
         location.reload();
       }
