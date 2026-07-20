@@ -78,6 +78,10 @@
       <div id="mapTab" class="tab-content block">
         <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
           <div id="map" class="rounded bg-gray-700 mb-4"></div>
+          
+          <!-- 실시간 실태 진단 구역 (오류 추적용) -->
+          <div id="debug-zone" class="mb-4 p-4 bg-yellow-950/40 border border-yellow-800/60 rounded text-xs text-yellow-300 hidden"></div>
+
           <div class="grid grid-cols-3 gap-4 text-center">
             <div class="bg-gray-700 p-3 rounded"><span class="block text-xs text-gray-400">총 주행 거리</span><span id="hud-distance" class="text-xl font-bold text-green-400">0.00 km</span></div>
             <div class="bg-gray-700 p-3 rounded"><span class="block text-xs text-gray-400">배터리 변동</span><span id="hud-battery" class="text-xl font-bold text-blue-400">0% → 0%</span></div>
@@ -195,7 +199,7 @@
       }
     }
 
-    // 🎯 초강력 데이터 파싱 알고리즘 탑재
+    // 🎯 초강력 무제한 깊이 탐색(Deep Recursive Scanner) 엔진
     function updateDashboard(tripId) {
       const tripData = trips[tripId];
       if (!tripData) return;
@@ -204,59 +208,81 @@
 
       const waypoints = [];
       
-      // 1. 루트 레벨 위치 확보 (문자열/숫자 가리지 않고 강제 변환)
-      const rootLat = tripData.latitude ?? tripData.lat;
-      const rootLng = tripData.longitude ?? tripData.lng;
-      if (rootLat && rootLng && !isNaN(Number(rootLat))) {
-        waypoints.push({
-          idx: 0,
-          lat: Number(rootLat),
-          lng: Number(rootLng),
-          battery: tripData.battery_level !== undefined ? parseInt(tripData.battery_level) : null,
-          odometer: tripData.odometer ? Number(tripData.odometer) : null,
-          inside_temp: tripData.inside_temp,
-          outside_temp: tripData.outside_temp
+      // 오브젝트 트리를 밑바닥까지 뒤져서 좌표쌍을 수집하는 재귀함수
+      function deepScan(obj) {
+        if (!obj || typeof obj !== 'object') return;
+        
+        if (Array.isArray(obj)) {
+          obj.forEach(item => deepScan(item));
+          return;
+        }
+
+        let lat = null, lng = null;
+        let battery = null, odometer = null, inside_temp = null, outside_temp = null;
+
+        Object.keys(obj).forEach(k => {
+          const kl = k.toLowerCase();
+          if (kl === 'lat' || kl === 'latitude') lat = Number(obj[k]);
+          if (kl === 'lng' || kl === 'longitude' || kl === 'lon') lng = Number(obj[k]);
+          if (kl.includes('battery')) battery = parseInt(obj[k]);
+          if (kl.includes('odometer') || kl === 'odo') odometer = Number(obj[k]);
+          if (kl.includes('inside_temp')) inside_temp = obj[k];
+          if (kl.includes('outside_temp')) outside_temp = obj[k];
+        });
+
+        if (lat && lng && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+          // 중복 추가 방지 처리
+          const isExist = waypoints.some(wp => Math.abs(wp.lat - lat) < 0.0001 && Math.abs(wp.lng - lng) < 0.0001);
+          if (!isExist) {
+            waypoints.push({ lat, lng, battery, odometer, inside_temp, outside_temp });
+          }
+        }
+
+        // 자식 노드가 있으면 하위 레벨로 재진입 탐색
+        Object.keys(obj).forEach(k => {
+          if (typeof obj[k] === 'object' && obj[k] !== null) {
+            deepScan(obj[k]);
+          }
         });
       }
 
-      // 2. 주행 포인트 탐색 기법 고도화 (형태 파괴 방어 루프)
-      Object.keys(tripData).forEach(key => {
-        const val = tripData[key];
-        if (val && typeof val === 'object') {
-          const pLat = val.latitude ?? val.lat;
-          const pLng = val.longitude ?? val.lng;
-          
-          if (pLat && pLng && !isNaN(Number(pLat))) {
-            const parsedIdx = parseInt(key);
-            waypoints.push({
-              idx: !isNaN(parsedIdx) ? parsedIdx : (waypoints.length + 1),
-              lat: Number(pLat),
-              lng: Number(pLng),
-              battery: val.battery_level !== undefined ? parseInt(val.battery_level) : (val.battery !== undefined ? parseInt(val.battery) : null),
-              odometer: val.odometer ? Number(val.odometer) : null,
-              inside_temp: val.inside_temp,
-              outside_temp: val.outside_temp
-            });
-          }
-        }
-      });
+      // 탐색 시작
+      deepScan(tripData);
 
-      // 3. Odometer 또는 인덱스 기준 완전 정렬로 선 꼬임 방지
-      waypoints.sort((a, b) => {
-        if (a.odometer && b.odometer) return a.odometer - b.odometer;
-        return a.idx - b.idx;
-      });
-
-      const coords = waypoints.map(wp => [wp.lat, wp.lng]);
-
-      // 배터리 표기 에러(0% 오류) 원천 교정
-      const moveKM = Number(tripData.moveKM || 0);
-      const useBattery = Number(tripData.useBattery || 0);
+      // 주행 거리 혹은 수집 순으로 정렬 보정
+      const hasOdo = waypoints.some(wp => wp.odometer > 0);
+      if (hasOdo) {
+        waypoints.sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
+      }
       
-      const validBatteryPoints = waypoints.filter(wp => wp.battery !== null);
-      const startBat = tripData.battery_level !== undefined ? parseInt(tripData.battery_level) : (validBatteryPoints.length > 0 ? validBatteryPoints[0].battery : 0);
-      const endBat = tripData.nowBattery !== undefined ? parseInt(tripData.nowBattery) : (validBatteryPoints.length > 0 ? validBatteryPoints[validBatteryPoints.length - 1].battery : startBat);
+      waypoints.forEach((wp, i) => wp.idx = i);
+
+      // 🔍 [진단창 작동] 데이터 상태를 검사하여 화면에 알림 표출
+      const debugZone = document.getElementById('debug-zone');
+      if (waypoints.length === 0) {
+        debugZone.classList.remove('hidden');
+        debugZone.innerHTML = `⚠️ <b>데이터 구조 진단 알림:</b> 문서를 불러왔으나 내부에서 위도/경도 필드(lat, lng)를 파싱하지 못했습니다.<br>📦 <b>현재 최상위 데이터 필드 목록:</b> <span class="font-mono bg-black/40 px-1 rounded">${Object.keys(tripData).join(', ')}</span>`;
+      } else {
+        debugZone.classList.add('hidden');
+      }
+
+      // HUD 데이터 보정 연산
+      let moveKM = Number(tripData.moveKM || tripData.distance || 0);
+      let useBattery = Number(tripData.useBattery || 0);
       
+      if (moveKM === 0 && waypoints.length > 1 && hasOdo) {
+        const odos = waypoints.map(wp => wp.odometer).filter(o => o > 0);
+        moveKM = Math.max(...odos) - Math.min(...odos);
+      }
+
+      const validBats = waypoints.map(wp => wp.battery).filter(b => b !== null && b > 0);
+      const startBat = tripData.battery_level !== undefined ? parseInt(tripData.battery_level) : (validBats.length > 0 ? validBats[0] : 0);
+      const endBat = tripData.nowBattery !== undefined ? parseInt(tripData.nowBattery) : (validBats.length > 0 ? validBats[validBats.length - 1] : startBat);
+      
+      if (useBattery === 0 && startBat > 0 && endBat > 0) {
+        useBattery = Math.abs(startBat - endBat);
+      }
+
       let calculatedEff = 0;
       if (moveKM > 0 && useBattery > 0) {
         calculatedEff = Math.round((75000 * (useBattery / 100)) / moveKM);
@@ -266,10 +292,12 @@
       document.getElementById('hud-battery').innerText = `${startBat}% → ${endBat}%`;
       document.getElementById('hud-eff').innerText = `${useBattery.toFixed(1)}% 소모 (${calculatedEff > 0 ? calculatedEff : '-'} Wh/km)`;
 
-      // 지도 초기화 및 Polyline 그리기
+      // 지도 위 드로잉 초기화
       if (routeLine) map.removeLayer(routeLine);
       if (startMarker) map.removeLayer(startMarker);
       if (endMarker) map.removeLayer(endMarker);
+
+      const coords = waypoints.map(wp => [wp.lat, wp.lng]);
 
       if (coords.length > 0) {
         routeLine = L.polyline(coords, { color: '#ef4444', weight: 6, opacity: 0.9 }).addTo(map);
@@ -285,14 +313,14 @@
         map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
       }
 
-      // 테이블 바인딩 보정
+      // 테이블 뷰 갱신
       const logBody = document.getElementById('logTableBody');
       logBody.innerHTML = '';
       waypoints.forEach(wp => {
         const tr = document.createElement('tr');
         tr.className = "border-b border-gray-700 hover:bg-gray-700/50 text-xs text-gray-200";
         tr.innerHTML = `
-          <td class="p-3 font-mono text-gray-400">Point #|${wp.idx}</td>
+          <td class="p-3 font-mono text-gray-400">Point #${wp.idx}</td>
           <td class="p-3">${wp.odometer ? wp.odometer.toFixed(2) + ' km' : '-'}</td>
           <td class="p-3"><span class="text-blue-400">${wp.outside_temp || tripData.outside_temp || '-'}°C</span> / <span class="text-orange-400">${wp.inside_temp || '-'}°C</span></td>
           <td class="p-3 text-cyan-400 font-mono">${wp.battery ? wp.battery + '%' : '-'}</td>
@@ -307,11 +335,12 @@
 
       tripLabels.forEach(tripName => {
         const data = trips[tripName];
-        distances.push(data.moveKM || 0);
+        distances.push(data.moveKM || data.distance || 0);
         batteryUses.push(data.useBattery || 0);
         const temp = parseFloat(data.outside_temp);
-        if (!isNaN(temp) && data.moveKM > 0 && data.useBattery > 0) {
-          const eff = Math.round((75000 * (data.useBattery / 100)) / data.moveKM);
+        if (!isNaN(temp) && (data.moveKM > 0 || data.distance > 0)) {
+          const d = data.moveKM || data.distance;
+          const eff = Math.round((75000 * ((data.useBattery || 1) / 100)) / d);
           if(eff < 500) scatterData.push({ x: temp, y: eff });
         }
       });
