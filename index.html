@@ -17,7 +17,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <style>
-    #map { height: 480px; z-index: 1; }
+    #map { height: 500px; z-index: 1; }
   </style>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans min-h-screen flex items-center justify-center m-0 p-0">
@@ -55,50 +55,85 @@
 
   <!-- 2. 메인 관제 시스템 레이어 -->
   <div id="appDashboard" class="hidden w-full min-h-screen flex flex-col md:flex-row bg-gray-900 text-gray-100">
-    <!-- 사이드바 -->
-    <div class="w-full md:w-64 bg-gray-800 p-6 flex flex-col justify-between border-r border-gray-700">
-      <div>
-        <h1 class="text-xl font-bold text-red-500 mb-6 flex items-center gap-2">⚡ Tesla 관제 시스템</h1>
-        <label class="block text-sm font-medium text-gray-400 mb-2">주행 기록 선택</label>
-        <select id="tripSelect" class="w-full bg-gray-700 text-white rounded p-2 border border-gray-600 focus:outline-none focus:border-red-500"></select>
+    <!-- 사이드바 고도화 -->
+    <div class="w-full md:w-64 bg-gray-800 p-5 flex flex-col justify-between border-r border-gray-700 space-y-6">
+      <div class="space-y-5">
+        <h1 class="text-xl font-bold text-red-500 flex items-center gap-2">⚡ Tesla 관제 시스템</h1>
+        
+        <!-- 🗺️ 지도 스타일 체인저 추가 -->
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">🗺️ 지도 스타일 선호도</label>
+          <select id="mapStyleSelect" onchange="changeMapStyle()" class="w-full bg-gray-700 text-white rounded p-2 text-sm border border-gray-600 focus:outline-none focus:border-red-500">
+            <option value="voyager" selected>🎨 화사한 컬러 지도 (추천)</option>
+            <option value="positron">⚪ 깔끔한 라이트 지도</option>
+            <option value="dark">🕶️ 시크한 다크 지도</option>
+          </select>
+        </div>
+
+        <hr class="border-gray-700">
+
+        <!-- ⏱️ 원하는 시기별 조회 필터 추가 -->
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">🔍 주행 데이터 조회 모드</label>
+          <select id="viewModeSelect" onchange="renderDynamicFilters()" class="w-full bg-gray-700 text-white rounded p-2 text-sm border border-gray-600 focus:outline-none focus:border-red-500">
+            <option value="individual">🏁 개별 주행기록별</option>
+            <option value="daily">📅 일별 경로 합산</option>
+            <option value="weekly">🗓️ 주간별 경로 합산</option>
+            <option value="custom">⏳ 원하는 기간 지정</option>
+          </select>
+        </div>
+
+        <!-- 동적 조건 컨트롤러 컨테이너 -->
+        <div id="dynamicFilterContainer" class="space-y-3"></div>
       </div>
-      <button onclick="resetAppConfig()" class="mt-6 w-full bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-2 rounded transition">🔑 인증 정보 초기화</button>
+      
+      <button onclick="resetAppConfig()" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-2 rounded transition">🔑 인증 정보 초기화</button>
     </div>
 
     <!-- 메인 뷰 -->
-    <div class="flex-1 p-6 md:p-10 overflow-y-auto">
-      <div class="flex border-b border-gray-700 mb-6">
-        <button onclick="switchTab('mapTab')" id="btn-mapTab" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-red-500 text-red-500">🗺️ 주행 경로 지도</button>
+    <div class="flex-1 p-5 md:p-8 overflow-y-auto">
+      <div class="flex border-b border-gray-700 mb-5">
+        <button onclick="switchTab('mapTab')" id="btn-mapTab" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-red-500 text-red-500">🗺️ 주행 경로 및 분석</button>
         <button onclick="switchTab('chartTab')" id="btn-chartTab" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white">🔋 전비 및 배터리</button>
         <button onclick="switchTab('tempTab')" id="btn-tempTab" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white">🌡️ 온도 상관관계</button>
         <button onclick="switchTab('logTab')" id="btn-logTab" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white">📑 경로 상세 로그</button>
       </div>
 
       <!-- 지도 탭 -->
-      <div id="mapTab" class="tab-content block">
+      <div id="mapTab" class="tab-content block space-y-5">
         <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
           <div id="map" class="rounded bg-gray-700 mb-4"></div>
           
-          <!-- 실시간 실태 진단 구역 (오류 추적용) -->
-          <div id="debug-zone" class="mb-4 p-4 bg-yellow-950/40 border border-yellow-800/60 rounded text-xs text-yellow-300 hidden"></div>
-
+          <!-- 실시간 HUD 종합 정보창 -->
           <div class="grid grid-cols-3 gap-4 text-center">
-            <div class="bg-gray-700 p-3 rounded"><span class="block text-xs text-gray-400">총 주행 거리</span><span id="hud-distance" class="text-xl font-bold text-green-400">0.00 km</span></div>
-            <div class="bg-gray-700 p-3 rounded"><span class="block text-xs text-gray-400">배터리 변동</span><span id="hud-battery" class="text-xl font-bold text-blue-400">0% → 0%</span></div>
-            <div class="bg-gray-700 p-3 rounded"><span class="block text-xs text-gray-400">배터리 소모 (환산전비)</span><span id="hud-eff" class="text-sm font-bold text-yellow-400">0% (0 Wh/km)</span></div>
+            <div class="bg-gray-700 p-3 rounded shadow-inner"><span class="block text-xs text-gray-400">선택 기간 총 거리</span><span id="hud-distance" class="text-xl font-bold text-green-400">0.00 km</span></div>
+            <div class="bg-gray-700 p-3 rounded shadow-inner"><span class="block text-xs text-gray-400">선택 기간 주행 횟수</span><span id="hud-battery" class="text-xl font-bold text-blue-400">0회</span></div>
+            <div class="bg-gray-700 p-3 rounded shadow-inner"><span class="block text-xs text-gray-400">배터리 소모 (평균 전비)</span><span id="hud-eff" class="text-sm font-bold text-yellow-400">0% (0 Wh/km)</span></div>
+          </div>
+        </div>
+
+        <!-- 🚀 새로 추가된 고급 정보: 스마트 인사이츠 분석 리포트 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-gray-800 p-4 rounded-lg shadow-md border border-gray-700">
+            <h3 class="text-sm font-semibold text-red-400 mb-2">💡 전비 효율 스마트 팁</h3>
+            <p id="insight-efficiency" class="text-xs text-gray-300 leading-relaxed">데이터를 분석 중입니다...</p>
+          </div>
+          <div class="bg-gray-800 p-4 rounded-lg shadow-md border border-gray-700">
+            <h3 class="text-sm font-semibold text-blue-400 mb-2">🚗 선택 구간 최장 주행 및 환경 정보</h3>
+            <p id="insight-distance" class="text-xs text-gray-300 leading-relaxed">데이터를 수집하고 있습니다...</p>
           </div>
         </div>
       </div>
 
-      <div id="chartTab" class="tab-content hidden"><div class="bg-gray-800 p-6 rounded-lg h-[400px]"><canvas id="efficiencyChart"></canvas></div></div>
-      <div id="tempTab" class="tab-content hidden"><div class="bg-gray-800 p-6 rounded-lg h-[400px]"><canvas id="tempScatterChart"></canvas></div></div>
+      <div id="chartTab" class="tab-content hidden"><div class="bg-gray-800 p-6 rounded-lg h-[450px]"><canvas id="efficiencyChart"></canvas></div></div>
+      <div id="tempTab" class="tab-content hidden"><div class="bg-gray-800 p-6 rounded-lg h-[450px]"><canvas id="tempScatterChart"></canvas></div></div>
 
       <!-- 상세 로그 테이블 탭 -->
       <div id="logTab" class="tab-content hidden">
         <div class="bg-gray-800 p-6 rounded-lg shadow-lg overflow-x-auto">
           <table class="w-full text-left text-sm text-gray-300">
             <thead class="bg-gray-700 text-gray-400 uppercase text-xs">
-              <tr><th class="p-3">구간 번호</th><th class="p-3">누적 거리(ODO)</th><th class="p-3">외기/내기 온도</th><th class="p-3">현재 배터리</th></tr>
+              <tr><th class="p-3">주행 시각 및 포인트</th><th class="p-3">누적 거리(ODO)</th><th class="p-3">외기/내기 온도</th><th class="p-3">현재 배터리</th></tr>
             </thead>
             <tbody id="logTableBody"></tbody>
           </table>
@@ -109,7 +144,7 @@
 
   <script>
     const STORAGE_KEY = "secure_tesla_dashboard_tokens";
-    let db, trips = {}, map, routeLine, startMarker, endMarker, effChart, tempChart;
+    let db, allTrips = [], map, tileLayer, routeLayers = [], markers = [], effChart, tempChart;
 
     window.onload = function() {
       if (!localStorage.getItem(STORAGE_KEY)) {
@@ -158,171 +193,257 @@
       }
     }
 
+    // 🗺️ 밝기 조절이 완벽히 지원되는 지도 엔진 초기화
     function initMap() {
       if (map) return;
       map = L.map('map').setView([37.5665, 126.9780], 11);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO' }).addTo(map);
+      changeMapStyle();
     }
 
+    function changeMapStyle() {
+      if (tileLayer) map.removeLayer(tileLayer);
+      const style = document.getElementById('mapStyleSelect').value;
+      
+      let tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'; // 🎨 기본값: 밝고 컬러풀한 프리미엄 테마
+      if (style === 'positron') tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'; // ⚪ 라이트 테마
+      if (style === 'dark') tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'; // 🕶️ 다크 테마
+
+      tileLayer = L.tileLayer(tileUrl, { attribution: '&copy; CARTO' }).addTo(map);
+    }
+
+    // 전체 DB 데이터를 가져와 고성능 객체배열 구조로 선원 파싱
     async function loadData() {
       try {
         const snapshot = await db.collection('driving').orderBy('date', 'desc').get();
-        if (snapshot.empty) {
-          document.getElementById('tripSelect').innerHTML = '<option>데이터가 존재하지 않습니다.</option>';
-          return;
-        }
-        trips = {};
+        if (snapshot.empty) return;
+
+        allTrips = [];
         snapshot.docs.forEach(doc => {
           const data = doc.data();
           const timestamp = data.date || parseInt(doc.id);
-          let tripName = doc.id + " 주행";
-          if (!isNaN(timestamp)) {
-            tripName = new Date(timestamp).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' 주행';
+          const dateObj = new Date(timestamp);
+          const waypoints = [];
+
+          function deepScan(obj) {
+            if (!obj || typeof obj !== 'object') return;
+            if (Array.isArray(obj)) { obj.forEach(item => deepScan(item)); return; }
+            let lat = null, lng = null, battery = null, odometer = null, inside_temp = null, outside_temp = null;
+            Object.keys(obj).forEach(k => {
+              const kl = k.toLowerCase();
+              if (kl === 'lat' || kl === 'latitude') lat = Number(obj[k]);
+              if (kl === 'lng' || kl === 'longitude' || kl === 'lon') lng = Number(obj[k]);
+              if (kl.includes('battery')) battery = parseInt(obj[k]);
+              if (kl.includes('odometer') || kl === 'odo') odometer = Number(obj[k]);
+              if (kl.includes('inside_temp')) inside_temp = obj[k];
+              if (kl.includes('outside_temp')) outside_temp = obj[k];
+            });
+            if (lat && lng && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+              if (!waypoints.some(wp => Math.abs(wp.lat - lat) < 0.0001 && Math.abs(wp.lng - lng) < 0.0001)) {
+                waypoints.push({ lat, lng, battery, odometer, inside_temp, outside_temp });
+              }
+            }
+            Object.keys(obj).forEach(k => { if (typeof obj[k] === 'object' && obj[k] !== null) deepScan(obj[k]); });
           }
-          trips[tripName] = data;
+
+          deepScan(data);
+          waypoints.sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
+          waypoints.forEach((wp, i) => wp.idx = i);
+
+          allTrips.push({
+            id: doc.id,
+            timestamp,
+            dateObj,
+            moveKM: Number(data.moveKM || data.distance || 0),
+            useBattery: Number(data.useBattery || 0),
+            battery_level: data.battery_level,
+            nowBattery: data.nowBattery,
+            outside_temp: data.outside_temp,
+            waypoints
+          });
         });
 
-        const select = document.getElementById('tripSelect');
-        select.innerHTML = '';
-        Object.keys(trips).forEach((tripName, idx) => {
-          const opt = document.createElement('option');
-          opt.value = tripName; opt.innerText = tripName;
-          if(idx === 0) opt.selected = true;
-          select.appendChild(opt);
-        });
-        select.addEventListener('change', (e) => updateDashboard(e.target.value));
-        
-        updateDashboard(select.value);
+        allTrips.sort((a, b) => b.timestamp - a.timestamp);
+        renderDynamicFilters();
         renderGlobalCharts();
       } catch (error) {
         console.error(error);
       }
     }
 
-    // 🎯 초강력 무제한 깊이 탐색(Deep Recursive Scanner) 엔진
-    function updateDashboard(tripId) {
-      const tripData = trips[tripId];
-      if (!tripData) return;
+    // ⏳ 선택한 주기 모드(일별, 주간별, 기간별)에 따라 사이드바 세부 드롭다운 동적 생성
+    function renderDynamicFilters() {
+      const mode = document.getElementById('viewModeSelect').value;
+      const container = document.getElementById('dynamicFilterContainer');
+      container.innerHTML = '';
 
-      if (map) setTimeout(() => map.invalidateSize(), 50);
-
-      const waypoints = [];
-      
-      // 오브젝트 트리를 밑바닥까지 뒤져서 좌표쌍을 수집하는 재귀함수
-      function deepScan(obj) {
-        if (!obj || typeof obj !== 'object') return;
-        
-        if (Array.isArray(obj)) {
-          obj.forEach(item => deepScan(item));
-          return;
-        }
-
-        let lat = null, lng = null;
-        let battery = null, odometer = null, inside_temp = null, outside_temp = null;
-
-        Object.keys(obj).forEach(k => {
-          const kl = k.toLowerCase();
-          if (kl === 'lat' || kl === 'latitude') lat = Number(obj[k]);
-          if (kl === 'lng' || kl === 'longitude' || kl === 'lon') lng = Number(obj[k]);
-          if (kl.includes('battery')) battery = parseInt(obj[k]);
-          if (kl.includes('odometer') || kl === 'odo') odometer = Number(obj[k]);
-          if (kl.includes('inside_temp')) inside_temp = obj[k];
-          if (kl.includes('outside_temp')) outside_temp = obj[k];
+      if (mode === 'individual') {
+        const select = document.createElement('select');
+        select.id = "tripSelect";
+        select.className = "w-full bg-gray-700 text-white rounded p-2 text-xs border border-gray-600 focus:outline-none";
+        allTrips.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.id;
+          opt.innerText = t.dateObj.toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' 주행';
+          select.appendChild(opt);
         });
+        select.addEventListener('change', updateDashboard);
+        container.appendChild(select);
+      } 
+      else if (mode === 'daily') {
+        const days = [...new Set(allTrips.map(t => t.dateObj.toLocaleDateString('ko-KR')))];
+        const select = document.createElement('select');
+        select.id = "dateSelect";
+        select.className = "w-full bg-gray-700 text-white rounded p-2 text-xs border border-gray-600 focus:outline-none";
+        days.forEach(d => {
+          const opt = document.createElement('option'); opt.value = d; opt.innerText = d;
+          select.appendChild(opt);
+        });
+        select.addEventListener('change', updateDashboard);
+        container.appendChild(select);
+      } 
+      else if (mode === 'weekly') {
+        const getWeekNumber = (d) => {
+          const date = new Date(d.getTime());
+          date.setHours(0,0,0,0);
+          date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+          const week1 = new Date(date.getFullYear(), 0, 4);
+          return date.getFullYear() + "년 " + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7 + 1) + "주차";
+        };
+        const weeks = [...new Set(allTrips.map(t => getWeekNumber(t.dateObj)))];
+        const select = document.createElement('select');
+        select.id = "weekSelect";
+        select.className = "w-full bg-gray-700 text-white rounded p-2 text-xs border border-gray-600 focus:outline-none";
+        weeks.forEach(w => {
+          const opt = document.createElement('option'); opt.value = w; opt.innerText = w;
+          select.appendChild(opt);
+        });
+        select.addEventListener('change', updateDashboard);
+        container.appendChild(select);
+      } 
+      else if (mode === 'custom') {
+        container.innerHTML = `
+          <input type="date" id="startDateInput" class="w-full bg-gray-700 text-white rounded p-1.5 text-xs border border-gray-600 focus:outline-none">
+          <input type="date" id="endDateInput" class="w-full bg-gray-700 text-white rounded p-1.5 text-xs border border-gray-600 focus:outline-none">
+          <button onclick="updateDashboard()" class="w-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1.5 rounded transition">조회하기</button>
+        `;
+        if (allTrips.length > 0) {
+          document.getElementById('startDateInput').value = allTrips[allTrips.length - 1].dateObj.toISOString().split('T')[0];
+          document.getElementById('endDateInput').value = allTrips[0].dateObj.toISOString().split('T')[0];
+        }
+      }
+      updateDashboard();
+    }
 
-        if (lat && lng && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-          // 중복 추가 방지 처리
-          const isExist = waypoints.some(wp => Math.abs(wp.lat - lat) < 0.0001 && Math.abs(wp.lng - lng) < 0.0001);
-          if (!isExist) {
-            waypoints.push({ lat, lng, battery, odometer, inside_temp, outside_temp });
+    // 🏁 핵심 렌더러 연산: 다중 주행 묶음 선 꼬임 방지 연산 매핑 기술 탑재
+    function updateDashboard() {
+      const mode = document.getElementById('viewModeSelect').value;
+      let targetTrips = [];
+
+      if (mode === 'individual') {
+        const val = document.getElementById('tripSelect')?.value;
+        targetTrips = allTrips.filter(t => t.id === val);
+      } else if (mode === 'daily') {
+        const val = document.getElementById('dateSelect')?.value;
+        targetTrips = allTrips.filter(t => t.dateObj.toLocaleDateString('ko-KR') === val);
+      } else if (mode === 'weekly') {
+        const val = document.getElementById('weekSelect')?.value;
+        const getWeekNumber = (d) => {
+          const date = new Date(d.getTime()); date.setHours(0,0,0,0);
+          date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+          return date.getFullYear() + "년 " + Math.round(((date.getTime() - new Date(date.getFullYear(), 0, 4).getTime()) / 86400000 - 3 + (new Date(date.getFullYear(), 0, 4).getDay() + 6) % 7) / 7 + 1) + "주차";
+        };
+        targetTrips = allTrips.filter(t => getWeekNumber(t.dateObj) === val);
+      } else if (mode === 'custom') {
+        const sStr = document.getElementById('startDateInput')?.value;
+        const eStr = document.getElementById('endDateInput')?.value;
+        if (sStr && eStr) {
+          const sDate = new Date(sStr + "T00:00:00");
+          const eDate = new Date(eStr + "T23:59:59");
+          targetTrips = allTrips.filter(t => t.dateObj >= sDate && t.dateObj <= eDate);
+        }
+      }
+
+      // 맵 리셋
+      routeLayers.forEach(l => map.removeLayer(l)); routeLayers = [];
+      markers.forEach(m => map.removeLayer(m)); markers = [];
+
+      let totalKM = 0, totalBatUsed = 0, combinedWaypoints = [];
+
+      // 여러 주행 기록이 묶였을 때, 서로 다른 목적지끼리 일직선으로 이어지는 오류 차단 (개별 레이어로 드로잉)
+      targetTrips.forEach(trip => {
+        totalKM += trip.moveKM;
+        totalBatUsed += trip.useBattery;
+
+        const coords = trip.waypoints.map(wp => [wp.lat, wp.lng]);
+        if (coords.length > 0) {
+          const line = L.polyline(coords, { color: '#ef4444', weight: 5, opacity: 0.85 }).addTo(map);
+          routeLayers.push(line);
+
+          // 출발/도착 지점별 상세 팝업 마커 부착
+          const sM = L.circleMarker(coords[0], { radius: 6, color: '#10b981', fillColor: '#10b981', fillOpacity: 1 }).addTo(map)
+            .bindPopup(`<b>🏁 출발</b> [${trip.dateObj.toLocaleDateString('ko-KR', {month:'short', day:'numeric'})} ${trip.dateObj.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'})}]`);
+          markers.push(sM);
+
+          if (coords.length > 1) {
+            const eM = L.circleMarker(coords[coords.length - 1], { radius: 6, color: '#f43f5e', fillColor: '#f43f5e', fillOpacity: 1 }).addTo(map)
+              .bindPopup(`<b>🏁 도착</b><br>거리: ${trip.moveKM.toFixed(2)} km<br>소모: ${trip.useBattery}%`);
+            markers.push(eM);
           }
         }
 
-        // 자식 노드가 있으면 하위 레벨로 재진입 탐색
-        Object.keys(obj).forEach(k => {
-          if (typeof obj[k] === 'object' && obj[k] !== null) {
-            deepScan(obj[k]);
-          }
+        trip.waypoints.forEach(wp => {
+          combinedWaypoints.push({
+            ...wp,
+            timeLabel: trip.dateObj.toLocaleDateString('ko-KR', {month:'short', day:'numeric'}) + ' ' + trip.dateObj.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'})
+          });
         });
+      });
+
+      // 전체 경로가 한 눈에 들어오도록 오토 포커스 카메라 줌 연산
+      if (routeLayers.length > 0) {
+        const group = L.featureGroup(routeLayers);
+        map.fitBounds(group.getBounds(), { padding: [40, 40] });
       }
 
-      // 탐색 시작
-      deepScan(tripData);
-
-      // 주행 거리 혹은 수집 순으로 정렬 보정
-      const hasOdo = waypoints.some(wp => wp.odometer > 0);
-      if (hasOdo) {
-        waypoints.sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
+      // HUD 계계판 계산기 가동
+      let avgEff = 0;
+      if (totalKM > 0 && totalBatUsed > 0) {
+        avgEff = Math.round((75000 * (totalBatUsed / 100)) / totalKM);
       }
+
+      document.getElementById('hud-distance').innerText = `${totalKM.toFixed(2)} km`;
+      document.getElementById('hud-battery').innerText = `${targetTrips.length}회 주행 묶음`;
+      document.getElementById('hud-eff').innerText = `${totalBatUsed.toFixed(1)}% 소모 (${avgEff > 0 ? avgEff : '-'} Wh/km)`;
+
+      // 💡 [새 기능] 실시간 수집 인사이츠 요약 리포트 매칭 작성
+      const insEff = document.getElementById('insight-efficiency');
+      const insDist = document.getElementById('insight-distance');
       
-      waypoints.forEach((wp, i) => wp.idx = i);
-
-      // 🔍 [진단창 작동] 데이터 상태를 검사하여 화면에 알림 표출
-      const debugZone = document.getElementById('debug-zone');
-      if (waypoints.length === 0) {
-        debugZone.classList.remove('hidden');
-        debugZone.innerHTML = `⚠️ <b>데이터 구조 진단 알림:</b> 문서를 불러왔으나 내부에서 위도/경도 필드(lat, lng)를 파싱하지 못했습니다.<br>📦 <b>현재 최상위 데이터 필드 목록:</b> <span class="font-mono bg-black/40 px-1 rounded">${Object.keys(tripData).join(', ')}</span>`;
+      if (avgEff > 0) {
+        if (avgEff < 150) insEff.innerHTML = `🟢 현재 선택 주기 평균 전비는 <b>${avgEff} Wh/km</b>로 <b>최상급 효율</b>을 기록 중입니다. 연비 운전의 달인이시군요!`;
+        else if (avgEff < 210) insEff.innerHTML = `🟡 현재 선택 주기 평균 전비는 <b>${avgEff} Wh/km</b>로 표준 범주에 속합니다. 냉난방 공조 장치 사용에 따른 최적화 상태입니다.`;
+        else insEff.innerHTML = `🔴 현재 선택 주기 평균 전비는 <b>${avgEff} Wh/km</b>로 다소 높은 편입니다. 급가속 빈도가 높거나 외기 온도의 영향(한파/폭염)이 있었는지 체크해 보세요.`;
       } else {
-        debugZone.classList.add('hidden');
+        insEff.innerText = "조회된 통계 데이터 요약이 충분하지 않습니다.";
       }
 
-      // HUD 데이터 보정 연산
-      let moveKM = Number(tripData.moveKM || tripData.distance || 0);
-      let useBattery = Number(tripData.useBattery || 0);
-      
-      if (moveKM === 0 && waypoints.length > 1 && hasOdo) {
-        const odos = waypoints.map(wp => wp.odometer).filter(o => o > 0);
-        moveKM = Math.max(...odos) - Math.min(...odos);
+      if (targetTrips.length > 0) {
+        const maxSingleTrip = Math.max(...targetTrips.map(t => t.moveKM));
+        const temps = targetTrips.map(t => parseFloat(t.outside_temp)).filter(t => !isNaN(t));
+        const avgOutTemp = temps.length > 0 ? (temps.reduce((a,b)=>a+b,0)/temps.length).toFixed(1) : '-';
+        insDist.innerHTML = `📍 이 기간 중 1회 최장 주행 거리는 <b>${maxSingleTrip.toFixed(2)} km</b>이며,<br>🌡️ 평균 외부 기온 환경은 <b>${avgOutTemp}°C</b> 조건이었습니다.`;
       }
 
-      const validBats = waypoints.map(wp => wp.battery).filter(b => b !== null && b > 0);
-      const startBat = tripData.battery_level !== undefined ? parseInt(tripData.battery_level) : (validBats.length > 0 ? validBats[0] : 0);
-      const endBat = tripData.nowBattery !== undefined ? parseInt(tripData.nowBattery) : (validBats.length > 0 ? validBats[validBats.length - 1] : startBat);
-      
-      if (useBattery === 0 && startBat > 0 && endBat > 0) {
-        useBattery = Math.abs(startBat - endBat);
-      }
-
-      let calculatedEff = 0;
-      if (moveKM > 0 && useBattery > 0) {
-        calculatedEff = Math.round((75000 * (useBattery / 100)) / moveKM);
-      }
-
-      document.getElementById('hud-distance').innerText = `${moveKM.toFixed(2)} km`;
-      document.getElementById('hud-battery').innerText = `${startBat}% → ${endBat}%`;
-      document.getElementById('hud-eff').innerText = `${useBattery.toFixed(1)}% 소모 (${calculatedEff > 0 ? calculatedEff : '-'} Wh/km)`;
-
-      // 지도 위 드로잉 초기화
-      if (routeLine) map.removeLayer(routeLine);
-      if (startMarker) map.removeLayer(startMarker);
-      if (endMarker) map.removeLayer(endMarker);
-
-      const coords = waypoints.map(wp => [wp.lat, wp.lng]);
-
-      if (coords.length > 0) {
-        routeLine = L.polyline(coords, { color: '#ef4444', weight: 6, opacity: 0.9 }).addTo(map);
-        
-        startMarker = L.circleMarker(coords[0], { radius: 7, color: '#10b981', fillColor: '#10b981', fillOpacity: 1 }).addTo(map)
-          .bindPopup(`<b>🏁 출발지점</b><br>배터리: ${startBat}%`);
-
-        if(coords.length > 1) {
-          endMarker = L.circleMarker(coords[coords.length - 1], { radius: 7, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 1 }).addTo(map)
-            .bindPopup(`<b>🏁 도착지점</b><br>배터리: ${endBat}%`);
-        }
-
-        map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
-      }
-
-      // 테이블 뷰 갱신
+      // 테이블 뷰 작성
       const logBody = document.getElementById('logTableBody');
       logBody.innerHTML = '';
-      waypoints.forEach(wp => {
+      combinedWaypoints.forEach(wp => {
         const tr = document.createElement('tr');
         tr.className = "border-b border-gray-700 hover:bg-gray-700/50 text-xs text-gray-200";
         tr.innerHTML = `
-          <td class="p-3 font-mono text-gray-400">Point #${wp.idx}</td>
+          <td class="p-3 font-mono text-gray-400">${wp.timeLabel} (#${wp.idx})</td>
           <td class="p-3">${wp.odometer ? wp.odometer.toFixed(2) + ' km' : '-'}</td>
-          <td class="p-3"><span class="text-blue-400">${wp.outside_temp || tripData.outside_temp || '-'}°C</span> / <span class="text-orange-400">${wp.inside_temp || '-'}°C</span></td>
+          <td class="p-3"><span class="text-blue-400">${wp.outside_temp || '-'}°C</span> / <span class="text-orange-400">${wp.inside_temp || '-'}°C</span></td>
           <td class="p-3 text-cyan-400 font-mono">${wp.battery ? wp.battery + '%' : '-'}</td>
         `;
         logBody.appendChild(tr);
@@ -330,17 +451,15 @@
     }
 
     function renderGlobalCharts() {
-      const tripLabels = Object.keys(trips).reverse();
-      const distances = [], batteryUses = [], scatterData = [];
+      const tripLabels = allTrips.map(t => t.dateObj.toLocaleDateString('ko-KR', {month:'short', day:'numeric'})).reverse();
+      const distances = allTrips.map(t => t.moveKM).reverse();
+      const batteryUses = allTrips.map(t => t.useBattery).reverse();
+      const scatterData = [];
 
-      tripLabels.forEach(tripName => {
-        const data = trips[tripName];
-        distances.push(data.moveKM || data.distance || 0);
-        batteryUses.push(data.useBattery || 0);
+      allTrips.forEach(data => {
         const temp = parseFloat(data.outside_temp);
-        if (!isNaN(temp) && (data.moveKM > 0 || data.distance > 0)) {
-          const d = data.moveKM || data.distance;
-          const eff = Math.round((75000 * ((data.useBattery || 1) / 100)) / d);
+        if (!isNaN(temp) && data.moveKM > 0 && data.useBattery > 0) {
+          const eff = Math.round((75000 * (data.useBattery / 100)) / data.moveKM);
           if(eff < 500) scatterData.push({ x: temp, y: eff });
         }
       });
@@ -349,7 +468,7 @@
       effChart = new Chart(document.getElementById('efficiencyChart').getContext('2d'), {
         type: 'bar',
         data: {
-          labels: tripLabels.map(l => l.replace(' 주행', '')),
+          labels: tripLabels,
           datasets: [
             { label: '주행거리 (km)', data: distances, backgroundColor: 'rgba(59, 130, 246, 0.6)', yAxisID: 'y' },
             { label: '배터리 소모 (%)', data: batteryUses, backgroundColor: 'rgba(239, 68, 68, 0.6)', yAxisID: 'y1' }
