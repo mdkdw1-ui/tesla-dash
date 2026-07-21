@@ -35,7 +35,7 @@
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite API Key (선택사항)</label>
-          <input type="password" id="cfg-apiKey" placeholder="보통 빈칸 유지 (CORS 허용 시)" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+          <input type="password" id="cfg-apiKey" placeholder="보통 빈칸 유지" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Kakao JavaScript API Key</label>
@@ -85,8 +85,8 @@
         <div class="bg-gray-800 p-4 rounded-xl shadow-lg flex-1 flex flex-col justify-between">
           <div id="map" class="rounded-lg bg-gray-700 shadow-inner flex-1 mb-4"></div>
           <div class="grid grid-cols-3 gap-4 text-center">
-            <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">총 거리</span><span id="hud-distance" class="text-lg font-bold text-green-400">0.00 km</span></div>
-            <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">주행 횟수</span><span id="hud-count" class="text-lg font-bold text-blue-400">0회</span></div>
+            <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">선택 날짜 거리</span><span id="hud-distance" class="text-lg font-bold text-green-400">0.00 km</span></div>
+            <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">선택 날짜 횟수</span><span id="hud-count" class="text-lg font-bold text-blue-400">0회</span></div>
             <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">배터리 사용</span><span id="hud-battery" class="text-lg font-bold text-yellow-400">0%</span></div>
           </div>
         </div>
@@ -138,6 +138,7 @@
     const STORAGE_CONFIG_KEY = "secure_tesla_appwrite_tokens";
     const VEHICLE_STATE_COLLECTION_ID = "6a5e4796003794d2ffff"; 
     let configObj = null, allTrips = [], rawVehicleObj = null, map;
+    let polylines = [], markers = [];
 
     window.onload = function() {
       if (!localStorage.getItem(STORAGE_CONFIG_KEY)) document.getElementById('setupView').classList.remove('hidden');
@@ -196,48 +197,41 @@
       const headers = { 'X-Appwrite-Project': configObj.projectId };
       if (configObj.apiKey) headers['X-Appwrite-Key'] = configObj.apiKey;
 
-      // 1. driving 데이터 수집 및 에러 디버깅
+      // 1. driving 수집
       try {
-        const url = `${base}/collections/driving/documents`;
+        const url = `${base}/collections/driving/documents?queries[]=${encodeURIComponent('limit(100)')}`;
         const res = await fetch(url, { headers });
-        
-        if (!res.ok) {
-          const errBody = await res.text();
-          statusEl.innerText = `❌ [HTTP ${res.status}] ${errBody.substring(0, 50)}`;
-          return;
-        }
+        if (res.ok) {
+          const dData = await res.json();
+          (dData.documents || []).forEach(doc => {
+            let parsed = doc;
+            if (typeof doc.rawData === 'string') {
+              try { parsed = { ...doc, ...JSON.parse(doc.rawData) }; } catch(e){}
+            } else if (typeof doc.rawData === 'object' && doc.rawData !== null) {
+              parsed = { ...doc, ...doc.rawData };
+            }
 
-        const dData = await res.json();
-        const docs = dData.documents || [];
-        
-        docs.forEach(doc => {
-          let parsed = doc;
-          if (typeof doc.rawData === 'string') {
-            try { parsed = { ...doc, ...JSON.parse(doc.rawData) }; } catch(e){}
-          } else if (typeof doc.rawData === 'object' && doc.rawData !== null) {
-            parsed = { ...doc, ...doc.rawData };
-          }
-
-          allTrips.push({ 
-            timestamp: doc.date || doc.$createdAt || Date.now(), 
-            moveKM: Number(parsed.moveKM || parsed.distance || parsed.drive_km || 0), 
-            useBattery: Number(parsed.useBattery || parsed.battery_used || 0) 
+            allTrips.push({ 
+              timestamp: Number(doc.date || doc.$createdAt || Date.now()), 
+              moveKM: Number(parsed.moveKM || parsed.distance || parsed.drive_km || 0), 
+              useBattery: Number(parsed.useBattery || parsed.battery_used || 0),
+              path: parsed.path || parsed.locations || parsed.coords || []
+            });
           });
-        });
-      } catch (e) {
-        console.error("driving Error:", e);
-        statusEl.innerText = `❌ [네트워크/CORS 에러] Appwrite에 Web Platform(mdkdw1-ui.github.io) 등록 필요!`;
-        return;
-      }
+        }
+      } catch (e) { console.error("driving Error:", e); }
 
-      // 2. vehicle_state 수집
+      // 2. vehicle_state 수집 (가장 최신 문서 선택)
       try {
-        const vUrl = `${base}/collections/${VEHICLE_STATE_COLLECTION_ID}/documents`;
+        const vUrl = `${base}/collections/${VEHICLE_STATE_COLLECTION_ID}/documents?queries[]=${encodeURIComponent('limit(100)')}`;
         const res = await fetch(vUrl, { headers });
         if (res.ok) {
           const vData = await res.json();
-          if (vData.documents && vData.documents.length > 0) {
-            const latestDoc = vData.documents[0];
+          const docs = vData.documents || [];
+          if (docs.length > 0) {
+            // date 기준 내림차순 정렬하여 최신 데이터 채택
+            docs.sort((a, b) => Number(b.date || 0) - Number(a.date || 0));
+            const latestDoc = docs[0];
             if (typeof latestDoc.rawData === 'string') {
               try { rawVehicleObj = JSON.parse(latestDoc.rawData); } catch(e){}
             } else { rawVehicleObj = latestDoc.rawData || latestDoc; }
@@ -246,10 +240,11 @@
         }
       } catch (e) { console.error("vehicle_state Error:", e); }
 
-      allTrips.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      // 주행 데이터 최신순 정렬
+      allTrips.sort((a, b) => b.timestamp - a.timestamp);
       statusEl.innerText = `✅ 로드 성공 (주행: ${allTrips.length}개)`;
-      setFilterMode('daily');
-      updateHUD();
+      
+      setFilterMode();
     }
 
     function findKeyAdaptive(targetKey) {
@@ -267,7 +262,7 @@
     function renderVehicleTab(detectedTime) {
       if (!rawVehicleObj) return;
 
-      document.getElementById('v-last-update').innerText = `동기화 시점: ${detectedTime ? new Date(detectedTime).toLocaleString('ko-KR') : '-'}`;
+      document.getElementById('v-last-update').innerText = `동기화 시점: ${detectedTime ? new Date(Number(detectedTime)).toLocaleString('ko-KR') : '-'}`;
       
       const stateStr = findKeyAdaptive('state') || findKeyAdaptive('charging_state') || 'Online';
       document.getElementById('v-state-text').innerText = (stateStr === 'Asleep' || stateStr === 'Offline') ? '📴 오프라인' : `🟢 ${stateStr}`;
@@ -279,7 +274,10 @@
       const batLvl = findKeyAdaptive('battery_level') || findKeyAdaptive('usable_battery_level');
       document.getElementById('v-battery').innerText = batLvl !== '-' ? `${batLvl}%` : '-';
       document.getElementById('brief-battery').innerText = batLvl !== '-' ? `${batLvl}%` : '-';
-      document.getElementById('v-name').innerText = findKeyAdaptive('display_name') || 'Tesla';
+      
+      // 차량 이름 파싱 강화 (vehicle_name 또는 display_name 탐색)
+      const vName = findKeyAdaptive('display_name') || findKeyAdaptive('vehicle_name');
+      document.getElementById('v-name').innerText = (vName && vName !== '-') ? vName : 'Tesla Model Y';
 
       document.getElementById('v-eff-val').innerText = `${findKeyAdaptive('efficiency') || '3.51'} km/kWh`;
       document.getElementById('v-eff-energy').innerText = `${findKeyAdaptive('energy_used') || '19.3'} kWh`;
@@ -293,29 +291,91 @@
       document.getElementById('v-tire-temp').innerText = `${findKeyAdaptive('outside_temp') || '30.0'}°C`;
     }
 
-    function updateHUD() {
-      let totalDist = 0;
-      let totalBat = 0;
-      allTrips.forEach(t => {
-        totalDist += t.moveKM;
-        totalBat += t.useBattery;
-      });
-      document.getElementById('hud-distance').innerText = `${totalDist.toFixed(2)} km`;
-      document.getElementById('hud-count').innerText = `${allTrips.length}회`;
-      document.getElementById('hud-battery').innerText = `${totalBat.toFixed(1)}%`;
-    }
-
-    function setFilterMode(mode) {
+    function setFilterMode() {
       const container = document.getElementById('dynamicDateInputs');
       if (allTrips.length === 0) {
         container.innerHTML = `<div class="text-xs text-gray-500">주행 기록 없음</div>`;
         return;
       }
-      const uniqueDays = [...new Set(allTrips.map(t => new Date(t.timestamp).toISOString().split('T')[0]))];
-      container.innerHTML = `<select id="input-daily" class="w-full bg-gray-700 text-white rounded p-2 text-sm focus:outline-none">${uniqueDays.map(d => `<option value="${d}">${d}</option>`).join('')}</select>`;
+
+      // 날짜(YYYY-MM-DD) 목록 추출
+      const uniqueDays = [...new Set(allTrips.map(t => {
+        const d = new Date(t.timestamp);
+        return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+      }).filter(Boolean))];
+
+      container.innerHTML = `<select id="input-daily" onchange="renderSelectedDayTrips(this.value)" class="w-full bg-gray-700 text-white rounded p-2 text-sm focus:outline-none">${uniqueDays.map(d => `<option value="${d}">${d}</option>`).join('')}</select>`;
+      
+      if (uniqueDays.length > 0) {
+        renderSelectedDayTrips(uniqueDays[0]);
+      }
     }
 
-    function initMap() { if(!map) map = new kakao.maps.Map(document.getElementById('map'), { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 5 }); }
+    function renderSelectedDayTrips(selectedDay) {
+      clearMap();
+      const filtered = allTrips.filter(t => {
+        const d = new Date(t.timestamp);
+        return !isNaN(d.getTime()) && d.toISOString().split('T')[0] === selectedDay;
+      });
+
+      let totalDist = 0;
+      let totalBat = 0;
+      const bounds = new kakao.maps.LatLngBounds();
+      let hasValidCoords = false;
+
+      filtered.forEach(trip => {
+        totalDist += trip.moveKM;
+        totalBat += trip.useBattery;
+
+        // GPS 좌표선 그리기
+        if (Array.isArray(trip.path) && trip.path.length > 0) {
+          const linePath = trip.path.map(pt => {
+            const lat = pt.lat || pt.latitude || pt[0];
+            const lng = pt.lng || pt.longitude || pt[1];
+            if (lat && lng) {
+              const loc = new kakao.maps.LatLng(lat, lng);
+              bounds.extend(loc);
+              hasValidCoords = true;
+              return loc;
+            }
+            return null;
+          }).filter(Boolean);
+
+          if (linePath.length > 0) {
+            const polyline = new kakao.maps.Polyline({
+              path: linePath,
+              strokeWeight: 5,
+              strokeColor: '#3B82F6',
+              strokeOpacity: 0.8,
+              strokeStyle: 'solid'
+            });
+            polyline.setMap(map);
+            polylines.push(polyline);
+          }
+        }
+      });
+
+      // HUD 통계 업뎃
+      document.getElementById('hud-distance').innerText = `${totalDist.toFixed(2)} km`;
+      document.getElementById('hud-count').innerText = `${filtered.length}회`;
+      document.getElementById('hud-battery').innerText = `${totalBat.toFixed(1)}%`;
+
+      if (hasValidCoords && map) {
+        map.setBounds(bounds);
+      }
+    }
+
+    function clearMap() {
+      polylines.forEach(p => p.setMap(null));
+      markers.forEach(m => m.setMap(null));
+      polylines = [];
+      markers = [];
+    }
+
+    function initMap() { 
+      if(!map) map = new kakao.maps.Map(document.getElementById('map'), { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 5 }); 
+    }
+
     function switchTab(tabName) {
       const btnDriving = document.getElementById('btn-tab-driving');
       const btnVehicle = document.getElementById('btn-tab-vehicle');
@@ -338,6 +398,7 @@
         drivingFilter.classList.add('hidden');
       }
     }
+
     function resetAppConfig() { localStorage.removeItem(STORAGE_CONFIG_KEY); location.reload(); }
   </script>
 </body>
