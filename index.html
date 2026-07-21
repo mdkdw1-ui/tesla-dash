@@ -31,56 +31,18 @@
     </div>
   </header>
 
-  <!-- Navigation Tabs -->
+  <!-- Navigation Tabs (순서 변경: 내 차량 정보가 첫 번째) -->
   <div class="bg-[#12141c] border-b border-gray-800 px-2 py-2 flex justify-around text-xs font-semibold overflow-x-auto">
-    <button onclick="switchTab('driving')" id="btn-tab-driving" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition whitespace-nowrap">🗺️ 주행지도</button>
-    <button onclick="switchTab('vehicle')" id="btn-tab-vehicle" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap">🚗 차량정보</button>
+    <button onclick="switchTab('vehicle')" id="btn-tab-vehicle" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition whitespace-nowrap">🚗 차량정보</button>
+    <button onclick="switchTab('driving')" id="btn-tab-driving" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap">🗺️ 주행지도</button>
     <button onclick="switchTab('monthly')" id="btn-tab-monthly" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap">📊 월간리포트</button>
     <button onclick="switchTab('battery')" id="btn-tab-battery" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap">🔋 배터리</button>
   </div>
 
   <main class="flex-1 p-3 md:p-6 max-w-2xl mx-auto w-full flex flex-col gap-4">
 
-    <!-- 1. 주행 지도 탭 -->
-    <div id="panel-driving" class="flex-1 flex flex-col gap-3">
-      <div class="card-dark rounded-2xl p-4 flex flex-col gap-3">
-        <span class="text-xs font-bold text-gray-400">📅 조회 기간 및 상세 조건</span>
-        
-        <!-- 기간 선택 버튼 -->
-        <div class="flex gap-1.5 overflow-x-auto pb-1 text-xs">
-          <button onclick="setFilterMode('single')" id="btn-mode-single" class="px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold whitespace-nowrap">단일운행</button>
-          <button onclick="setFilterMode('daily')" id="btn-mode-daily" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">일간</button>
-          <button onclick="setFilterMode('weekly')" id="btn-mode-weekly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">주간</button>
-          <button onclick="setFilterMode('monthly')" id="btn-mode-monthly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">월간</button>
-          <button onclick="setFilterMode('quarterly')" id="btn-mode-quarterly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">분기</button>
-          <button onclick="setFilterMode('half')" id="btn-mode-half" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">반년</button>
-          <button onclick="setFilterMode('yearly')" id="btn-mode-yearly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">년</button>
-        </div>
-
-        <!-- 동적 세부 드롭다운 + 화살표 이동 버튼 영역 -->
-        <div class="flex items-center gap-2">
-          <button onclick="shiftDrivingFilter(-1)" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold rounded-xl text-xs transition">◀</button>
-          <div id="dynamicFilterControls" class="flex-1"></div>
-          <button onclick="shiftDrivingFilter(1)" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold rounded-xl text-xs transition">▶</button>
-        </div>
-
-        <!-- 요약 통계 -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#0d0e12] p-3 rounded-xl text-center text-xs border border-gray-800/80">
-          <div><span class="text-gray-500 block text-[10px]">운행건수</span><span id="stat-count" class="font-bold text-blue-400">-</span></div>
-          <div><span class="text-gray-500 block text-[10px]">이동거리</span><span id="stat-distance" class="font-bold text-green-400">-</span></div>
-          <div><span class="text-gray-500 block text-[10px]">소모 배터리/전력</span><span id="stat-energy" class="font-bold text-yellow-400">-</span></div>
-          <div><span class="text-gray-500 block text-[10px]">평균 전비</span><span id="stat-efficiency" class="font-bold text-indigo-400">-</span></div>
-        </div>
-      </div>
-
-      <!-- 지도 -->
-      <div class="card-dark rounded-2xl overflow-hidden w-full aspect-[4/3] relative border border-gray-800 shadow-lg">
-        <div id="map" class="w-full h-full"></div>
-      </div>
-    </div>
-
-    <!-- 2. 내 차량 정보 탭 -->
-    <div id="panel-vehicle" class="hidden space-y-4">
+    <!-- 1. 내 차량 정보 탭 (첫 번째 화면) -->
+    <div id="panel-vehicle" class="space-y-4">
       <div class="flex justify-between items-center px-1">
         <h2 class="text-lg font-extrabold text-white">최근 차량 상태</h2>
         <span id="v-last-time" class="text-xs text-gray-400">--:-- 기준 🔄</span>
@@ -128,7 +90,7 @@
         </div>
       </div>
 
-      <!-- 2. 타이어 공기압 (TPMS) -->
+      <!-- 타이어 공기압 (TPMS) -->
       <div class="card-dark p-4 rounded-2xl space-y-3">
         <div class="flex justify-between items-center text-xs">
           <span class="font-bold text-gray-300">🛞 타이어 공기압 (TPMS)</span>
@@ -142,14 +104,52 @@
         </div>
       </div>
 
-      <!-- 3. 최근 상태 히스토리 (1km 이하 미세 이동은 제외) -->
+      <!-- 최근 상태 히스토리 -->
       <div class="space-y-2 pt-1">
         <h3 class="text-xs font-bold text-gray-400 px-1">최근 상태 히스토리 (일자별 주요 이력)</h3>
         <div id="timeline-container" class="space-y-3"></div>
       </div>
     </div>
 
-    <!-- 3. 월간 리포트 탭 (4. 2025년 9,10월 보완) -->
+    <!-- 2. 주행 지도 탭 (두 번째 화면) -->
+    <div id="panel-driving" class="hidden flex-1 flex flex-col gap-3">
+      <div class="card-dark rounded-2xl p-4 flex flex-col gap-3">
+        <span class="text-xs font-bold text-gray-400">📅 조회 기간 및 상세 조건</span>
+        
+        <!-- 기간 선택 버튼 -->
+        <div class="flex gap-1.5 overflow-x-auto pb-1 text-xs">
+          <button onclick="setFilterMode('single')" id="btn-mode-single" class="px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold whitespace-nowrap">단일운행</button>
+          <button onclick="setFilterMode('daily')" id="btn-mode-daily" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">일간</button>
+          <button onclick="setFilterMode('weekly')" id="btn-mode-weekly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">주간</button>
+          <button onclick="setFilterMode('monthly')" id="btn-mode-monthly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">월간</button>
+          <button onclick="setFilterMode('quarterly')" id="btn-mode-quarterly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">분기</button>
+          <button onclick="setFilterMode('half')" id="btn-mode-half" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">반년</button>
+          <button onclick="setFilterMode('yearly')" id="btn-mode-yearly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">년</button>
+        </div>
+
+        <!-- 동적 세부 드롭다운 + 화살표 이동 버튼 영역 -->
+        <div class="flex items-center gap-2">
+          <button onclick="shiftDrivingFilter(-1)" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold rounded-xl text-xs transition">◀</button>
+          <div id="dynamicFilterControls" class="flex-1"></div>
+          <button onclick="shiftDrivingFilter(1)" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold rounded-xl text-xs transition">▶</button>
+        </div>
+
+        <!-- 요약 통계 -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#0d0e12] p-3 rounded-xl text-center text-xs border border-gray-800/80">
+          <div><span class="text-gray-500 block text-[10px]">운행건수</span><span id="stat-count" class="font-bold text-blue-400">-</span></div>
+          <div><span class="text-gray-500 block text-[10px]">이동거리</span><span id="stat-distance" class="font-bold text-green-400">-</span></div>
+          <div><span class="text-gray-500 block text-[10px]">소모 배터리/전력</span><span id="stat-energy" class="font-bold text-yellow-400">-</span></div>
+          <div><span class="text-gray-500 block text-[10px]">평균 전비</span><span id="stat-efficiency" class="font-bold text-indigo-400">-</span></div>
+        </div>
+      </div>
+
+      <!-- 지도 -->
+      <div class="card-dark rounded-2xl overflow-hidden w-full aspect-[4/3] relative border border-gray-800 shadow-lg">
+        <div id="map" class="w-full h-full"></div>
+      </div>
+    </div>
+
+    <!-- 3. 월간 리포트 탭 -->
     <div id="panel-monthly" class="hidden space-y-4">
       <div class="card-dark p-4 rounded-2xl space-y-3">
         <div class="flex justify-between items-center">
@@ -351,7 +351,7 @@
     }
 
     function switchTab(tabName) {
-      ['driving', 'vehicle', 'monthly', 'battery'].forEach(t => {
+      ['vehicle', 'driving', 'monthly', 'battery'].forEach(t => {
         document.getElementById(`panel-${t}`).classList.toggle('hidden', t !== tabName);
         const btn = document.getElementById(`btn-tab-${t}`);
         if (btn) {
@@ -401,6 +401,9 @@
       });
 
       vehicleRows = vehicleRes || [];
+      
+      // 첫 화면 기본값: 내 차량 정보
+      switchTab('vehicle');
       setFilterMode('daily');
       loadVehicleData();
     }
@@ -474,7 +477,6 @@
       renderDrivingData();
     }
 
-    // 1. 화살표(◀ / ▶) 이동 시 연도-월-주차 연동 로직 개편
     function shiftDrivingFilter(offset) {
       if (currentFilterMode === 'daily') {
         const sel = document.getElementById('ctrl-sub-select');
@@ -651,16 +653,39 @@
         });
 
         const polyline = new kakao.maps.Polyline({
-          path: linePath, strokeWeight: 5, strokeColor: '#3B82F6', strokeOpacity: 0.8, strokeStyle: 'solid'
+          path: linePath, strokeWeight: 6, strokeColor: '#3B82F6', strokeOpacity: 0.85, strokeStyle: 'solid'
         });
         polyline.setMap(map);
         currentPolylines.push(polyline);
+
+        // 지도 선 클릭 시 언제 기록인지 팝업창(InfoWindow) 출력
+        kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
+          if (currentInfoWindow) currentInfoWindow.close();
+
+          const tripDate = new Date(trip.timestamp).toLocaleString('ko-KR', {
+            month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+          });
+
+          const content = `
+            <div style="padding:10px; background:#161820; border:1px solid #3B82F6; border-radius:12px; color:#ffffff; font-size:12px; line-height:1.5; font-family:sans-serif; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
+              <div style="font-weight:bold; color:#60A5FA; margin-bottom:4px;">🕒 ${tripDate}</div>
+              <div>📍 이동 거리: <b>${trip.moveKM.toFixed(1)} km</b></div>
+              <div>🔋 소모 배터리: <b>-${trip.useBattery.toFixed(1)}%</b></div>
+            </div>
+          `;
+
+          currentInfoWindow = new kakao.maps.InfoWindow({
+            position: mouseEvent.latLng,
+            content: content,
+            removable: true
+          });
+          currentInfoWindow.open(map);
+        });
       });
 
       if (hasPoints && map) map.setBounds(bounds);
     }
 
-    // 2 & 3. 내 차량 정보 (TPMS 출력 보완 & 1km 이하 주행 이벤트 제외)
     function loadVehicleData() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
@@ -673,7 +698,7 @@
       document.getElementById('v-battery-val').innerText = `${batVal}%`;
       document.getElementById('v-odometer-val').innerText = `${odoVal.toLocaleString()} km`;
 
-      // 2. TPMS 타이어 공기압 추출
+      // TPMS 타이어 공기압 추출
       let rawObj = latest.raw_data;
       if (typeof rawObj === 'string') {
         try { rawObj = JSON.parse(rawObj); } catch(e) { rawObj = {}; }
@@ -736,7 +761,7 @@
       document.getElementById('v-state-duration-title').innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
       document.getElementById('v-state-start-time').innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
 
-      // 3. 히스토리 생성 (1km 이하 미세 이동 필터링: odoDiff >= 2 조건 적용)
+      // 최근 상태 히스토리
       const timelineBox = document.getElementById('timeline-container');
       timelineBox.innerHTML = '';
 
@@ -749,7 +774,6 @@
         const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
         const odoDiff = Math.round((cur.odometer || 0) - (prev.odometer || 0));
 
-        // 1km 초과 주행(2km 이상) 또는 충전 이벤트만 허용
         if (odoDiff >= 2 || batDiff > 0) {
           const curDate = new Date(cur.updated_at);
           const dateKey = `${curDate.getMonth() + 1}월 ${curDate.getDate()}일`;
@@ -800,7 +824,6 @@
       });
     }
 
-    // 4. 월간 리포트 (2025년 9월, 10월 과거 충전 데이터 감지 개선)
     function initMonthlyDropdowns() {
       const yearSelect = document.getElementById('m-select-year');
       const monthSelect = document.getElementById('m-select-month');
@@ -848,7 +871,6 @@
       const totalDist = filteredTrips.reduce((a,c)=>a+c.moveKM, 0);
       const uniqueDays = new Set(filteredTrips.map(t => new Date(t.timestamp).toDateString())).size;
 
-      // 2025년 과거 충전 데이터 감지 로직 완화 (+1% 이상 상승 시 충전 감지)
       let chargeCount = 0;
       let totalChargePct = 0;
       
@@ -888,7 +910,6 @@
       document.getElementById('m-stat-avg-trip-km').innerText = `${avgTripKm}km`;
     }
 
-    // 배터리 탭 차트
     function renderBatteryCharts() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
