@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla Matrix Appwrite System v1001</title>
+  <title>Tesla Matrix Appwrite System v1003</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
   
@@ -19,7 +19,7 @@
   <!-- 1. 보안 설정 및 로그인 레이어 -->
   <div id="authContainer" class="w-full max-w-md p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 mx-4">
     <div id="setupView" class="hidden">
-      <h2 class="text-2xl font-bold text-blue-500 mb-2 text-center">🗺️ Appwrite 자립형 인프라 설정 (v1001)</h2>
+      <h2 class="text-2xl font-bold text-blue-500 mb-2 text-center">🗺️ Appwrite 자립형 인프라 설정 (v1003)</h2>
       <div class="space-y-4">
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Endpoint</label>
@@ -46,7 +46,7 @@
     </div>
 
     <div id="loginView" class="hidden">
-      <h2 class="text-2xl font-bold text-center mb-6 text-blue-400">Tesla Dashboard <span class="bg-blue-600 text-white text-xs px-2 py-1 rounded-full align-middle ml-1">v1001</span></h2>
+      <h2 class="text-2xl font-bold text-center mb-6 text-blue-400">Tesla Dashboard <span class="bg-blue-600 text-white text-xs px-2 py-1 rounded-full align-middle ml-1">v1003</span></h2>
       <div class="space-y-4">
         <input type="password" id="loginPassword" onkeydown="if(event.key === 'Enter') handleLogin()" placeholder="비밀번호 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-3 text-white font-mono text-center text-lg focus:outline-none">
         <div id="loginError" class="text-red-500 text-xs text-center hidden">❌ 비밀번호 오류 또는 복호화 실패</div>
@@ -59,7 +59,7 @@
   <div id="appDashboard" class="hidden w-full min-h-screen flex flex-col md:flex-row bg-gray-900 text-gray-100">
     <div class="w-full md:w-72 bg-gray-800 p-5 flex flex-col justify-between border-r border-gray-700 space-y-6">
       <div class="space-y-5">
-        <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">⚡ Tesla Appwrite <span class="text-xs bg-blue-900/60 text-blue-300 border border-blue-700 px-1.5 py-0.5 rounded">v1001</span></h1>
+        <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">⚡ Tesla Appwrite <span class="text-xs bg-blue-900/60 text-blue-300 border border-blue-700 px-1.5 py-0.5 rounded">v1003</span></h1>
         <div class="grid grid-cols-2 gap-1 bg-gray-950 p-1 rounded-lg border border-gray-700">
           <button id="btn-tab-driving" onclick="switchTab('driving')" class="py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition">주행 정보</button>
           <button id="btn-tab-vehicle" onclick="switchTab('vehicle')" class="py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition">내 차량 정보</button>
@@ -69,11 +69,11 @@
           <div id="dynamicDateInputs" class="space-y-2 mt-2"></div>
         </div>
         <div id="vehicleBriefSection" class="hidden bg-gray-900/60 p-3 rounded-lg border border-gray-700 space-y-2 text-xs">
-          <div class="flex justify-between"><span class="text-gray-400">차량 상태</span><span id="brief-state" class="font-bold text-green-400">-</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">차량 상태</span><span id="brief-state" class="font-bold text-gray-400">-</span></div>
           <div class="flex justify-between"><span class="text-gray-400">배터리</span><span id="brief-battery" class="font-bold text-yellow-400">-</span></div>
         </div>
         <div class="pt-2">
-          <div id="syncStatus" class="text-xs text-blue-400 bg-gray-900/50 p-2 rounded border border-gray-700 font-mono text-center break-all">데이터 로드 중...</div>
+          <div id="syncStatus" class="text-xs text-blue-400 bg-gray-900/50 p-2 rounded border border-gray-700 font-mono text-center break-all">데이터 연결 중...</div>
         </div>
       </div>
       <button onclick="resetAppConfig()" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-2 rounded transition">🔑 인증 정보 초기화</button>
@@ -104,29 +104,29 @@
             <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">현재 상태</span><span id="v-state-text" class="text-lg font-bold text-green-400">-</span></div>
             <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">총 누적 주행거리</span><span id="v-odometer" class="text-lg font-bold text-white">-</span></div>
             <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">배터리 잔량</span><span id="v-battery" class="text-lg font-bold text-yellow-400">-</span></div>
-            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">차량 이름</span><span id="v-name" class="text-lg font-bold text-blue-400 truncate block">-</span></div>
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">차량 이름/ID</span><span id="v-name" class="text-lg font-bold text-blue-400 truncate block">-</span></div>
           </div>
 
           <div class="bg-slate-900/40 p-5 rounded-xl border border-blue-900/40 space-y-3">
             <h3 class="text-xs font-bold text-blue-400 uppercase tracking-wider">⚡ 최근 전비 / 전력 사용량 통계</h3>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div><span class="text-gray-500 text-xs block">평균 전비</span> <span id="v-eff-val" class="text-lg font-bold text-indigo-400">- km/kWh</span></div>
-              <div><span class="text-gray-500 text-xs block">사용 에너지</span> <span id="v-eff-energy" class="text-lg font-bold text-gray-200">- kWh</span></div>
-              <div><span class="text-gray-500 text-xs block">실측 용량</span> <span id="v-eff-capacity" class="text-lg font-bold text-gray-200">- kWh</span></div>
-              <div><span class="text-gray-500 text-xs block">차량 기어 내부망</span> <span id="v-gear" class="text-lg font-bold text-yellow-500">-</span></div>
+              <div><span class="text-gray-500 text-xs block">평균 전비</span> <span id="v-eff-val" class="text-lg font-bold text-indigo-400">-</span></div>
+              <div><span class="text-gray-500 text-xs block">사용 에너지</span> <span id="v-eff-energy" class="text-lg font-bold text-gray-200">-</span></div>
+              <div><span class="text-gray-500 text-xs block">실측 용량</span> <span id="v-eff-capacity" class="text-lg font-bold text-gray-200">-</span></div>
+              <div><span class="text-gray-500 text-xs block">차량 기어/상태</span> <span id="v-gear" class="text-lg font-bold text-yellow-500">-</span></div>
             </div>
           </div>
 
           <div class="bg-gray-950 p-5 rounded-xl border border-gray-800 space-y-4">
             <div class="flex justify-between items-center border-b border-gray-800 pb-2">
               <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">⚙️ 타이어 공기압 모니터링</h3>
-              <span id="v-tire-temp" class="text-xs text-gray-500">- °C</span>
+              <span id="v-tire-temp" class="text-xs text-gray-500">-</span>
             </div>
             <div class="grid grid-cols-2 gap-4 max-w-md mx-auto">
-              <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-center"><span class="block text-[11px] text-gray-500 mb-1">앞 왼쪽</span><span id="tire-fl" class="text-xl font-bold text-amber-500">- psi</span></div>
-              <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-center"><span class="block text-[11px] text-gray-500 mb-1">앞 오른쪽</span><span id="tire-fr" class="text-xl font-bold text-amber-500">- psi</span></div>
-              <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-center"><span class="block text-[11px] text-gray-500 mb-1">뒤 왼쪽</span><span id="tire-rl" class="text-xl font-bold text-amber-500">- psi</span></div>
-              <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-center"><span class="block text-[11px] text-gray-500 mb-1">뒤 오른쪽</span><span id="tire-rr" class="text-xl font-bold text-amber-500">- psi</span></div>
+              <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-center"><span class="block text-[11px] text-gray-500 mb-1">앞 왼쪽</span><span id="tire-fl" class="text-xl font-bold text-amber-500">-</span></div>
+              <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-center"><span class="block text-[11px] text-gray-500 mb-1">앞 오른쪽</span><span id="tire-fr" class="text-xl font-bold text-amber-500">-</span></div>
+              <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-center"><span class="block text-[11px] text-gray-500 mb-1">뒤 왼쪽</span><span id="tire-rl" class="text-xl font-bold text-amber-500">-</span></div>
+              <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-center"><span class="block text-[11px] text-gray-500 mb-1">뒤 오른쪽</span><span id="tire-rr" class="text-xl font-bold text-amber-500">-</span></div>
             </div>
           </div>
         </div>
@@ -188,8 +188,9 @@
       });
     }
 
+    // Appwrite 데이터 가져오기 (Limit 1000 확장)
     async function fetchAllDocuments(baseUrl, headers, collectionId) {
-      const url = `${baseUrl}/collections/${collectionId}/documents`;
+      const url = `${baseUrl}/collections/${collectionId}/documents?limit=1000`;
       try {
         const res = await fetch(url, { headers });
         if (res.ok) {
@@ -200,52 +201,80 @@
       return [];
     }
 
+    // JSON 문서 파싱
     function parseDocumentPayload(doc) {
       let res = { ...doc };
-      if (typeof doc.rawData === 'string') {
-        try {
-          const parsed = JSON.parse(doc.rawData);
-          res = { ...res, ...parsed };
-        } catch(e){}
-      } else if (typeof doc.rawData === 'object' && doc.rawData !== null) {
-        res = { ...res, ...doc.rawData };
+      for (let k in doc) {
+        if (typeof doc[k] === 'string' && (doc[k].startsWith('{') || doc[k].startsWith('['))) {
+          try {
+            const parsed = JSON.parse(doc[k]);
+            if (typeof parsed === 'object' && parsed !== null) {
+              res = { ...res, ...parsed };
+            }
+          } catch(e){}
+        }
       }
       return res;
     }
 
+    // 중첩된 JSON 구조를 순회하여 동적으로 키 검색
+    function findDynamicValue(obj, targetKeys) {
+      if (!obj || typeof obj !== 'object') return null;
+      
+      // 1. 직계 키 검사
+      for (let key of targetKeys) {
+        if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') {
+          return obj[key];
+        }
+      }
+
+      // 2. 하위 객체 탐색
+      for (let k in obj) {
+        if (typeof obj[k] === 'object' && obj[k] !== null) {
+          let found = findDynamicValue(obj[k], targetKeys);
+          if (found !== null) return found;
+        }
+      }
+      return null;
+    }
+
     async function loadViewerData() {
       const statusEl = document.getElementById('syncStatus');
-      statusEl.innerText = "📥 최신 Appwrite 데이터 수집 중...";
+      statusEl.innerText = "📥 실제 Appwrite 데이터 수집 중...";
       allTrips = []; rawVehicleObj = null;
 
       const base = `${configObj.endpoint}/databases/${configObj.dbId}`;
       const headers = { 'X-Appwrite-Project': configObj.projectId };
       if (configObj.apiKey) headers['X-Appwrite-Key'] = configObj.apiKey;
 
-      // 1. driving 수집 및 JS 내림차순 정렬
+      // 1. 주행 데이터(driving) 수집
       try {
         const docs = await fetchAllDocuments(base, headers, 'driving');
         docs.forEach(doc => {
           const p = parseDocumentPayload(doc);
           
-          let ts = doc.$createdAt || p.date;
+          let ts = doc.$createdAt || findDynamicValue(p, ['date', 'timestamp', 'time']);
           if (typeof ts === 'string') ts = new Date(ts).getTime();
-          else if (typeof ts === 'number' && ts < 10000000000) ts = ts * 1000;
+
+          const dist = findDynamicValue(p, ['moveKM', 'distance', 'drive_km', 'km']) || 0;
+          const bat = findDynamicValue(p, ['useBattery', 'battery_used', 'used_battery']) || 0;
+          const pathData = findDynamicValue(p, ['path', 'locations', 'coords', 'route']) || [];
 
           allTrips.push({ 
             timestamp: ts || Date.now(), 
             createdAtStr: doc.$createdAt,
-            moveKM: Number(p.moveKM || p.distance || p.drive_km || 0), 
-            useBattery: Number(p.useBattery || p.battery_used || 0),
-            path: p.path || p.locations || p.coords || p.route || []
+            moveKM: Number(dist), 
+            useBattery: Number(bat),
+            path: pathData
           });
         });
       } catch (e) { console.error("driving Error:", e); }
 
-      // 2. vehicle_state 수집 ($createdAt 내림차순)
+      // 2. 차량 상태(vehicle_state) 수집
       try {
         const vDocs = await fetchAllDocuments(base, headers, VEHICLE_STATE_COLLECTION_ID);
         if (vDocs.length > 0) {
+          // 최신 생성순 정렬
           vDocs.sort((a, b) => new Date(b.$createdAt).getTime() - new Date(a.$createdAt).getTime());
           const latestDoc = vDocs[0];
           rawVehicleObj = parseDocumentPayload(latestDoc);
@@ -253,23 +282,10 @@
         }
       } catch (e) { console.error("vehicle_state Error:", e); }
 
-      // 주행 기록을 최신 시각 기준(내림차순)으로 완벽 정렬
       allTrips.sort((a, b) => b.timestamp - a.timestamp);
       statusEl.innerText = `✅ 로드 성공 (주행: ${allTrips.length}개)`;
       
       setFilterMode();
-    }
-
-    function findKeyAdaptive(targetKey) {
-      if (!rawVehicleObj) return '-';
-      let foundValue = null;
-      function deepSearch(obj) {
-        if (foundValue !== null || !obj || typeof obj !== 'object') return;
-        if (obj[targetKey] !== undefined && obj[targetKey] !== null) { foundValue = obj[targetKey]; return; }
-        for (const k of Object.keys(obj)) { deepSearch(obj[k]); }
-      }
-      deepSearch(rawVehicleObj);
-      return foundValue !== null ? foundValue : '-';
     }
 
     function renderVehicleTab(detectedTime) {
@@ -277,45 +293,50 @@
 
       const dateObj = new Date(detectedTime);
       document.getElementById('v-last-update').innerText = `동기화 시점: ${!isNaN(dateObj.getTime()) ? dateObj.toLocaleString('ko-KR') : '-'}`;
-      
-      const stateStr = String(findKeyAdaptive('state') || findKeyAdaptive('charging_state') || 'Online').toLowerCase();
-      const isOff = (stateStr.includes('asleep') || stateStr.includes('offline'));
-      
-      document.getElementById('v-state-text').innerText = isOff ? '📴 오프라인' : `🟢 ${stateStr.toUpperCase()}`;
-      document.getElementById('brief-state').innerText = isOff ? '오프라인' : stateStr;
 
-      // 주행거리 단위 파싱 자동 보정
-      const rawOdo = findKeyAdaptive('odometer');
-      if (rawOdo !== '-') {
-        let val = Number(rawOdo);
-        if (val > 100000) {
-          // 이미 km 단위인 경우
-          document.getElementById('v-odometer').innerText = `${val.toFixed(1)} km`;
-        } else {
-          // 마일(mile) 단위인 경우
-          document.getElementById('v-odometer').innerText = `${(val * 1.60934).toFixed(1)} km`;
-        }
+      // 동적 수치 연동
+      const state = findDynamicValue(rawVehicleObj, ['state', 'vehicle_state', 'charging_state']);
+      const odo = findDynamicValue(rawVehicleObj, ['odometer', 'mileage']);
+      const bat = findDynamicValue(rawVehicleObj, ['battery_level', 'usable_battery_level', 'battery']);
+      const name = findDynamicValue(rawVehicleObj, ['display_name', 'vehicle_name', 'car_name', 'vin']);
+      
+      const eff = findDynamicValue(rawVehicleObj, ['efficiency', 'avg_efficiency']);
+      const energy = findDynamicValue(rawVehicleObj, ['energy_used', 'used_energy']);
+      const cap = findDynamicValue(rawVehicleObj, ['nominal_full_pack_energy', 'pack_capacity', 'battery_capacity']);
+      const gear = findDynamicValue(rawVehicleObj, ['gear_shift', 'gear', 'shift_state']);
+
+      const tpmsFL = findDynamicValue(rawVehicleObj, ['tpms_pressure_fl', 'pressure_fl']);
+      const tpmsFR = findDynamicValue(rawVehicleObj, ['tpms_pressure_fr', 'pressure_fr']);
+      const tpmsRL = findDynamicValue(rawVehicleObj, ['tpms_pressure_rl', 'pressure_rl']);
+      const tpmsRR = findDynamicValue(rawVehicleObj, ['tpms_pressure_rr', 'pressure_rr']);
+      const temp = findDynamicValue(rawVehicleObj, ['outside_temp', 'ambient_temp']);
+
+      // DOM 투입
+      document.getElementById('v-state-text').innerText = state ? String(state).toUpperCase() : '-';
+      document.getElementById('brief-state').innerText = state ? String(state) : '-';
+
+      if (odo !== null) {
+        let val = Number(odo);
+        // 마일 단위 인경우 환산, 이미 km면 그대로
+        document.getElementById('v-odometer').innerText = val < 100000 ? `${(val * 1.60934).toFixed(1)} km` : `${val.toFixed(1)} km`;
       } else {
         document.getElementById('v-odometer').innerText = '-';
       }
-      
-      const batLvl = findKeyAdaptive('battery_level') || findKeyAdaptive('usable_battery_level');
-      document.getElementById('v-battery').innerText = batLvl !== '-' ? `${batLvl}%` : '-';
-      document.getElementById('brief-battery').innerText = batLvl !== '-' ? `${batLvl}%` : '-';
-      
-      const vName = findKeyAdaptive('display_name') || findKeyAdaptive('vehicle_name');
-      document.getElementById('v-name').innerText = (vName && vName !== '-') ? vName : 'Tesla Model Y';
 
-      document.getElementById('v-eff-val').innerText = `${findKeyAdaptive('efficiency') || '3.51'} km/kWh`;
-      document.getElementById('v-eff-energy').innerText = `${findKeyAdaptive('energy_used') || '19.3'} kWh`;
-      document.getElementById('v-eff-capacity').innerText = `${findKeyAdaptive('nominal_full_pack_energy') || '62.1'} kWh`;
-      document.getElementById('v-gear').innerText = findKeyAdaptive('gear_shift') || 'P (주차)';
+      document.getElementById('v-battery').innerText = bat !== null ? `${bat}%` : '-';
+      document.getElementById('brief-battery').innerText = bat !== null ? `${bat}%` : '-';
+      document.getElementById('v-name').innerText = name || '-';
 
-      document.getElementById('tire-fl').innerText = `${findKeyAdaptive('tpms_pressure_fl') || '33.7'} psi`;
-      document.getElementById('tire-fr').innerText = `${findKeyAdaptive('tpms_pressure_fr') || '34.1'} psi`;
-      document.getElementById('tire-rl').innerText = `${findKeyAdaptive('tpms_pressure_rl') || '34.1'} psi`;
-      document.getElementById('tire-rr').innerText = `${findKeyAdaptive('tpms_pressure_rr') || '34.1'} psi`;
-      document.getElementById('v-tire-temp').innerText = `${findKeyAdaptive('outside_temp') || '30.0'}°C`;
+      document.getElementById('v-eff-val').innerText = eff !== null ? `${eff} km/kWh` : '-';
+      document.getElementById('v-eff-energy').innerText = energy !== null ? `${energy} kWh` : '-';
+      document.getElementById('v-eff-capacity').innerText = cap !== null ? `${cap} kWh` : '-';
+      document.getElementById('v-gear').innerText = gear || '-';
+
+      document.getElementById('tire-fl').innerText = tpmsFL !== null ? `${tpmsFL} psi` : '-';
+      document.getElementById('tire-fr').innerText = tpmsFR !== null ? `${tpmsFR} psi` : '-';
+      document.getElementById('tire-rl').innerText = tpmsRL !== null ? `${tpmsRL} psi` : '-';
+      document.getElementById('tire-rr').innerText = tpmsRR !== null ? `${tpmsRR} psi` : '-';
+      document.getElementById('v-tire-temp').innerText = temp !== null ? `${temp}°C` : '-';
     }
 
     function setFilterMode() {
@@ -325,7 +346,6 @@
         return;
       }
 
-      // 내림차순(최신 날짜순) 날짜 목록 추출
       const daysMap = new Map();
       allTrips.forEach(t => {
         const d = new Date(t.timestamp);
