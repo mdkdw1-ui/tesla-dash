@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla Matrix Appwrite System</title>
+  <title>Tesla Matrix Appwrite System v999</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
   
@@ -19,7 +19,7 @@
   <!-- 1. 보안 설정 및 로그인 레이어 -->
   <div id="authContainer" class="w-full max-w-md p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 mx-4">
     <div id="setupView" class="hidden">
-      <h2 class="text-2xl font-bold text-blue-500 mb-2 text-center">🗺️ Appwrite 자립형 인프라 설정</h2>
+      <h2 class="text-2xl font-bold text-blue-500 mb-2 text-center">🗺️ Appwrite 자립형 인프라 설정 (v999)</h2>
       <div class="space-y-4">
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Endpoint</label>
@@ -46,7 +46,8 @@
     </div>
 
     <div id="loginView" class="hidden">
-      <h2 class="text-2xl font-bold text-center mb-6">Tesla Dashboard 로그인</h2>
+      <!-- 버전 식별용 알파벳/숫자 배치 -->
+      <h2 class="text-2xl font-bold text-center mb-6 text-blue-400">Tesla Dashboard <span class="bg-blue-600 text-white text-xs px-2 py-1 rounded-full align-middle ml-1">v999</span></h2>
       <div class="space-y-4">
         <input type="password" id="loginPassword" onkeydown="if(event.key === 'Enter') handleLogin()" placeholder="비밀번호 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-3 text-white font-mono text-center text-lg focus:outline-none">
         <div id="loginError" class="text-red-500 text-xs text-center hidden">❌ 비밀번호 오류 또는 복호화 실패</div>
@@ -59,7 +60,7 @@
   <div id="appDashboard" class="hidden w-full min-h-screen flex flex-col md:flex-row bg-gray-900 text-gray-100">
     <div class="w-full md:w-72 bg-gray-800 p-5 flex flex-col justify-between border-r border-gray-700 space-y-6">
       <div class="space-y-5">
-        <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">⚡ Tesla Appwrite</h1>
+        <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">⚡ Tesla Appwrite <span class="text-xs bg-blue-900/60 text-blue-300 border border-blue-700 px-1.5 py-0.5 rounded">v999</span></h1>
         <div class="grid grid-cols-2 gap-1 bg-gray-950 p-1 rounded-lg border border-gray-700">
           <button id="btn-tab-driving" onclick="switchTab('driving')" class="py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition">주행 정보</button>
           <button id="btn-tab-vehicle" onclick="switchTab('vehicle')" class="py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition">내 차량 정보</button>
@@ -188,7 +189,6 @@
       });
     }
 
-    // 100% 안전한 문서 수집 함수 (쿼리 파라미터 에러 차단)
     async function fetchDocumentsBulletproof(baseUrl, headers, collectionId) {
       const url = `${baseUrl}/collections/${collectionId}/documents`;
       try {
@@ -225,7 +225,7 @@
       const headers = { 'X-Appwrite-Project': configObj.projectId };
       if (configObj.apiKey) headers['X-Appwrite-Key'] = configObj.apiKey;
 
-      // 1. driving 데이터 수집
+      // 1. driving 수집
       try {
         const docs = await fetchDocumentsBulletproof(base, headers, 'driving');
         docs.forEach(doc => {
@@ -245,7 +245,7 @@
         });
       } catch (e) { console.error("driving Error:", e); }
 
-      // 2. vehicle_state 데이터 수집 ($createdAt 기준 최신순 정렬)
+      // 2. vehicle_state 수집 ($createdAt 기준 최신순 정렬)
       try {
         const vDocs = await fetchDocumentsBulletproof(base, headers, VEHICLE_STATE_COLLECTION_ID);
         if (vDocs.length > 0) {
