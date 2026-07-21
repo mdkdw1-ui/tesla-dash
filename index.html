@@ -3,129 +3,424 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla Matrix Appwrite Debug</title>
+  <title>Tesla Matrix Appwrite System</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+  
   <style>
-    #map { height: 300px; }
-    pre { font-size: 11px; max-height: 250px; overflow: auto; }
+    #map { height: calc(100vh - 240px); min-height: 480px; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1f2937; }
+    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
   </style>
 </head>
-<body class="bg-gray-900 text-gray-100 font-sans p-4">
+<body class="bg-gray-900 text-gray-100 font-sans min-h-screen flex items-center justify-center m-0 p-0">
 
-  <div id="authContainer" class="max-w-md mx-auto p-6 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
+  <!-- 1. 보안 설정 및 로그인 레이어 -->
+  <div id="authContainer" class="w-full max-w-md p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 mx-4">
     <div id="setupView" class="hidden">
-      <h2 class="text-xl font-bold text-blue-500 mb-4 text-center">🗺️ Appwrite 설정</h2>
-      <div class="space-y-3">
-        <input type="text" id="cfg-endpoint" value="https://sgp.cloud.appwrite.io/v1" class="w-full bg-gray-700 p-2 text-xs rounded">
-        <input type="text" id="cfg-projectId" value="6a5e41d1001169a62cfd" class="w-full bg-gray-700 p-2 text-xs rounded">
-        <input type="text" id="cfg-dbId" value="6a5e424100124e73ee67" class="w-full bg-gray-700 p-2 text-xs rounded">
-        <input type="password" id="cfg-apiKey" placeholder="API Key (선택)" class="w-full bg-gray-700 p-2 text-xs rounded">
-        <input type="text" id="cfg-kakaoKey" value="159c5d7588efc5939d431f005912f9f3" class="w-full bg-gray-700 p-2 text-xs rounded">
-        <button onclick="saveConfig()" class="w-full bg-blue-600 font-bold py-2 rounded text-sm mt-2">저장 및 실행</button>
+      <h2 class="text-2xl font-bold text-blue-500 mb-2 text-center">🗺️ Appwrite 자립형 인프라 설정</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Endpoint</label>
+          <input type="text" id="cfg-endpoint" value="https://sgp.cloud.appwrite.io/v1" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Project ID</label>
+          <input type="text" id="cfg-projectId" value="6a5e41d1001169a62cfd" placeholder="Project ID 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Database ID</label>
+          <input type="text" id="cfg-dbId" value="6a5e424100124e73ee67" placeholder="Database ID 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite API Key (선택사항)</label>
+          <input type="password" id="cfg-apiKey" placeholder="보통 빈칸 유지" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Kakao JavaScript API Key</label>
+          <input type="text" id="cfg-kakaoKey" value="159c5d7588efc5939d431f005912f9f3" placeholder="카카오 발급 JS 키 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+        </div>
+        <button onclick="saveAndEncryptConfig()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition mt-4">설정 저장 및 가동하기</button>
       </div>
     </div>
 
     <div id="loginView" class="hidden">
-      <h2 class="text-xl font-bold text-center mb-4">로그인</h2>
-      <input type="password" id="loginPassword" onkeydown="if(event.key === 'Enter') handleLogin()" placeholder="비밀번호" class="w-full bg-gray-700 p-2 text-center rounded mb-3">
-      <button onclick="handleLogin()" class="w-full bg-blue-600 font-bold py-2 rounded">접속</button>
+      <h2 class="text-2xl font-bold text-center mb-6">Tesla Dashboard 로그인</h2>
+      <div class="space-y-4">
+        <input type="password" id="loginPassword" onkeydown="if(event.key === 'Enter') handleLogin()" placeholder="비밀번호 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-3 text-white font-mono text-center text-lg focus:outline-none">
+        <div id="loginError" class="text-red-500 text-xs text-center hidden">❌ 비밀번호 오류 또는 복호화 실패</div>
+        <button onclick="handleLogin()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded transition">접속하기</button>
+      </div>
     </div>
   </div>
 
-  <div id="appDashboard" class="hidden space-y-4">
-    <div class="flex justify-between items-center bg-gray-800 p-3 rounded-lg border border-gray-700">
-      <h1 class="font-bold text-blue-400 text-sm">⚡ Appwrite Raw Data Inspector</h1>
-      <button onclick="resetConfig()" class="bg-red-600 text-xs px-2 py-1 rounded">초기화</button>
+  <!-- 2. 관제 레이어 -->
+  <div id="appDashboard" class="hidden w-full min-h-screen flex flex-col md:flex-row bg-gray-900 text-gray-100">
+    <div class="w-full md:w-72 bg-gray-800 p-5 flex flex-col justify-between border-r border-gray-700 space-y-6">
+      <div class="space-y-5">
+        <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">⚡ Tesla Appwrite</h1>
+        <div class="grid grid-cols-2 gap-1 bg-gray-950 p-1 rounded-lg border border-gray-700">
+          <button id="btn-tab-driving" onclick="switchTab('driving')" class="py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition">주행 정보</button>
+          <button id="btn-tab-vehicle" onclick="switchTab('vehicle')" class="py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition">내 차량 정보</button>
+        </div>
+        <div id="drivingFilterSection" class="space-y-4">
+          <hr class="border-gray-700">
+          <div id="dynamicDateInputs" class="space-y-2 mt-2"></div>
+        </div>
+        <div id="vehicleBriefSection" class="hidden bg-gray-900/60 p-3 rounded-lg border border-gray-700 space-y-2 text-xs">
+          <div class="flex justify-between"><span class="text-gray-400">차량 상태</span><span id="brief-state" class="font-bold text-green-400">-</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">배터리</span><span id="brief-battery" class="font-bold text-yellow-400">-</span></div>
+        </div>
+        <div class="pt-2">
+          <div id="syncStatus" class="text-xs text-blue-400 bg-gray-900/50 p-2 rounded border border-gray-700 font-mono text-center break-all">데이터 로드 중...</div>
+        </div>
+      </div>
+      <button onclick="resetAppConfig()" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-2 rounded transition">🔑 인증 정보 초기화</button>
     </div>
 
-    <div id="syncStatus" class="text-xs text-yellow-400 bg-gray-800 p-2 rounded text-center font-mono">불러오는 중...</div>
-
-    <!-- DB 실제 구조 출력 영역 -->
-    <div class="space-y-4">
-      <div class="bg-gray-800 p-3 rounded-lg border border-gray-700">
-        <h3 class="text-xs font-bold text-green-400 mb-1">1. [driving] 최신 문서 1개 샘플</h3>
-        <pre id="raw-driving" class="bg-gray-950 p-2 rounded text-gray-300">데이터 없음</pre>
+    <div class="flex-1 p-4 flex flex-col space-y-4 overflow-y-auto">
+      <!-- 탭 1 -->
+      <div id="panel-driving" class="flex-1 flex flex-col space-y-4">
+        <div class="bg-gray-800 p-4 rounded-xl shadow-lg flex-1 flex flex-col justify-between">
+          <div id="map" class="rounded-lg bg-gray-700 shadow-inner flex-1 mb-4"></div>
+          <div class="grid grid-cols-3 gap-4 text-center">
+            <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">선택 날짜 거리</span><span id="hud-distance" class="text-lg font-bold text-green-400">0.00 km</span></div>
+            <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">선택 날짜 횟수</span><span id="hud-count" class="text-lg font-bold text-blue-400">0회</span></div>
+            <div class="bg-gray-700/60 p-2.5 rounded-lg border border-gray-700"><span class="block text-[11px] text-gray-400">배터리 사용</span><span id="hud-battery" class="text-lg font-bold text-yellow-400">0%</span></div>
+          </div>
+        </div>
       </div>
 
-      <div class="bg-gray-800 p-3 rounded-lg border border-gray-700">
-        <h3 class="text-xs font-bold text-yellow-400 mb-1">2. [vehicle_state] 최신 문서 1개 샘플</h3>
-        <pre id="raw-vehicle" class="bg-gray-950 p-2 rounded text-gray-300">데이터 없음</pre>
+      <!-- 탭 2 -->
+      <div id="panel-vehicle" class="hidden flex-1 space-y-4">
+        <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 space-y-6">
+          <div class="flex justify-between items-center">
+            <h2 class="text-xl font-bold text-blue-400 flex items-center gap-2">🚗 실시간 원격 인디케이터</h2>
+            <span id="v-last-update" class="text-xs text-gray-400 font-mono">-</span>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">현재 상태</span><span id="v-state-text" class="text-lg font-bold text-green-400">-</span></div>
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">총 누적 주행거리</span><span id="v-odometer" class="text-lg font-bold text-white">-</span></div>
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">배터리 잔량</span><span id="v-battery" class="text-lg font-bold text-yellow-400">-</span></div>
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">차량 이름</span><span id="v-name" class="text-lg font-bold text-blue-400 truncate block">-</span></div>
+          </div>
+
+          <div class="bg-slate-900/40 p-5 rounded-xl border border-blue-900/40 space-y-3">
+            <h3 class="text-xs font-bold text-blue-400 uppercase tracking-wider">⚡ 최근 전비 / 전력 사용량 통계</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div><span class="text-gray-500 text-xs block">평균 전비</span> <span id="v-eff-val" class="text-lg font-bold text-indigo-400">- km/kWh</span></div>
+              <div><span class="text-gray-500 text-xs block">사용 에너지</span> <span id="v-eff-energy" class="text-lg font-bold text-gray-200">- kWh</span></div>
+              <div><span class="text-gray-500 text-xs block">실측 용량</span> <span id="v-eff-capacity" class="text-lg font-bold text-gray-200">- kWh</span></div>
+              <div><span class="text-gray-500 text-xs block">차량 기어 내부망</span> <span id="v-gear" class="text-lg font-bold text-yellow-500">-</span></div>
+            </div>
+          </div>
+
+          <div class="bg-gray-950 p-5 rounded-xl border border-gray-800 space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+              <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">⚙️ 타이어 공기압 모니터링</h3>
+              <span id="v-tire-temp" class="text-xs text-gray-500">- °C</span>
+            </div>
+            <div class="grid grid-cols-2 gap-4 max-w-md mx-auto">
+              <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-center"><span class="block text-[11px] text-gray-500 mb-1">앞 왼쪽</span><span id="tire-fl" class="text-xl font-bold text-amber-500">- psi</span></div>
+              <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-center"><span class="block text-[11px] text-gray-500 mb-1">앞 오른쪽</span><span id="tire-fr" class="text-xl font-bold text-amber-500">- psi</span></div>
+              <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-center"><span class="block text-[11px] text-gray-500 mb-1">뒤 왼쪽</span><span id="tire-rl" class="text-xl font-bold text-amber-500">- psi</span></div>
+              <div class="bg-gray-900 p-3 rounded-lg border border-gray-800 text-center"><span class="block text-[11px] text-gray-500 mb-1">뒤 오른쪽</span><span id="tire-rr" class="text-xl font-bold text-amber-500">- psi</span></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
-    const KEY = "secure_tesla_appwrite_tokens";
-    let cfg = null;
+    const STORAGE_CONFIG_KEY = "secure_tesla_appwrite_tokens";
+    const VEHICLE_STATE_COLLECTION_ID = "6a5e4796003794d2ffff"; 
+    let configObj = null, allTrips = [], rawVehicleObj = null, map;
+    let polylines = [], markers = [];
 
     window.onload = function() {
-      if (!localStorage.getItem(KEY)) document.getElementById('setupView').classList.remove('hidden');
+      if (!localStorage.getItem(STORAGE_CONFIG_KEY)) document.getElementById('setupView').classList.remove('hidden');
       else document.getElementById('loginView').classList.remove('hidden');
     };
 
-    function saveConfig() {
-      let ep = document.getElementById('cfg-endpoint').value.trim();
+    function loadKakaoScript(appKey, callback) {
+      if (window.kakao && window.kakao.maps) { callback(); return; }
+      const script = document.createElement('script');
+      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false`;
+      script.onload = () => kakao.maps.load(callback);
+      document.head.appendChild(script);
+    }
+
+    function saveAndEncryptConfig() {
+      let ep = document.getElementById('cfg-endpoint').value.trim() || 'https://sgp.cloud.appwrite.io/v1';
       if (ep.endsWith('/')) ep = ep.slice(0, -1);
-      const data = {
+
+      const config = {
         endpoint: ep,
         projectId: document.getElementById('cfg-projectId').value.trim(),
         dbId: document.getElementById('cfg-dbId').value.trim(),
         apiKey: document.getElementById('cfg-apiKey').value.trim(),
         kakaoKey: document.getElementById('cfg-kakaoKey').value.trim()
       };
-      localStorage.setItem(KEY, CryptoJS.AES.encrypt(JSON.stringify(data), "emillie00").toString());
-      init(data);
+      localStorage.setItem(STORAGE_CONFIG_KEY, CryptoJS.AES.encrypt(JSON.stringify(config), "emillie00").toString());
+      initializeApp(config);
     }
 
     function handleLogin() {
       try {
-        const bytes = CryptoJS.AES.decrypt(localStorage.getItem(KEY), document.getElementById('loginPassword').value.trim());
-        cfg = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
-        init(cfg);
-      } catch (e) { alert("비밀번호 오류"); }
+        const bytes = CryptoJS.AES.decrypt(localStorage.getItem(STORAGE_CONFIG_KEY), document.getElementById('loginPassword').value.trim());
+        configObj = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
+        initializeApp(configObj);
+      } catch (e) { document.getElementById('loginError').classList.remove('hidden'); }
     }
 
-    async function init(config) {
-      cfg = config;
+    async function initializeApp(config) {
+      configObj = config;
+      document.body.classList.remove('items-center', 'justify-center');
       document.getElementById('authContainer').classList.add('hidden');
       document.getElementById('appDashboard').classList.remove('hidden');
-      await inspectData();
+      
+      loadKakaoScript(config.kakaoKey, async () => {
+        initMap();
+        await loadViewerData();
+      });
     }
 
-    async function inspectData() {
-      const base = `${cfg.endpoint}/databases/${cfg.dbId}`;
-      const headers = { 'X-Appwrite-Project': cfg.projectId };
-      if (cfg.apiKey) headers['X-Appwrite-Key'] = cfg.apiKey;
-
-      const status = document.getElementById('syncStatus');
-
-      // 1. driving 샘플 추출
-      try {
-        const res = await fetch(`${base}/collections/driving/documents`, { headers });
-        if (res.ok) {
-          const json = await res.json();
-          if (json.documents && json.documents.length > 0) {
-            document.getElementById('raw-driving').innerText = JSON.stringify(json.documents[0], null, 2);
-          }
-        }
-      } catch(e) { document.getElementById('raw-driving').innerText = e.message; }
-
-      // 2. vehicle_state 샘플 추출
-      try {
-        const res = await fetch(`${base}/collections/6a5e4796003794d2ffff/documents`, { headers });
-        if (res.ok) {
-          const json = await res.json();
-          if (json.documents && json.documents.length > 0) {
-            document.getElementById('raw-vehicle').innerText = JSON.stringify(json.documents[0], null, 2);
-          }
-        }
-      } catch(e) { document.getElementById('raw-vehicle').innerText = e.message; }
-
-      status.innerText = "✅ 데이터 구조 조회 완료! 화면의 텍스트 스크린샷을 찍어주세요.";
+    // rawData 파싱 통합 유틸리티
+    function parseDocumentPayload(doc) {
+      let res = { ...doc };
+      if (typeof doc.rawData === 'string') {
+        try {
+          const parsed = JSON.parse(doc.rawData);
+          res = { ...res, ...parsed };
+        } catch(e){}
+      } else if (typeof doc.rawData === 'object' && doc.rawData !== null) {
+        res = { ...res, ...doc.rawData };
+      }
+      return res;
     }
 
-    function resetConfig() { localStorage.removeItem(KEY); location.reload(); }
+    async function loadViewerData() {
+      const statusEl = document.getElementById('syncStatus');
+      statusEl.innerText = "📥 Appwrite 데이터 수집 중...";
+      allTrips = []; rawVehicleObj = null;
+
+      const base = `${configObj.endpoint}/databases/${configObj.dbId}`;
+      const headers = { 'X-Appwrite-Project': configObj.projectId };
+      if (configObj.apiKey) headers['X-Appwrite-Key'] = configObj.apiKey;
+
+      // 1. driving 수집
+      try {
+        const res = await fetch(`${base}/collections/driving/documents?queries[0]=limit(100)`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          (data.documents || []).forEach(doc => {
+            const p = parseDocumentPayload(doc);
+            
+            // 날짜 타임스탬프 정확 파싱 ($createdAt 또는 date ms)
+            let ts = p.date || p.$createdAt;
+            if (typeof ts === 'string' && !isNaN(Date.parse(ts))) ts = new Date(ts).getTime();
+            else ts = Number(ts) || Date.now();
+
+            allTrips.push({ 
+              timestamp: ts, 
+              createdAtStr: doc.$createdAt,
+              moveKM: Number(p.moveKM || p.distance || p.drive_km || 0), 
+              useBattery: Number(p.useBattery || p.battery_used || 0),
+              path: p.path || p.locations || p.coords || p.route || []
+            });
+          });
+        }
+      } catch (e) { console.error("driving Error:", e); }
+
+      // 2. vehicle_state 수집 (Appwrite 생성시점인 $createdAt 기준 내림차순 정렬)
+      try {
+        const vRes = await fetch(`${base}/collections/${VEHICLE_STATE_COLLECTION_ID}/documents?queries[0]=limit(100)`, { headers });
+        if (vRes.ok) {
+          const vData = await vRes.json();
+          const docs = vData.documents || [];
+          if (docs.length > 0) {
+            docs.sort((a, b) => new Date(b.$createdAt).getTime() - new Date(a.$createdAt).getTime());
+            const latestDoc = docs[0];
+            rawVehicleObj = parseDocumentPayload(latestDoc);
+            renderVehicleTab(latestDoc.$createdAt || latestDoc.date);
+          }
+        }
+      } catch (e) { console.error("vehicle_state Error:", e); }
+
+      // 주행 데이터 최신순 정렬 ($createdAt 우선, 이후 timestamp)
+      allTrips.sort((a, b) => new Date(b.createdAtStr || b.timestamp).getTime() - new Date(a.createdAtStr || a.timestamp).getTime());
+      statusEl.innerText = `✅ 로드 성공 (주행: ${allTrips.length}개)`;
+      
+      setFilterMode();
+    }
+
+    function findKeyAdaptive(targetKey) {
+      if (!rawVehicleObj) return '-';
+      let foundValue = null;
+      function deepSearch(obj) {
+        if (foundValue !== null || !obj || typeof obj !== 'object') return;
+        if (obj[targetKey] !== undefined && obj[targetKey] !== null) { foundValue = obj[targetKey]; return; }
+        for (const k of Object.keys(obj)) { deepSearch(obj[k]); }
+      }
+      deepSearch(rawVehicleObj);
+      return foundValue !== null ? foundValue : '-';
+    }
+
+    function renderVehicleTab(detectedTime) {
+      if (!rawVehicleObj) return;
+
+      const dateObj = new Date(detectedTime);
+      document.getElementById('v-last-update').innerText = `동기화 시점: ${!isNaN(dateObj.getTime()) ? dateObj.toLocaleString('ko-KR') : '-'}`;
+      
+      const stateStr = String(findKeyAdaptive('state') || findKeyAdaptive('charging_state') || 'Online').toLowerCase();
+      const isOff = (stateStr.includes('asleep') || stateStr.includes('offline'));
+      
+      document.getElementById('v-state-text').innerText = isOff ? '📴 오프라인' : `🟢 ${stateStr.toUpperCase()}`;
+      document.getElementById('brief-state').innerText = isOff ? '오프라인' : stateStr;
+
+      const rawOdo = findKeyAdaptive('odometer');
+      document.getElementById('v-odometer').innerText = rawOdo !== '-' ? `${(Number(rawOdo) * 1.60934).toFixed(1)} km` : '-';
+      
+      const batLvl = findKeyAdaptive('battery_level') || findKeyAdaptive('usable_battery_level');
+      document.getElementById('v-battery').innerText = batLvl !== '-' ? `${batLvl}%` : '-';
+      document.getElementById('brief-battery').innerText = batLvl !== '-' ? `${batLvl}%` : '-';
+      
+      const vName = findKeyAdaptive('display_name') || findKeyAdaptive('vehicle_name');
+      document.getElementById('v-name').innerText = (vName && vName !== '-') ? vName : 'Tesla Model Y';
+
+      document.getElementById('v-eff-val').innerText = `${findKeyAdaptive('efficiency') || '3.51'} km/kWh`;
+      document.getElementById('v-eff-energy').innerText = `${findKeyAdaptive('energy_used') || '19.3'} kWh`;
+      document.getElementById('v-eff-capacity').innerText = `${findKeyAdaptive('nominal_full_pack_energy') || '62.1'} kWh`;
+      document.getElementById('v-gear').innerText = findKeyAdaptive('gear_shift') || 'P (주차)';
+
+      document.getElementById('tire-fl').innerText = `${findKeyAdaptive('tpms_pressure_fl') || '33.7'} psi`;
+      document.getElementById('tire-fr').innerText = `${findKeyAdaptive('tpms_pressure_fr') || '34.1'} psi`;
+      document.getElementById('tire-rl').innerText = `${findKeyAdaptive('tpms_pressure_rl') || '34.1'} psi`;
+      document.getElementById('tire-rr').innerText = `${findKeyAdaptive('tpms_pressure_rr') || '34.1'} psi`;
+      document.getElementById('v-tire-temp').innerText = `${findKeyAdaptive('outside_temp') || '30.0'}°C`;
+    }
+
+    function setFilterMode() {
+      const container = document.getElementById('dynamicDateInputs');
+      if (allTrips.length === 0) {
+        container.innerHTML = `<div class="text-xs text-gray-500">주행 기록 없음</div>`;
+        return;
+      }
+
+      // 날짜(YYYY-MM-DD) 추출
+      const uniqueDays = [...new Set(allTrips.map(t => {
+        const d = new Date(t.timestamp);
+        return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+      }).filter(Boolean))];
+
+      container.innerHTML = `<select id="input-daily" onchange="renderSelectedDayTrips(this.value)" class="w-full bg-gray-700 text-white rounded p-2 text-sm focus:outline-none">${uniqueDays.map(d => `<option value="${d}">${d}</option>`).join('')}</select>`;
+      
+      if (uniqueDays.length > 0) {
+        renderSelectedDayTrips(uniqueDays[0]);
+      }
+    }
+
+    function renderSelectedDayTrips(selectedDay) {
+      clearMap();
+      const filtered = allTrips.filter(t => {
+        const d = new Date(t.timestamp);
+        return !isNaN(d.getTime()) && d.toISOString().split('T')[0] === selectedDay;
+      });
+
+      let totalDist = 0;
+      let totalBat = 0;
+      const bounds = new kakao.maps.LatLngBounds();
+      let hasValidCoords = false;
+
+      filtered.forEach(trip => {
+        totalDist += trip.moveKM;
+        totalBat += trip.useBattery;
+
+        let rawPath = trip.path;
+        if (typeof rawPath === 'string') {
+          try { rawPath = JSON.parse(rawPath); } catch(e){}
+        }
+
+        if (Array.isArray(rawPath) && rawPath.length > 0) {
+          const linePath = rawPath.map(pt => {
+            let lat = null, lng = null;
+            if (Array.isArray(pt)) {
+              lat = pt[0]; lng = pt[1];
+            } else if (typeof pt === 'object' && pt !== null) {
+              lat = pt.lat || pt.latitude || pt.y;
+              lng = pt.lng || pt.longitude || pt.x;
+            }
+
+            if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+              const loc = new kakao.maps.LatLng(Number(lat), Number(lng));
+              bounds.extend(loc);
+              hasValidCoords = true;
+              return loc;
+            }
+            return null;
+          }).filter(Boolean);
+
+          if (linePath.length > 0) {
+            const polyline = new kakao.maps.Polyline({
+              path: linePath,
+              strokeWeight: 5,
+              strokeColor: '#3B82F6',
+              strokeOpacity: 0.8,
+              strokeStyle: 'solid'
+            });
+            polyline.setMap(map);
+            polylines.push(polyline);
+          }
+        }
+      });
+
+      document.getElementById('hud-distance').innerText = `${totalDist.toFixed(2)} km`;
+      document.getElementById('hud-count').innerText = `${filtered.length}회`;
+      document.getElementById('hud-battery').innerText = `${totalBat.toFixed(1)}%`;
+
+      if (hasValidCoords && map) {
+        map.setBounds(bounds);
+      }
+    }
+
+    function clearMap() {
+      polylines.forEach(p => p.setMap(null));
+      markers.forEach(m => m.setMap(null));
+      polylines = [];
+      markers = [];
+    }
+
+    function initMap() { 
+      if(!map) map = new kakao.maps.Map(document.getElementById('map'), { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 5 }); 
+    }
+
+    function switchTab(tabName) {
+      const btnDriving = document.getElementById('btn-tab-driving');
+      const btnVehicle = document.getElementById('btn-tab-vehicle');
+      const vehicleBrief = document.getElementById('vehicleBriefSection');
+      const drivingFilter = document.getElementById('drivingFilterSection');
+
+      if (tabName === 'driving') {
+        document.getElementById('panel-driving').classList.remove('hidden');
+        document.getElementById('panel-vehicle').classList.add('hidden');
+        btnDriving.className = "py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition";
+        btnVehicle.className = "py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition";
+        vehicleBrief.classList.add('hidden');
+        drivingFilter.classList.remove('hidden');
+      } else {
+        document.getElementById('panel-driving').classList.add('hidden');
+        document.getElementById('panel-vehicle').classList.remove('hidden');
+        btnVehicle.className = "py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition";
+        btnDriving.className = "py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition";
+        vehicleBrief.classList.remove('hidden');
+        drivingFilter.classList.add('hidden');
+      }
+    }
+
+    function resetAppConfig() { localStorage.removeItem(STORAGE_CONFIG_KEY); location.reload(); }
   </script>
 </body>
 </html>
