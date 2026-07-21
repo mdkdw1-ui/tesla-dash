@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla Control System v1008 (Supabase Edition)</title>
+  <title>Tesla Control System (Supabase)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
   
@@ -199,13 +199,14 @@
       });
     }
 
-    // Supabase 테이블 데이터 수집 함수
-    async function fetchSupabaseTable(table) {
-      const endpoint = `${configObj.url}/rest/v1/${table}?select=*`;
+    // Supabase REST API 호출 함수 (최대 5000개 수집 및 정렬 대응)
+    async function fetchSupabaseTable(queryPath) {
+      const endpoint = `${configObj.url}/rest/v1/${queryPath}`;
       const headers = {
         'apikey': configObj.key,
         'Authorization': `Bearer ${configObj.key}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Range': '0-4999' // 기본 100개 제약 해제
       };
 
       try {
@@ -213,7 +214,7 @@
         if (res.ok) {
           return await res.json();
         }
-      } catch (e) { console.error(`Supabase Fetch Error [${table}]:`, e); }
+      } catch (e) { console.error(`Supabase Fetch Error [${queryPath}]:`, e); }
       return [];
     }
 
@@ -222,18 +223,20 @@
       statusEl.innerText = "📥 Supabase 데이터 수집 중...";
       allTrips = []; rawVehicleObj = null;
 
-      const USER_UID = 'dwHcQZWCzBSzmJx8Q5qNkZjAH6d2';
-      const VEHICLE_ID = '3744141651867089';
-
-      // 1. driving 테이블 수집 (내 사용자/차량 필터링)
+      // 1. driving 테이블 수집 (전체 개수 한계 제거 및 정렬 처리)
       try {
-        const drivingRows = await fetchSupabaseTable(`driving?user_uid=eq.${USER_UID}&vehicle_id=eq.${VEHICLE_ID}`);
+        const drivingRows = await fetchSupabaseTable('driving?order=created_at.desc');
         drivingRows.forEach(row => {
           let ts = new Date(row.created_at).getTime();
           let dist = Number(row.move_km || 0);
           let bat = Number(row.use_battery || 0);
+          
           let locList = row.location_list || [];
+          if (typeof locList === 'string') {
+            try { locList = JSON.parse(locList); } catch(e){}
+          }
 
+          // odometer 보정
           if (dist === 0 && Array.isArray(locList) && locList.length > 1) {
             const firstOdo = Number(locList[0]?.odometer || 0);
             const lastOdo = Number(locList[locList.length - 1]?.odometer || 0);
@@ -252,9 +255,9 @@
         });
       } catch (e) { console.error("driving load error:", e); }
 
-      // 2. vehicle 테이블 수집 (최신 상태)
+      // 2. vehicle 테이블 수집 (최신 1건)
       try {
-        const vehicleRows = await fetchSupabaseTable(`vehicle?user_uid=eq.${USER_UID}&vehicle_id=eq.${VEHICLE_ID}&order=updated_at.desc&limit=1`);
+        const vehicleRows = await fetchSupabaseTable('vehicle?order=updated_at.desc&limit=1');
         if (vehicleRows.length > 0) {
           rawVehicleObj = vehicleRows[0];
           renderVehicleTab(rawVehicleObj.updated_at);
