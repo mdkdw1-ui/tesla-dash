@@ -188,6 +188,28 @@
       });
     }
 
+    // 안전한 데이터 수집 함수 (쿼리 실패 시 기본 로드 지원)
+    async function fetchSafeDocuments(baseUrl, headers, collectionId) {
+      // 1. queries[0]=limit(100) 시도
+      try {
+        const qUrl = `${baseUrl}/collections/${collectionId}/documents?queries[0]=limit(100)`;
+        const res = await fetch(qUrl, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.documents && data.documents.length > 0) return data.documents;
+        }
+      } catch (e) {}
+
+      // 2. 기본 URL(쿼리 없음) Fallback 시도
+      const defaultUrl = `${baseUrl}/collections/${collectionId}/documents`;
+      const resFallback = await fetch(defaultUrl, { headers });
+      if (resFallback.ok) {
+        const dataFallback = await resFallback.json();
+        return dataFallback.documents || [];
+      }
+      return [];
+    }
+
     async function loadViewerData() {
       const statusEl = document.getElementById('syncStatus');
       statusEl.innerText = "📥 Appwrite 데이터 수집 중...";
@@ -199,44 +221,34 @@
 
       // 1. driving 수집
       try {
-        const url = `${base}/collections/driving/documents?queries[]=${encodeURIComponent('limit(100)')}`;
-        const res = await fetch(url, { headers });
-        if (res.ok) {
-          const dData = await res.json();
-          (dData.documents || []).forEach(doc => {
-            let parsed = doc;
-            if (typeof doc.rawData === 'string') {
-              try { parsed = { ...doc, ...JSON.parse(doc.rawData) }; } catch(e){}
-            } else if (typeof doc.rawData === 'object' && doc.rawData !== null) {
-              parsed = { ...doc, ...doc.rawData };
-            }
+        const docs = await fetchSafeDocuments(base, headers, 'driving');
+        docs.forEach(doc => {
+          let parsed = doc;
+          if (typeof doc.rawData === 'string') {
+            try { parsed = { ...doc, ...JSON.parse(doc.rawData) }; } catch(e){}
+          } else if (typeof doc.rawData === 'object' && doc.rawData !== null) {
+            parsed = { ...doc, ...doc.rawData };
+          }
 
-            allTrips.push({ 
-              timestamp: Number(doc.date || doc.$createdAt || Date.now()), 
-              moveKM: Number(parsed.moveKM || parsed.distance || parsed.drive_km || 0), 
-              useBattery: Number(parsed.useBattery || parsed.battery_used || 0),
-              path: parsed.path || parsed.locations || parsed.coords || []
-            });
+          allTrips.push({ 
+            timestamp: Number(doc.date || doc.$createdAt || Date.now()), 
+            moveKM: Number(parsed.moveKM || parsed.distance || parsed.drive_km || 0), 
+            useBattery: Number(parsed.useBattery || parsed.battery_used || 0),
+            path: parsed.path || parsed.locations || parsed.coords || []
           });
-        }
+        });
       } catch (e) { console.error("driving Error:", e); }
 
-      // 2. vehicle_state 수집 (가장 최신 문서 선택)
+      // 2. vehicle_state 수집
       try {
-        const vUrl = `${base}/collections/${VEHICLE_STATE_COLLECTION_ID}/documents?queries[]=${encodeURIComponent('limit(100)')}`;
-        const res = await fetch(vUrl, { headers });
-        if (res.ok) {
-          const vData = await res.json();
-          const docs = vData.documents || [];
-          if (docs.length > 0) {
-            // date 기준 내림차순 정렬하여 최신 데이터 채택
-            docs.sort((a, b) => Number(b.date || 0) - Number(a.date || 0));
-            const latestDoc = docs[0];
-            if (typeof latestDoc.rawData === 'string') {
-              try { rawVehicleObj = JSON.parse(latestDoc.rawData); } catch(e){}
-            } else { rawVehicleObj = latestDoc.rawData || latestDoc; }
-            renderVehicleTab(latestDoc.date || latestDoc.$createdAt);
-          }
+        const vDocs = await fetchSafeDocuments(base, headers, VEHICLE_STATE_COLLECTION_ID);
+        if (vDocs.length > 0) {
+          vDocs.sort((a, b) => Number(b.date || 0) - Number(a.date || 0));
+          const latestDoc = vDocs[0];
+          if (typeof latestDoc.rawData === 'string') {
+            try { rawVehicleObj = JSON.parse(latestDoc.rawData); } catch(e){}
+          } else { rawVehicleObj = latestDoc.rawData || latestDoc; }
+          renderVehicleTab(latestDoc.date || latestDoc.$createdAt);
         }
       } catch (e) { console.error("vehicle_state Error:", e); }
 
@@ -275,7 +287,6 @@
       document.getElementById('v-battery').innerText = batLvl !== '-' ? `${batLvl}%` : '-';
       document.getElementById('brief-battery').innerText = batLvl !== '-' ? `${batLvl}%` : '-';
       
-      // 차량 이름 파싱 강화 (vehicle_name 또는 display_name 탐색)
       const vName = findKeyAdaptive('display_name') || findKeyAdaptive('vehicle_name');
       document.getElementById('v-name').innerText = (vName && vName !== '-') ? vName : 'Tesla Model Y';
 
@@ -298,7 +309,6 @@
         return;
       }
 
-      // 날짜(YYYY-MM-DD) 목록 추출
       const uniqueDays = [...new Set(allTrips.map(t => {
         const d = new Date(t.timestamp);
         return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
@@ -327,7 +337,6 @@
         totalDist += trip.moveKM;
         totalBat += trip.useBattery;
 
-        // GPS 좌표선 그리기
         if (Array.isArray(trip.path) && trip.path.length > 0) {
           const linePath = trip.path.map(pt => {
             const lat = pt.lat || pt.latitude || pt[0];
@@ -355,7 +364,6 @@
         }
       });
 
-      // HUD 통계 업뎃
       document.getElementById('hud-distance').innerText = `${totalDist.toFixed(2)} km`;
       document.getElementById('hud-count').innerText = `${filtered.length}회`;
       document.getElementById('hud-battery').innerText = `${totalBat.toFixed(1)}%`;
