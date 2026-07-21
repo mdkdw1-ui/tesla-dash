@@ -31,7 +31,7 @@
     </div>
   </header>
 
-  <!-- Navigation Tabs (모든 탭 유지) -->
+  <!-- Navigation Tabs -->
   <div class="bg-[#12141c] border-b border-gray-800 px-2 py-2 flex justify-around text-xs font-semibold overflow-x-auto">
     <button onclick="switchTab('driving')" id="btn-tab-driving" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition whitespace-nowrap">🗺️ 주행지도</button>
     <button onclick="switchTab('vehicle')" id="btn-tab-vehicle" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap">🚗 차량정보</button>
@@ -117,7 +117,7 @@
         <div id="v-day-trips-list" class="space-y-1.5 pt-2 border-t border-gray-800/60 text-xs"></div>
       </div>
 
-      <!-- 주차 시간 카드 -->
+      <!-- 주차 시간 카드 (최신 로그 시간 반영) -->
       <div id="card-state-duration" class="card-dark card-border-amber p-4 rounded-2xl flex items-center justify-between">
         <div class="flex items-center space-x-3">
           <span id="v-state-icon" class="text-2xl">🅿️</span>
@@ -128,7 +128,7 @@
         </div>
       </div>
 
-      <!-- 타이어 공기압 (TPMS) -->
+      <!-- 3. 타이어 공기압 (TPMS) 파싱 보완 -->
       <div class="card-dark p-4 rounded-2xl space-y-3">
         <div class="flex justify-between items-center text-xs">
           <span class="font-bold text-gray-300">🛞 타이어 공기압 (TPMS)</span>
@@ -142,14 +142,14 @@
         </div>
       </div>
 
-      <!-- 최근 상태 히스토리 (충전은 녹색, 날짜는 바깥 배지 분리) -->
+      <!-- 4. 최근 상태 히스토리 (날짜별 그룹화 개편) -->
       <div class="space-y-2 pt-1">
-        <h3 class="text-xs font-bold text-gray-400 px-1">최근 상태 히스토리 (최근 10건)</h3>
-        <div id="timeline-container" class="space-y-2"></div>
+        <h3 class="text-xs font-bold text-gray-400 px-1">최근 상태 히스토리 (일자별 이력)</h3>
+        <div id="timeline-container" class="space-y-3"></div>
       </div>
     </div>
 
-    <!-- 3. 월간 리포트 탭 (화살표 이동 및 충전 집계 보완) -->
+    <!-- 3. 월간 리포트 탭 (7. 추가 정보 및 2025년 보완) -->
     <div id="panel-monthly" class="hidden space-y-4">
       <div class="card-dark p-4 rounded-2xl space-y-3">
         <div class="flex justify-between items-center">
@@ -183,13 +183,28 @@
         </div>
       </div>
 
+      <!-- 7. 월간 인사이트 추가 정보 카드 -->
+      <div class="grid grid-cols-2 gap-3">
+        <div class="card-dark p-4 rounded-2xl flex flex-col gap-1 border border-indigo-500/30">
+          <span class="text-[11px] text-gray-400">💳 추정 충전 비용</span>
+          <span id="m-stat-cost" class="text-lg font-extrabold text-indigo-300">- 원</span>
+        </div>
+        <div class="card-dark p-4 rounded-2xl flex flex-col gap-1 border border-teal-500/30">
+          <span class="text-[11px] text-gray-400">🌱 탄소 절감량</span>
+          <span id="m-stat-co2" class="text-lg font-extrabold text-teal-300">- kg CO₂</span>
+        </div>
+      </div>
+
       <div class="card-dark p-4 rounded-2xl flex justify-between items-center">
-        <span class="text-xs font-bold text-gray-300">평균 전비</span>
+        <div>
+          <span class="text-xs font-bold text-gray-300 block">평균 전비</span>
+          <span class="text-[10px] text-gray-500">운행 1회당 평균 <span id="m-stat-avg-trip-km" class="text-gray-300 font-bold">-km</span></span>
+        </div>
         <span id="m-stat-avg-eff" class="text-2xl font-black text-indigo-400">- km/kWh</span>
       </div>
     </div>
 
-    <!-- 4. 배터리 탭 (완전히 복구 및 정상 유지) -->
+    <!-- 4. 배터리 탭 -->
     <div id="panel-battery" class="hidden space-y-4">
       <div class="grid grid-cols-2 gap-3">
         <div class="card-dark p-4 rounded-2xl">
@@ -368,7 +383,7 @@
     async function loadAllData() {
       const [drivingRes, vehicleRes] = await Promise.all([
         fetchSupabaseTable('driving?order=created_at.desc'),
-        fetchSupabaseTable('vehicle?order=updated_at.desc&limit=2000')
+        fetchSupabaseTable('vehicle?order=updated_at.desc&limit=3000')
       ]);
 
       allTrips = (drivingRes || []).map(r => {
@@ -391,7 +406,7 @@
       loadVehicleData();
     }
 
-    // --- 주행 필터 및 드롭다운 컨트롤 ---
+    // 1 & 2. 필터 모드별 제어 및 주간/분기/반기 드롭다운 수정을 위한 보완
     function setFilterMode(mode) {
       currentFilterMode = mode;
       ['single', 'daily', 'weekly', 'monthly', 'quarterly', 'half', 'yearly'].forEach(m => {
@@ -416,7 +431,20 @@
         }))];
         const opts = days.map(d => `<option value="${d}">${d}</option>`).join('');
         container.innerHTML = `<select id="ctrl-sub-select" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-xl p-2 text-xs border border-gray-700 font-bold">${opts}</select>`;
-      } else if (mode === 'weekly' || mode === 'monthly') {
+      } else if (mode === 'weekly') {
+        // 주간 전용 드롭다운 (1주차~5주차 선택 가능)
+        const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
+        container.innerHTML = `
+          <div class="flex gap-2 text-xs">
+            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${yearOpts}</select>
+            <select id="ctrl-month" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${monthOpts}</select>
+            <select id="ctrl-week" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">
+              <option value="1">1주차</option><option value="2">2주차</option><option value="3">3주차</option><option value="4">4주차</option><option value="5">5주차</option>
+            </select>
+          </div>
+        `;
+        if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = new Date(allTrips[0].timestamp).getMonth() + 1;
+      } else if (mode === 'monthly') {
         const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
         container.innerHTML = `
           <div class="flex gap-2 text-xs">
@@ -430,10 +458,7 @@
           <div class="flex gap-2 text-xs">
             <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${yearOpts}</select>
             <select id="ctrl-quarter" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">
-              <option value="1">1분기 (1~3월)</option>
-              <option value="2">2분기 (4~6월)</option>
-              <option value="3">3분기 (7~9월)</option>
-              <option value="4">4분기 (10~12월)</option>
+              <option value="1">1분기 (1~3월)</option><option value="2">2분기 (4~6월)</option><option value="3">3분기 (7~9월)</option><option value="4">4분기 (10~12월)</option>
             </select>
           </div>
         `;
@@ -442,8 +467,7 @@
           <div class="flex gap-2 text-xs">
             <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${yearOpts}</select>
             <select id="ctrl-half" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">
-              <option value="1">상반기 (1~6월)</option>
-              <option value="2">하반기 (7~12월)</option>
+              <option value="1">상반기 (1~6월)</option><option value="2">하반기 (7~12월)</option>
             </select>
           </div>
         `;
@@ -453,34 +477,52 @@
       renderDrivingData();
     }
 
-    // 주행 지도 필터 화살표 (◀ / ▶) 이동 함수
+    // 2. 화살표 이동 (◀ / ▶) 모든 필터 모드 지원
     function shiftDrivingFilter(offset) {
       if (currentFilterMode === 'daily') {
         const sel = document.getElementById('ctrl-sub-select');
         if (sel && sel.selectedIndex !== -1) {
-          const nextIdx = sel.selectedIndex - offset; // 역순 정렬 대응
-          if (nextIdx >= 0 && nextIdx < sel.options.length) {
-            sel.selectedIndex = nextIdx;
-            renderDrivingData();
-          }
+          const nextIdx = sel.selectedIndex - offset;
+          if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
         }
-      } else if (currentFilterMode === 'weekly' || currentFilterMode === 'monthly') {
+      } else if (currentFilterMode === 'weekly') {
+        const wSel = document.getElementById('ctrl-week');
+        if (wSel) {
+          let val = Number(wSel.value) + offset;
+          if (val > 5) val = 1; if (val < 1) val = 5;
+          wSel.value = val; renderDrivingData();
+        }
+      } else if (currentFilterMode === 'monthly') {
         const mSel = document.getElementById('ctrl-month');
         if (mSel) {
           let val = Number(mSel.value) + offset;
-          if (val > 12) val = 1;
-          if (val < 1) val = 12;
-          mSel.value = val;
+          if (val > 12) val = 1; if (val < 1) val = 12;
+          mSel.value = val; renderDrivingData();
+        }
+      } else if (currentFilterMode === 'quarterly') {
+        const qSel = document.getElementById('ctrl-quarter');
+        if (qSel) {
+          let val = Number(qSel.value) + offset;
+          if (val > 4) val = 1; if (val < 1) val = 4;
+          qSel.value = val; renderDrivingData();
+        }
+      } else if (currentFilterMode === 'half') {
+        const hSel = document.getElementById('ctrl-half');
+        if (hSel) {
+          hSel.value = hSel.value === "1" ? "2" : "1";
           renderDrivingData();
+        }
+      } else if (currentFilterMode === 'yearly') {
+        const ySel = document.getElementById('ctrl-year');
+        if (ySel && ySel.selectedIndex !== -1) {
+          const nextIdx = ySel.selectedIndex - offset;
+          if (nextIdx >= 0 && nextIdx < ySel.options.length) { ySel.selectedIndex = nextIdx; renderDrivingData(); }
         }
       } else if (currentFilterMode === 'single') {
         const sel = document.getElementById('ctrl-select');
         if (sel && sel.selectedIndex !== -1) {
           const nextIdx = sel.selectedIndex - offset;
-          if (nextIdx >= 0 && nextIdx < sel.options.length) {
-            sel.selectedIndex = nextIdx;
-            renderDrivingData();
-          }
+          if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
         }
       }
     }
@@ -504,7 +546,16 @@
           const d = new Date(t.timestamp);
           return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` === selectedDay;
         });
-      } else if (currentFilterMode === 'weekly' || currentFilterMode === 'monthly') {
+      } else if (currentFilterMode === 'weekly') {
+        const selY = Number(document.getElementById('ctrl-year')?.value);
+        const selM = Number(document.getElementById('ctrl-month')?.value);
+        const selW = Number(document.getElementById('ctrl-week')?.value);
+        matched = allTrips.filter(t => {
+          const d = new Date(t.timestamp);
+          const weekNum = Math.ceil(d.getDate() / 7);
+          return d.getFullYear() === selY && (d.getMonth() + 1) === selM && weekNum === selW;
+        });
+      } else if (currentFilterMode === 'monthly') {
         const selY = Number(document.getElementById('ctrl-year')?.value);
         const selM = Number(document.getElementById('ctrl-month')?.value);
         matched = allTrips.filter(t => {
@@ -568,7 +619,7 @@
       if (hasPoints && map) map.setBounds(bounds);
     }
 
-    // --- 2. 내 차량 정보 (타이어 정보 및 최근 히스토리 시안성 개선) ---
+    // 3 & 4 & 5. 차량 상태, TPMS 보완, 주차 시각 계산 기준 보완, 일자별 히스토리 개편
     function loadVehicleData() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
@@ -581,11 +632,19 @@
       document.getElementById('v-battery-val').innerText = `${batVal}%`;
       document.getElementById('v-odometer-val').innerText = `${odoVal.toLocaleString()} km`;
 
-      // 타이어 공기압 (TPMS) 정보 출력
-      document.getElementById('tpms-fl').innerText = `${latest.tpms_fl || 0} psi`;
-      document.getElementById('tpms-fr').innerText = `${latest.tpms_fr || 0} psi`;
-      document.getElementById('tpms-rl').innerText = `${latest.tpms_rl || 0} psi`;
-      document.getElementById('tpms-rr').innerText = `${latest.tpms_rr || 0} psi`;
+      // 3. 타이어 공기압 (TPMS) 정밀 추출 (raw_data 파싱 포함)
+      let fl = latest.tpms_fl || latest.raw_data?.tpms?.fl || latest.raw_data?.tpms_pressure_fl || 0;
+      let fr = latest.tpms_fr || latest.raw_data?.tpms?.fr || latest.raw_data?.tpms_pressure_fr || 0;
+      let rl = latest.tpms_rl || latest.raw_data?.tpms?.rl || latest.raw_data?.tpms_pressure_rl || 0;
+      let rr = latest.tpms_rr || latest.raw_data?.tpms?.rr || latest.raw_data?.tpms_pressure_rr || 0;
+
+      // Bar 단위 수치일 경우 PSI 자동 환산
+      const toPsi = (v) => (v > 0 && v < 10) ? Math.round(v * 14.5038) : Math.round(v);
+
+      document.getElementById('tpms-fl').innerText = `${toPsi(fl)} psi`;
+      document.getElementById('tpms-fr').innerText = `${toPsi(fr)} psi`;
+      document.getElementById('tpms-rl').innerText = `${toPsi(rl)} psi`;
+      document.getElementById('tpms-rr').innerText = `${toPsi(rr)} psi`;
 
       // 당일 운행 기록 요약
       if (allTrips.length > 0) {
@@ -623,56 +682,80 @@
         });
       }
 
-      // 주차 경과 시간
+      // 5. 주차 경과 시간 (최근 차량 로그 수신 시각인 updateDate와 주행 종료 시각 중 더 최근 것을 기준)
       let lastTripEndMs = allTrips.length > 0 ? allTrips[0].timestamp : updateDate.getTime();
-      const parkDiffMs = Date.now() - lastTripEndMs;
+      let parkingBaseMs = Math.max(lastTripEndMs, updateDate.getTime());
+      
+      const parkDiffMs = Math.max(0, Date.now() - parkingBaseMs);
       const pHours = Math.floor(parkDiffMs / 3600000);
       const pMins = Math.floor((parkDiffMs % 3600000) / 60000);
       document.getElementById('v-state-duration-title').innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
-      document.getElementById('v-state-start-time').innerText = `${new Date(lastTripEndMs).toLocaleString('ko-KR')} 부터`;
+      document.getElementById('v-state-start-time').innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
 
-      // 히스토리 10건 (날짜 외부 배지 분리 및 충전 녹색 처리)
+      // 4. 히스토리 날짜별 그룹화 출력 (예: 7월 19일 -> 이벤트들, 7월 17일 -> 이벤트들)
       const timelineBox = document.getElementById('timeline-container');
       timelineBox.innerHTML = '';
 
-      let count = 0;
-      for (let i = 0; i < vehicleRows.length - 1 && count < 10; i++) {
+      let eventsGrouped = {};
+      let validEventsCount = 0;
+
+      for (let i = 0; i < vehicleRows.length - 1 && validEventsCount < 15; i++) {
         const cur = vehicleRows[i];
         const prev = vehicleRows[i+1];
         const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
         const odoDiff = Math.round((cur.odometer || 0) - (prev.odometer || 0));
 
         if (odoDiff >= 1 || batDiff > 0) {
-          const isDrive = odoDiff >= 1;
-          const label = isDrive ? "주행" : "충전";
-          // 충전은 눈에 띄는 녹색 계열로 적용
-          const badgeColor = isDrive ? "bg-blue-600 text-white" : "bg-emerald-600 text-white";
-          
           const curDate = new Date(cur.updated_at);
-          const dateBadge = `${curDate.getMonth()+1}.${curDate.getDate()}`;
-          const timeStr = curDate.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
-          const desc = isDrive ? `거리: ${odoDiff}km | 소모: -${Math.abs(batDiff)}%` : `충전량: +${batDiff}% (+${((batDiff/100)*60).toFixed(1)}kWh)`;
+          const dateKey = `${curDate.getMonth() + 1}월 ${curDate.getDate()}일`;
 
-          timelineBox.insertAdjacentHTML('beforeend', `
-            <div class="card-dark p-3 rounded-xl flex items-center justify-between text-xs gap-2">
-              <div class="flex items-center space-x-2">
-                <!-- 날짜 외부 독립 배지 -->
-                <span class="px-2 py-1 bg-gray-800 text-gray-300 rounded-lg text-[11px] font-extrabold border border-gray-700">${dateBadge}</span>
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeColor}">${label}</span>
-                <span class="text-gray-400 text-[11px]">${timeStr}</span>
-              </div>
-              <div class="text-right text-gray-200 text-[11px]">
-                <div class="font-bold">${desc}</div>
-                <div class="text-[10px] text-gray-500">🔋 ${cur.battery_level}% | 📍 ${Math.round(cur.odometer||0).toLocaleString()}km</div>
-              </div>
-            </div>
-          `);
-          count++;
+          if (!eventsGrouped[dateKey]) eventsGrouped[dateKey] = [];
+
+          const isDrive = odoDiff >= 1;
+          eventsGrouped[dateKey].push({
+            isDrive: isDrive,
+            timeStr: curDate.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' }),
+            desc: isDrive ? `주행 ${odoDiff}km (-${Math.abs(batDiff)}%)` : `충전 +${batDiff}% (+${((batDiff/100)*60).toFixed(1)}kWh)`,
+            bat: cur.battery_level,
+            odo: Math.round(cur.odometer || 0)
+          });
+          validEventsCount++;
         }
       }
+
+      Object.keys(eventsGrouped).forEach(dateHeader => {
+        let groupHtml = `
+          <div class="card-dark p-3 rounded-2xl space-y-2 border border-gray-800">
+            <div class="flex items-center space-x-2 border-b border-gray-800/80 pb-1.5">
+              <span class="text-xs font-black text-indigo-400 bg-indigo-950/60 px-2.5 py-0.5 rounded-lg border border-indigo-800/50">📅 ${dateHeader}</span>
+            </div>
+            <div class="space-y-1.5 pt-1">
+        `;
+
+        eventsGrouped[dateHeader].forEach(evt => {
+          const badgeClass = evt.isDrive ? "bg-blue-600/30 text-blue-300 border-blue-500/40" : "bg-emerald-600/30 text-emerald-300 border-emerald-500/40";
+          const icon = evt.isDrive ? "🚗" : "⚡";
+
+          groupHtml += `
+            <div class="flex items-center justify-between text-xs py-1 px-1">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border ${badgeClass}">${icon} ${evt.isDrive ? "주행" : "충전"}</span>
+                <span class="text-gray-400 text-[11px] font-mono">${evt.timeStr}</span>
+              </div>
+              <div class="text-right">
+                <span class="font-bold text-gray-200 text-[11px]">${evt.desc}</span>
+                <span class="text-[10px] text-gray-500 block">🔋 ${evt.bat}% | 📍 ${evt.odo.toLocaleString()}km</span>
+              </div>
+            </div>
+          `;
+        });
+
+        groupHtml += `</div></div>`;
+        timelineBox.insertAdjacentHTML('beforeend', groupHtml);
+      });
     }
 
-    // --- 3. 월간 리포트 (2025년 9월, 10월 포함 및 과거 데이터 충전 집계 수정) ---
+    // 6 & 7. 월간 리포트 충전 기록 보완 (2025년 포함) 및 추가 인사이트 정보 계산
     function initMonthlyDropdowns() {
       const yearSelect = document.getElementById('m-select-year');
       const monthSelect = document.getElementById('m-select-month');
@@ -720,7 +803,7 @@
       const totalDist = filteredTrips.reduce((a,c)=>a+c.moveKM, 0);
       const uniqueDays = new Set(filteredTrips.map(t => new Date(t.timestamp).toDateString())).size;
 
-      // 과거 월(2025년 9월, 10월 등) 충전 횟수 및 충전량 정밀 추정
+      // 6. 2025년 9월/10월 포함 충전 정밀 집계
       let chargeCount = 0;
       let totalChargePct = 0;
       
@@ -733,26 +816,39 @@
         const prev = vFiltered[i-1];
         const cur = vFiltered[i];
         const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
+        const stateStr = (cur.state || '').toLowerCase();
 
-        if (batDiff >= 2) {
-          chargeCount++;
-          totalChargePct += batDiff;
+        if (batDiff >= 2 || stateStr.includes('charge')) {
+          if (batDiff >= 2) {
+            chargeCount++;
+            totalChargePct += batDiff;
+          }
         }
       }
 
-      const chargeKwh = ((totalChargePct / 100) * 60).toFixed(1);
+      const chargeKwh = ((totalChargePct / 100) * 60);
       const totalBatUse = filteredTrips.reduce((a,c)=>a+c.useBattery, 0);
       const estKwh = (totalBatUse / 100) * 60;
       const avgEff = estKwh > 0 ? (totalDist / estKwh).toFixed(2) : "0.00";
 
+      // 7. 추가 인사이트 정보 계산
+      const avgTripKm = filteredTrips.length > 0 ? (totalDist / filteredTrips.length).toFixed(1) : "0.0";
+      const estCost = Math.round(chargeKwh * 320); // 완속/급속 평균 320원/kWh 가정
+      const co2Saved = (totalDist * 0.12).toFixed(1); // 동급 내연기관 대비 1km당 약 120g CO2 절감 가정
+
       document.getElementById('m-stat-distance').innerText = `${totalDist.toFixed(1)} km`;
       document.getElementById('m-stat-days').innerText = `${uniqueDays} 일`;
       document.getElementById('m-stat-charge-count').innerText = `${chargeCount} 회`;
-      document.getElementById('m-stat-charge-kwh').innerText = `${chargeKwh} kWh`;
+      document.getElementById('m-stat-charge-kwh').innerText = `${chargeKwh.toFixed(1)} kWh`;
       document.getElementById('m-stat-avg-eff').innerText = `${avgEff} km/kWh`;
+
+      // 추가 정보 반영
+      document.getElementById('m-stat-cost').innerText = `약 ${estCost.toLocaleString()} 원`;
+      document.getElementById('m-stat-co2').innerText = `${co2Saved} kg`;
+      document.getElementById('m-stat-avg-trip-km').innerText = `${avgTripKm}km`;
     }
 
-    // --- 4. 배터리 탭 (차트 정상 지원) ---
+    // 4. 배터리 탭 (차트 및 데이터 유지)
     function renderBatteryCharts() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
