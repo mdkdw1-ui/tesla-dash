@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla Matrix Appwrite System v1000</title>
+  <title>Tesla Matrix Appwrite System v1001</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
   
@@ -19,7 +19,7 @@
   <!-- 1. 보안 설정 및 로그인 레이어 -->
   <div id="authContainer" class="w-full max-w-md p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 mx-4">
     <div id="setupView" class="hidden">
-      <h2 class="text-2xl font-bold text-blue-500 mb-2 text-center">🗺️ Appwrite 자립형 인프라 설정 (v1000)</h2>
+      <h2 class="text-2xl font-bold text-blue-500 mb-2 text-center">🗺️ Appwrite 자립형 인프라 설정 (v1001)</h2>
       <div class="space-y-4">
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Endpoint</label>
@@ -46,7 +46,7 @@
     </div>
 
     <div id="loginView" class="hidden">
-      <h2 class="text-2xl font-bold text-center mb-6 text-blue-400">Tesla Dashboard <span class="bg-blue-600 text-white text-xs px-2 py-1 rounded-full align-middle ml-1">v1000</span></h2>
+      <h2 class="text-2xl font-bold text-center mb-6 text-blue-400">Tesla Dashboard <span class="bg-blue-600 text-white text-xs px-2 py-1 rounded-full align-middle ml-1">v1001</span></h2>
       <div class="space-y-4">
         <input type="password" id="loginPassword" onkeydown="if(event.key === 'Enter') handleLogin()" placeholder="비밀번호 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-3 text-white font-mono text-center text-lg focus:outline-none">
         <div id="loginError" class="text-red-500 text-xs text-center hidden">❌ 비밀번호 오류 또는 복호화 실패</div>
@@ -59,7 +59,7 @@
   <div id="appDashboard" class="hidden w-full min-h-screen flex flex-col md:flex-row bg-gray-900 text-gray-100">
     <div class="w-full md:w-72 bg-gray-800 p-5 flex flex-col justify-between border-r border-gray-700 space-y-6">
       <div class="space-y-5">
-        <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">⚡ Tesla Appwrite <span class="text-xs bg-blue-900/60 text-blue-300 border border-blue-700 px-1.5 py-0.5 rounded">v1000</span></h1>
+        <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">⚡ Tesla Appwrite <span class="text-xs bg-blue-900/60 text-blue-300 border border-blue-700 px-1.5 py-0.5 rounded">v1001</span></h1>
         <div class="grid grid-cols-2 gap-1 bg-gray-950 p-1 rounded-lg border border-gray-700">
           <button id="btn-tab-driving" onclick="switchTab('driving')" class="py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition">주행 정보</button>
           <button id="btn-tab-vehicle" onclick="switchTab('vehicle')" class="py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition">내 차량 정보</button>
@@ -188,31 +188,15 @@
       });
     }
 
-    // Appwrite 최신순 정렬(orderDesc) REST 쿼리 전송
-    async function fetchLatestDocuments(baseUrl, headers, collectionId) {
-      const q1 = encodeURIComponent('orderDesc("$createdAt")');
-      const q2 = encodeURIComponent('limit(100)');
-      const url = `${baseUrl}/collections/${collectionId}/documents?queries[0]=${q1}&queries[1]=${q2}`;
-      
+    async function fetchAllDocuments(baseUrl, headers, collectionId) {
+      const url = `${baseUrl}/collections/${collectionId}/documents`;
       try {
         const res = await fetch(url, { headers });
         if (res.ok) {
           const data = await res.json();
           return data.documents || [];
         }
-      } catch(e) {
-        console.error("Query Fetch Error:", e);
-      }
-
-      // 쿼리 실패시 기본 릴레이
-      try {
-        const fallbackRes = await fetch(`${baseUrl}/collections/${collectionId}/documents`, { headers });
-        if (fallbackRes.ok) {
-          const fbData = await fallbackRes.json();
-          return fbData.documents || [];
-        }
-      } catch(e){}
-
+      } catch(e) { console.error("Fetch Error:", e); }
       return [];
     }
 
@@ -238,18 +222,18 @@
       const headers = { 'X-Appwrite-Project': configObj.projectId };
       if (configObj.apiKey) headers['X-Appwrite-Key'] = configObj.apiKey;
 
-      // 1. driving 수집
+      // 1. driving 수집 및 JS 내림차순 정렬
       try {
-        const docs = await fetchLatestDocuments(base, headers, 'driving');
+        const docs = await fetchAllDocuments(base, headers, 'driving');
         docs.forEach(doc => {
           const p = parseDocumentPayload(doc);
           
-          let ts = p.date || p.$createdAt;
-          if (typeof ts === 'string' && !isNaN(Date.parse(ts))) ts = new Date(ts).getTime();
-          else ts = Number(ts) || Date.now();
+          let ts = doc.$createdAt || p.date;
+          if (typeof ts === 'string') ts = new Date(ts).getTime();
+          else if (typeof ts === 'number' && ts < 10000000000) ts = ts * 1000;
 
           allTrips.push({ 
-            timestamp: ts, 
+            timestamp: ts || Date.now(), 
             createdAtStr: doc.$createdAt,
             moveKM: Number(p.moveKM || p.distance || p.drive_km || 0), 
             useBattery: Number(p.useBattery || p.battery_used || 0),
@@ -258,9 +242,9 @@
         });
       } catch (e) { console.error("driving Error:", e); }
 
-      // 2. vehicle_state 수집
+      // 2. vehicle_state 수집 ($createdAt 내림차순)
       try {
-        const vDocs = await fetchLatestDocuments(base, headers, VEHICLE_STATE_COLLECTION_ID);
+        const vDocs = await fetchAllDocuments(base, headers, VEHICLE_STATE_COLLECTION_ID);
         if (vDocs.length > 0) {
           vDocs.sort((a, b) => new Date(b.$createdAt).getTime() - new Date(a.$createdAt).getTime());
           const latestDoc = vDocs[0];
@@ -269,9 +253,9 @@
         }
       } catch (e) { console.error("vehicle_state Error:", e); }
 
-      // 최종 정렬 (최신순)
-      allTrips.sort((a, b) => new Date(b.createdAtStr || b.timestamp).getTime() - new Date(a.createdAtStr || a.timestamp).getTime());
-      statusEl.innerText = `✅ 최신 로드 성공 (주행: ${allTrips.length}개)`;
+      // 주행 기록을 최신 시각 기준(내림차순)으로 완벽 정렬
+      allTrips.sort((a, b) => b.timestamp - a.timestamp);
+      statusEl.innerText = `✅ 로드 성공 (주행: ${allTrips.length}개)`;
       
       setFilterMode();
     }
@@ -300,8 +284,20 @@
       document.getElementById('v-state-text').innerText = isOff ? '📴 오프라인' : `🟢 ${stateStr.toUpperCase()}`;
       document.getElementById('brief-state').innerText = isOff ? '오프라인' : stateStr;
 
+      // 주행거리 단위 파싱 자동 보정
       const rawOdo = findKeyAdaptive('odometer');
-      document.getElementById('v-odometer').innerText = rawOdo !== '-' ? `${(Number(rawOdo) * 1.60934).toFixed(1)} km` : '-';
+      if (rawOdo !== '-') {
+        let val = Number(rawOdo);
+        if (val > 100000) {
+          // 이미 km 단위인 경우
+          document.getElementById('v-odometer').innerText = `${val.toFixed(1)} km`;
+        } else {
+          // 마일(mile) 단위인 경우
+          document.getElementById('v-odometer').innerText = `${(val * 1.60934).toFixed(1)} km`;
+        }
+      } else {
+        document.getElementById('v-odometer').innerText = '-';
+      }
       
       const batLvl = findKeyAdaptive('battery_level') || findKeyAdaptive('usable_battery_level');
       document.getElementById('v-battery').innerText = batLvl !== '-' ? `${batLvl}%` : '-';
@@ -329,15 +325,22 @@
         return;
       }
 
-      const uniqueDays = [...new Set(allTrips.map(t => {
+      // 내림차순(최신 날짜순) 날짜 목록 추출
+      const daysMap = new Map();
+      allTrips.forEach(t => {
         const d = new Date(t.timestamp);
-        return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
-      }).filter(Boolean))];
+        if (!isNaN(d.getTime())) {
+          const dayStr = d.toISOString().split('T')[0];
+          if (!daysMap.has(dayStr)) daysMap.set(dayStr, d.getTime());
+        }
+      });
 
-      container.innerHTML = `<select id="input-daily" onchange="renderSelectedDayTrips(this.value)" class="w-full bg-gray-700 text-white rounded p-2 text-sm focus:outline-none">${uniqueDays.map(d => `<option value="${d}">${d}</option>`).join('')}</select>`;
+      const sortedDays = Array.from(daysMap.keys()).sort((a, b) => daysMap.get(b) - daysMap.get(a));
+
+      container.innerHTML = `<select id="input-daily" onchange="renderSelectedDayTrips(this.value)" class="w-full bg-gray-700 text-white rounded p-2 text-sm focus:outline-none">${sortedDays.map(d => `<option value="${d}">${d}</option>`).join('')}</select>`;
       
-      if (uniqueDays.length > 0) {
-        renderSelectedDayTrips(uniqueDays[0]);
+      if (sortedDays.length > 0) {
+        renderSelectedDayTrips(sortedDays[0]);
       }
     }
 
