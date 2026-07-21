@@ -39,24 +39,23 @@
       
       <!-- 사이드바 컨트롤 영역 -->
       <aside class="w-full md:w-80 bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-4 shadow-lg">
-        <h2 class="text-sm font-bold text-gray-400 uppercase tracking-wider">주행 데이터 필터</h2>
+        <h2 class="text-sm font-bold text-gray-400 uppercase tracking-wider">🗺️ 주행 데이터 필터</h2>
         
-        <!-- 기간 모드 선택 -->
+        <!-- 기간/단위 선택 (드롭다운) -->
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs text-gray-400">조회 기준</label>
-          <select id="ctrl-mode" onchange="onModeChange()" class="bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
-            <option value="all">전체 누적</option>
-            <option value="yearly">년별 조회</option>
-            <option value="monthly">월별 조회</option>
+          <label class="text-xs text-gray-400">조회 단위 구분</label>
+          <select id="filterMode" onchange="onFilterModeChange()" class="bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+            <option value="single" selected>1회 주행 (일회운행)</option>
+            <option value="daily">일간 (일별)</option>
+            <option value="weekly">주간 (주별)</option>
+            <option value="monthly">월간 (월별)</option>
+            <option value="yearly">연간 (년별)</option>
+            <option value="custom">기간 직접 지정</option>
           </select>
         </div>
 
-        <!-- 동적 셀렉트 박스 (년/월 선택용) -->
-        <div id="ctrl-sub-container" class="hidden flex-col gap-1.5">
-          <label id="ctrl-sub-label" class="text-xs text-gray-400">선택</label>
-          <select id="ctrl-select" onchange="renderDrivingData()" class="bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
-          </select>
-        </div>
+        <!-- 동적 컨트롤 영역 -->
+        <div id="dynamicFilterControls" class="space-y-2"></div>
 
         <!-- 요약 HUD -->
         <div class="mt-auto bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-3">
@@ -109,8 +108,8 @@
             <span id="v-state-text" class="text-xl font-extrabold text-white">-</span>
           </div>
           <div class="bg-gray-950 p-4 rounded-xl border border-gray-800">
-            <span class="text-xs text-gray-400 block mb-1">총 누적 거리</span>
-            <span id="v-odometer" class="text-xl font-extrabold text-white">-</span>
+            <span class="text-xs text-gray-400 block mb-1">총 누적 거리 (오도메터)</span>
+            <span id="v-odometer" class="text-xl font-extrabold text-green-400">-</span>
           </div>
           <div class="bg-gray-950 p-4 rounded-xl border border-gray-800">
             <span class="text-xs text-gray-400 block mb-1">배터리 잔량</span>
@@ -124,23 +123,23 @@
 
         <!-- 배터리 & 에너지 상세 -->
         <div class="bg-gray-950 p-5 rounded-xl border border-blue-950/50 space-y-4">
-          <h3 class="text-xs font-bold text-blue-400 uppercase tracking-wider">⚡ 배터리 & 에너지 상세</h3>
+          <h3 class="text-xs font-bold text-blue-400 uppercase tracking-wider">⚡ 배터리 & 주행 수치 요약</h3>
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div class="bg-gray-900 p-3 rounded-lg border border-gray-800">
-              <span class="text-gray-400 text-xs block">평균 전비</span>
-              <span id="v-eff-val" class="text-lg font-bold text-indigo-400">-</span>
+              <span class="text-gray-400 text-xs block">수집된 주행 기록</span>
+              <span id="v-trip-count" class="text-lg font-bold text-indigo-400">- 건</span>
             </div>
             <div class="bg-gray-900 p-3 rounded-lg border border-gray-800">
-              <span class="text-gray-400 text-xs block">사용 에너지</span>
-              <span id="v-eff-energy" class="text-lg font-bold text-gray-200">-</span>
+              <span class="text-gray-400 text-xs block">총 측정 주행거리</span>
+              <span id="v-total-move" class="text-lg font-bold text-gray-200">- km</span>
             </div>
             <div class="bg-gray-900 p-3 rounded-lg border border-gray-800">
-              <span class="text-gray-400 text-xs block">배터리 팩 용량</span>
-              <span id="v-eff-capacity" class="text-lg font-bold text-gray-200">-</span>
+              <span class="text-gray-400 text-xs block">총 배터리 사용량</span>
+              <span id="v-total-bat" class="text-lg font-bold text-gray-200">- %</span>
             </div>
             <div class="bg-gray-900 p-3 rounded-lg border border-gray-800">
-              <span class="text-gray-400 text-xs block">현재 기어</span>
-              <span id="v-gear" class="text-lg font-bold text-yellow-500">-</span>
+              <span class="text-gray-400 text-xs block">차량 ID</span>
+              <span id="v-gear" class="text-sm font-bold text-yellow-500 truncate block">-</span>
             </div>
           </div>
         </div>
@@ -296,7 +295,7 @@
         kakao.maps.load(callback);
       };
       script.onerror = () => {
-        alert("카카오맵 API 키가 올바르지 않거나 Kakao Developers의 Web 도메인(https://mdkdw1-ui.github.io) 설정이 맞지 않습니다.");
+        alert("카카오맵 API 키 오류 또는 Web 도메인 미등록 상태입니다.");
         openConfigModal();
       };
       document.head.appendChild(script);
@@ -350,51 +349,137 @@
       }
     }
 
+    function getWeekKey(d) {
+      const target = new Date(d.valueOf());
+      const dayNr = (d.getDay() + 6) % 7;
+      target.setDate(target.getDate() - dayNr + 3);
+      const firstThursday = target.valueOf();
+      target.setMonth(0, 1);
+      if (target.getDay() !== 4) {
+        target.setMonth(0, 1 + ((4 - target.getDay() + 7) % 7));
+      }
+      const weekNumber = 1 + Math.round((firstThursday - target.valueOf()) / 604800000);
+      return `${d.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
+    }
+
     // --- [주행 데이터 처리] ---
     async function loadDrivingData() {
-      allTrips = await fetchSupabaseTable('driving?order=created_at.desc');
-      populateSubSelectorOptions();
-      renderDrivingData();
+      const drivingRows = await fetchSupabaseTable('driving?order=created_at.desc');
+      allTrips = [];
+
+      drivingRows.forEach(row => {
+        let ts = new Date(row.created_at).getTime();
+        let dist = Number(row.move_km || 0);
+        let bat = Number(row.use_battery || 0);
+        
+        let locList = row.location_list || [];
+        if (typeof locList === 'string') {
+          try { locList = JSON.parse(locList); } catch(e){}
+        }
+
+        allTrips.push({
+          id: row.id,
+          timestamp: isNaN(ts) ? Date.now() : ts,
+          createdAtStr: row.created_at,
+          moveKM: dist,
+          useBattery: bat,
+          drivingTime: row.driving_time || '',
+          path: locList
+        });
+      });
+
+      allTrips.sort((a, b) => b.timestamp - a.timestamp);
+      onFilterModeChange();
     }
 
-    function onModeChange() {
-      const mode = document.getElementById('ctrl-mode').value;
-      const subContainer = document.getElementById('ctrl-sub-container');
-      if (mode === 'all') {
-        subContainer.classList.add('hidden');
-      } else {
-        subContainer.classList.remove('hidden');
-        populateSubSelectorOptions();
+    function onFilterModeChange() {
+      const mode = document.getElementById('filterMode').value;
+      const container = document.getElementById('dynamicFilterControls');
+      container.innerHTML = '';
+
+      if (allTrips.length === 0) {
+        container.innerHTML = `<div class="text-xs text-gray-500">주행 데이터가 없습니다.</div>`;
+        return;
       }
+
+      if (mode === 'single') {
+        const options = allTrips.map((t, i) => {
+          const d = new Date(t.timestamp);
+          const timeStr = !isNaN(d.getTime()) ? d.toLocaleString('ko-KR') : `주행 ${i+1}`;
+          const dur = t.drivingTime ? ` [${t.drivingTime}]` : '';
+          return `<option value="${t.id}">${timeStr}${dur} (${t.moveKM.toFixed(2)}km)</option>`;
+        }).join('');
+        container.innerHTML = `
+          <label class="block text-[11px] text-gray-400 mb-1">운행 선택</label>
+          <select id="ctrl-select" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-lg p-2.5 text-xs border border-gray-700 focus:outline-none">${options}</select>
+        `;
+      } 
+      else if (mode === 'daily') {
+        const set = new Set();
+        allTrips.forEach(t => {
+          const d = new Date(t.timestamp);
+          if (!isNaN(d.getTime())) set.add(d.toISOString().split('T')[0]);
+        });
+        const list = Array.from(set).sort().reverse();
+        container.innerHTML = `
+          <label class="block text-[11px] text-gray-400 mb-1">날짜 선택</label>
+          <select id="ctrl-select" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-lg p-2.5 text-xs border border-gray-700 focus:outline-none">${list.map(x => `<option value="${x}">${x}</option>`).join('')}</select>
+        `;
+      } 
+      else if (mode === 'weekly') {
+        const set = new Set();
+        allTrips.forEach(t => {
+          const d = new Date(t.timestamp);
+          if (!isNaN(d.getTime())) set.add(getWeekKey(d));
+        });
+        const list = Array.from(set).sort().reverse();
+        container.innerHTML = `
+          <label class="block text-[11px] text-gray-400 mb-1">주차 선택</label>
+          <select id="ctrl-select" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-lg p-2.5 text-xs border border-gray-700 focus:outline-none">${list.map(x => `<option value="${x}">${x}</option>`).join('')}</select>
+        `;
+      } 
+      else if (mode === 'monthly') {
+        const set = new Set();
+        allTrips.forEach(t => {
+          const d = new Date(t.timestamp);
+          if (!isNaN(d.getTime())) set.add(d.toISOString().slice(0, 7));
+        });
+        const list = Array.from(set).sort().reverse();
+        container.innerHTML = `
+          <label class="block text-[11px] text-gray-400 mb-1">월 선택</label>
+          <select id="ctrl-select" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-lg p-2.5 text-xs border border-gray-700 focus:outline-none">${list.map(x => `<option value="${x}">${x}</option>`).join('')}</select>
+        `;
+      } 
+      else if (mode === 'yearly') {
+        const set = new Set();
+        allTrips.forEach(t => {
+          const d = new Date(t.timestamp);
+          if (!isNaN(d.getTime())) set.add(String(d.getFullYear()));
+        });
+        const list = Array.from(set).sort().reverse();
+        container.innerHTML = `
+          <label class="block text-[11px] text-gray-400 mb-1">연도 선택</label>
+          <select id="ctrl-select" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-lg p-2.5 text-xs border border-gray-700 focus:outline-none">${list.map(x => `<option value="${x}">${x}</option>`).join('')}</select>
+        `;
+      } 
+      else if (mode === 'custom') {
+        const timestamps = allTrips.map(t => t.timestamp).filter(Boolean);
+        const minD = new Date(Math.min(...timestamps)).toISOString().split('T')[0];
+        const maxD = new Date(Math.max(...timestamps)).toISOString().split('T')[0];
+        container.innerHTML = `
+          <div class="space-y-1">
+            <span class="text-[10px] text-gray-400">시작일</span>
+            <input type="date" id="ctrl-start" value="${minD}" class="w-full bg-gray-800 text-white text-xs rounded-lg p-2 border border-gray-700 focus:outline-none">
+          </div>
+          <div class="space-y-1 mt-2">
+            <span class="text-[10px] text-gray-400">종료일</span>
+            <input type="date" id="ctrl-end" value="${maxD}" class="w-full bg-gray-800 text-white text-xs rounded-lg p-2 border border-gray-700 focus:outline-none">
+          </div>
+          <button onclick="renderDrivingData()" class="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2 rounded-lg transition mt-2">조회</button>
+        `;
+      }
+
       renderDrivingData();
-    }
-
-    function populateSubSelectorOptions() {
-      const mode = document.getElementById('ctrl-mode').value;
-      const selectElem = document.getElementById('ctrl-select');
-      const subLabel = document.getElementById('ctrl-sub-label');
-      selectElem.innerHTML = '';
-
-      if (mode === 'yearly') {
-        subLabel.innerText = '년도 선택';
-        const years = [...new Set(allTrips.map(t => new Date(t.created_at).getFullYear()))].filter(y => !isNaN(y)).sort((a,b)=>b-a);
-        years.forEach(y => {
-          const opt = document.createElement('option');
-          opt.value = y; opt.innerText = `${y}년`;
-          selectElem.appendChild(opt);
-        });
-      } else if (mode === 'monthly') {
-        subLabel.innerText = '월 선택';
-        const months = [...new Set(allTrips.map(t => {
-          const d = new Date(t.created_at);
-          return !isNaN(d.getTime()) ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` : null;
-        }))].filter(Boolean).sort().reverse();
-        months.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m; opt.innerText = m;
-          selectElem.appendChild(opt);
-        });
-      }
     }
 
     function extractLatLng(pt) {
@@ -413,25 +498,56 @@
     }
 
     function renderDrivingData() {
-      const mode = document.getElementById('ctrl-mode').value;
-      const subVal = document.getElementById('ctrl-select').value;
+      const mode = document.getElementById('filterMode').value;
+      let matched = [];
 
-      let matched = allTrips;
-      if (mode === 'yearly') {
-        matched = allTrips.filter(t => String(new Date(t.created_at).getFullYear()) === subVal);
-      } else if (mode === 'monthly') {
+      if (mode === 'single') {
+        const val = document.getElementById('ctrl-select')?.value;
+        matched = allTrips.filter(t => t.id === val);
+      } 
+      else if (mode === 'daily') {
+        const val = document.getElementById('ctrl-select')?.value;
         matched = allTrips.filter(t => {
-          const d = new Date(t.created_at);
-          const mStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-          return mStr === subVal;
+          const d = new Date(t.timestamp);
+          return !isNaN(d.getTime()) && d.toISOString().split('T')[0] === val;
         });
+      } 
+      else if (mode === 'weekly') {
+        const val = document.getElementById('ctrl-select')?.value;
+        matched = allTrips.filter(t => {
+          const d = new Date(t.timestamp);
+          return !isNaN(d.getTime()) && getWeekKey(d) === val;
+        });
+      } 
+      else if (mode === 'monthly') {
+        const val = document.getElementById('ctrl-select')?.value;
+        matched = allTrips.filter(t => {
+          const d = new Date(t.timestamp);
+          return !isNaN(d.getTime()) && d.toISOString().slice(0, 7) === val;
+        });
+      } 
+      else if (mode === 'yearly') {
+        const val = document.getElementById('ctrl-select')?.value;
+        matched = allTrips.filter(t => {
+          const d = new Date(t.timestamp);
+          return !isNaN(d.getTime()) && String(d.getFullYear()) === val;
+        });
+      } 
+      else if (mode === 'custom') {
+        const s = document.getElementById('ctrl-start')?.value;
+        const e = document.getElementById('ctrl-end')?.value;
+        if (s && e) {
+          const st = new Date(s + "T00:00:00").getTime();
+          const et = new Date(e + "T23:59:59").getTime();
+          matched = allTrips.filter(t => t.timestamp >= st && t.timestamp <= et);
+        }
       }
 
       // HUD 업데이트
       document.getElementById('stat-count').innerText = `${matched.length} 건`;
-      const totalDist = matched.reduce((acc, cur) => acc + (Number(cur.move_km) || 0), 0);
+      const totalDist = matched.reduce((acc, cur) => acc + (cur.moveKM || 0), 0);
       document.getElementById('stat-distance').innerText = `${totalDist.toFixed(2)} km`;
-      const totalBat = matched.reduce((acc, cur) => acc + (Number(cur.use_battery) || 0), 0);
+      const totalBat = matched.reduce((acc, cur) => acc + (cur.useBattery || 0), 0);
       document.getElementById('stat-energy').innerText = `${totalBat.toFixed(1)} %`;
 
       // 지도 초기화 후 다시 그리기
@@ -443,7 +559,7 @@
       let hasCoords = false;
 
       matched.forEach((trip, idx) => {
-        let rawPath = trip.location_list;
+        let rawPath = trip.path;
         if (typeof rawPath === 'string') {
           try { rawPath = JSON.parse(rawPath); } catch(e){ rawPath = []; }
         }
@@ -476,31 +592,56 @@
       }
     }
 
-    // --- [내 차량 정보 처리] ---
+    // --- [내 차량 정보 처리 (데이터 0 보정 로직 포함)] ---
     async function loadVehicleData() {
       const data = await fetchSupabaseTable('vehicle?order=updated_at.desc&limit=1');
+      
+      let maxOdometer = 0;
+      let totalMove = 0;
+      let totalBatteryUsed = 0;
+
+      // 주행 기록 기반으로 오도메터 및 통계 자동 추정
+      if (allTrips.length > 0) {
+        allTrips.forEach(t => {
+          totalMove += t.moveKM || 0;
+          totalBatteryUsed += t.useBattery || 0;
+
+          if (Array.isArray(t.path) && t.path.length > 0) {
+            const lastPt = t.path[t.path.length - 1];
+            if (lastPt && lastPt.odometer) {
+              const odo = Number(lastPt.odometer);
+              if (odo > maxOdometer) maxOdometer = odo;
+            }
+          }
+        });
+      }
+
+      document.getElementById('v-trip-count').innerText = `${allTrips.length} 건`;
+      document.getElementById('v-total-move').innerText = `${totalMove.toFixed(1)} km`;
+      document.getElementById('v-total-bat').innerText = `${totalBatteryUsed.toFixed(1)} %`;
+
       if (data && data.length > 0) {
         const v = data[0];
-        const raw = v.raw_data || {};
         
         document.getElementById('v-last-update').innerText = `최신 동기화: ${new Date(v.updated_at || v.created_at).toLocaleString()}`;
         document.getElementById('v-state-badge').innerText = (v.state || 'ONLINE').toUpperCase();
         document.getElementById('v-state-badge').className = "px-3 py-1 text-xs font-bold rounded-full bg-green-900/60 text-green-400 border border-green-700";
 
-        document.getElementById('v-state-text').innerText = v.state ? String(v.state).toUpperCase() : '-';
-        document.getElementById('v-odometer').innerText = `${v.odometer ? Number(v.odometer).toLocaleString() : '-'} km`;
-        document.getElementById('v-battery').innerText = `${v.battery_level ?? '-'}%`;
-        document.getElementById('v-temp').innerText = `${raw.outside_temp || raw.ambient_temp || '-'}℃`;
+        document.getElementById('v-state-text').innerText = v.state ? String(v.state).toUpperCase() : 'ONLINE';
+        
+        // 오도메터가 0일 경우 주행데이터에서 찾은 최신 오도메터 적용
+        const displayOdometer = (v.odometer && Number(v.odometer) > 0) ? Number(v.odometer) : maxOdometer;
+        document.getElementById('v-odometer').innerText = displayOdometer > 0 ? `${displayOdometer.toLocaleString()} km` : '기록 없음';
 
-        document.getElementById('v-eff-val').innerText = raw.efficiency ? `${raw.efficiency} km/kWh` : '-';
-        document.getElementById('v-eff-energy').innerText = raw.energy_used ? `${raw.energy_used} kWh` : '-';
-        document.getElementById('v-eff-capacity').innerText = raw.nominal_full_pack_energy ? `${raw.nominal_full_pack_energy} kWh` : '-';
-        document.getElementById('v-gear').innerText = raw.gear_shift || raw.gear || 'P';
+        document.getElementById('v-battery').innerText = (v.battery_level && Number(v.battery_level) > 0) ? `${v.battery_level}%` : 'N/A';
+        document.getElementById('v-temp').innerText = 'N/A';
 
-        document.getElementById('tire-fl').innerText = v.tpms_fl !== undefined ? `${v.tpms_fl} PSI` : '-';
-        document.getElementById('tire-fr').innerText = v.tpms_fr !== undefined ? `${v.tpms_fr} PSI` : '-';
-        document.getElementById('tire-rl').innerText = v.tpms_rl !== undefined ? `${v.tpms_rl} PSI` : '-';
-        document.getElementById('tire-rr').innerText = v.tpms_rr !== undefined ? `${v.tpms_rr} PSI` : '-';
+        document.getElementById('v-gear').innerText = v.vehicle_id || 'Model Y';
+
+        document.getElementById('tire-fl').innerText = (v.tpms_fl && Number(v.tpms_fl) > 0) ? `${v.tpms_fl} PSI` : 'N/A';
+        document.getElementById('tire-fr').innerText = (v.tpms_fr && Number(v.tpms_fr) > 0) ? `${v.tpms_fr} PSI` : 'N/A';
+        document.getElementById('tire-rl').innerText = (v.tpms_rl && Number(v.tpms_rl) > 0) ? `${v.tpms_rl} PSI` : 'N/A';
+        document.getElementById('tire-rr').innerText = (v.tpms_rr && Number(v.tpms_rr) > 0) ? `${v.tpms_rr} PSI` : 'N/A';
       }
     }
   </script>
