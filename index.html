@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla Matrix Appwrite System v1005</title>
+  <title>Tesla Matrix Appwrite System v1006</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
   
@@ -19,7 +19,7 @@
   <!-- 1. 보안 설정 및 로그인 -->
   <div id="authContainer" class="w-full max-w-md p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 mx-4">
     <div id="setupView" class="hidden">
-      <h2 class="text-2xl font-bold text-blue-500 mb-2 text-center">🗺️ Appwrite 자립형 인프라 설정 (v1005)</h2>
+      <h2 class="text-2xl font-bold text-blue-500 mb-2 text-center">🗺️ Appwrite 자립형 인프라 설정 (v1006)</h2>
       <div class="space-y-4">
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Endpoint</label>
@@ -46,7 +46,7 @@
     </div>
 
     <div id="loginView" class="hidden">
-      <h2 class="text-2xl font-bold text-center mb-6 text-blue-400">Tesla Dashboard <span class="bg-blue-600 text-white text-xs px-2 py-1 rounded-full align-middle ml-1">v1005</span></h2>
+      <h2 class="text-2xl font-bold text-center mb-6 text-blue-400">Tesla Dashboard <span class="bg-blue-600 text-white text-xs px-2 py-1 rounded-full align-middle ml-1">v1006</span></h2>
       <div class="space-y-4">
         <input type="password" id="loginPassword" onkeydown="if(event.key === 'Enter') handleLogin()" placeholder="비밀번호 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-3 text-white font-mono text-center text-lg focus:outline-none">
         <div id="loginError" class="text-red-500 text-xs text-center hidden">❌ 비밀번호 오류 또는 복호화 실패</div>
@@ -59,25 +59,25 @@
   <div id="appDashboard" class="hidden w-full min-h-screen flex flex-col md:flex-row bg-gray-900 text-gray-100">
     <div class="w-full md:w-80 bg-gray-800 p-5 flex flex-col justify-between border-r border-gray-700 space-y-6">
       <div class="space-y-5">
-        <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">⚡ Tesla Control <span class="text-xs bg-blue-900/60 text-blue-300 border border-blue-700 px-1.5 py-0.5 rounded">v1005</span></h1>
+        <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">⚡ Tesla Control <span class="text-xs bg-blue-900/60 text-blue-300 border border-blue-700 px-1.5 py-0.5 rounded">v1006</span></h1>
 
         <div class="grid grid-cols-2 gap-1 bg-gray-950 p-1 rounded-lg border border-gray-700">
           <button id="btn-tab-driving" onclick="switchTab('driving')" class="py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition">주행 정보</button>
           <button id="btn-tab-vehicle" onclick="switchTab('vehicle')" class="py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition">내 차량 정보</button>
         </div>
 
-        <!-- 주행 데이터 구분 조회 필터 -->
+        <!-- 주행 데이터 구별 필터 -->
         <div id="drivingFilterSection" class="space-y-3 bg-gray-900/60 p-3 rounded-lg border border-gray-700">
           <div class="text-xs font-bold text-gray-300 flex justify-between items-center">
-            <span>📅 지도 경로 필터</span>
+            <span>🗺️ 주행 경로 필터</span>
             <span id="tripCountBadge" class="text-[10px] bg-blue-900 text-blue-300 px-1.5 py-0.5 rounded">0개</span>
           </div>
 
           <div>
             <label class="block text-[11px] text-gray-400 mb-1">조회 단위 선택</label>
             <select id="filterMode" onchange="onFilterModeChange()" class="w-full bg-gray-700 text-white rounded p-2 text-xs border border-gray-600 focus:outline-none">
-              <option value="single">주행건별 (1회 주행)</option>
-              <option value="daily" selected>일간 (일별)</option>
+              <option value="single" selected>주행건별 (1회 주행)</option>
+              <option value="daily">일간 (일별)</option>
               <option value="weekly">주간 (주별)</option>
               <option value="monthly">월간 (월별)</option>
               <option value="yearly">연간 (년별)</option>
@@ -85,7 +85,7 @@
             </select>
           </div>
 
-          <!-- 동적 드롭다운 / 날짜 피커 영역 -->
+          <!-- 동적 드롭다운 / 날짜 피커 -->
           <div id="dynamicFilterControls" class="space-y-2"></div>
         </div>
 
@@ -224,7 +224,6 @@
       return [];
     }
 
-    // JSON 문자열 / 중첩 데이터 깊이 우선 해제
     function parseDocumentPayload(doc) {
       let res = { ...doc };
       for (let k in doc) {
@@ -244,7 +243,6 @@
       return res;
     }
 
-    // 전수 스캔 알고리즘
     function findValueByKeys(obj, keys) {
       if (!obj || typeof obj !== 'object') return null;
       for (let k of keys) {
@@ -268,26 +266,36 @@
       const headers = { 'X-Appwrite-Project': configObj.projectId };
       if (configObj.apiKey) headers['X-Appwrite-Key'] = configObj.apiKey;
 
-      // 1. driving 수집
+      // 1. driving 수집 및 location_list 파싱
       try {
         const docs = await fetchAllDocuments(base, headers, 'driving');
         docs.forEach(doc => {
           const p = parseDocumentPayload(doc);
           
-          let ts = doc.$createdAt || findValueByKeys(p, ['date', 'timestamp', 'time', 'start_date', 'createdAt']);
+          let ts = doc.$createdAt || findValueByKeys(p, ['date', 'timestamp', 'time', 'start_date']);
           if (typeof ts === 'string') ts = new Date(ts).getTime();
 
-          const dist = findValueByKeys(p, ['moveKM', 'distance', 'drive_km', 'km', 'total_distance']) || 0;
-          const bat = findValueByKeys(p, ['useBattery', 'battery_used', 'used_battery', 'battery_consumption']) || 0;
-          const pathData = findValueByKeys(p, ['path', 'locations', 'coords', 'route', 'coordinates', 'points']) || [];
+          // Firestore 좌표 목록 location_list 지원
+          const locList = p.location_list || p.path || p.locations || p.coords || [];
+
+          // 주행거리 / 사용배터리 산출
+          let dist = Number(p.moveKM || p.distance || 0);
+          let bat = Number(p.useBattery || p.battery_used || 0);
+
+          if (dist === 0 && Array.isArray(locList) && locList.length > 1) {
+            const firstOdo = Number(locList[0]?.odometer || 0);
+            const lastOdo = Number(locList[locList.length - 1]?.odometer || 0);
+            if (lastOdo > firstOdo) dist = lastOdo - firstOdo;
+          }
 
           allTrips.push({ 
             id: doc.$id,
             timestamp: ts || Date.now(), 
             createdAtStr: doc.$createdAt,
-            moveKM: Number(dist), 
-            useBattery: Number(bat),
-            path: pathData
+            moveKM: dist, 
+            useBattery: bat,
+            drivingTime: p.drivingTime || '',
+            path: locList
           });
         });
       } catch (e) { console.error("driving error:", e); }
@@ -309,7 +317,6 @@
       onFilterModeChange();
     }
 
-    // 주간 연산 보조 함수
     function getWeekKey(d) {
       const target = new Date(d.valueOf());
       const dayNr = (d.getDay() + 6) % 7;
@@ -323,7 +330,6 @@
       return `${d.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
     }
 
-    // 필터 옵션 변경 처리
     function onFilterModeChange() {
       const mode = document.getElementById('filterMode').value;
       const container = document.getElementById('dynamicFilterControls');
@@ -335,10 +341,11 @@
       }
 
       if (mode === 'single') {
-        const options = allTrips.map(t => {
+        const options = allTrips.map((t, i) => {
           const d = new Date(t.timestamp);
-          const timeStr = !isNaN(d.getTime()) ? d.toLocaleString('ko-KR') : t.id;
-          return `<option value="${t.id}">${timeStr} (${t.moveKM.toFixed(1)}km)</option>`;
+          const timeStr = !isNaN(d.getTime()) ? d.toLocaleString('ko-KR') : `주행 ${i+1}`;
+          const dur = t.drivingTime ? ` [${t.drivingTime}]` : '';
+          return `<option value="${t.id}">${timeStr}${dur} (${t.moveKM.toFixed(2)}km)</option>`;
         }).join('');
         container.innerHTML = `<select id="ctrl-select" onchange="renderFilteredMap()" class="w-full bg-gray-700 text-white rounded p-2 text-xs border border-gray-600 focus:outline-none">${options}</select>`;
       } 
@@ -447,22 +454,13 @@
       drawTripsOnKakaoMap(matched);
     }
 
-    // 좌표 구조 유연 파서
     function extractLatLng(pt) {
       if (!pt) return null;
-      let lat = null, lng = null;
+      let lat = pt.latitude || pt.lat || pt.y;
+      let lng = pt.longitude || pt.lng || pt.x;
 
-      if (Array.isArray(pt)) {
-        if (pt.length >= 2) {
-          // [lat, lng] 또는 [lng, lat] 자동 보정
-          const num1 = Number(pt[0]), num2 = Number(pt[1]);
-          if (num1 > 30 && num1 < 45 && num2 > 120 && num2 < 135) { lat = num1; lng = num2; }
-          else if (num2 > 30 && num2 < 45 && num1 > 120 && num1 < 135) { lat = num2; lng = num1; }
-          else { lat = num1; lng = num2; }
-        }
-      } else if (typeof pt === 'object') {
-        lat = pt.lat || pt.latitude || pt.y;
-        lng = pt.lng || pt.longitude || pt.x;
+      if (Array.isArray(pt) && pt.length >= 2) {
+        lat = pt[0]; lng = pt[1];
       }
 
       if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
@@ -510,7 +508,7 @@
         }
       });
 
-      document.getElementById('hud-distance').innerText = `${totalDist.toFixed(1)} km`;
+      document.getElementById('hud-distance').innerText = `${totalDist.toFixed(2)} km`;
       document.getElementById('hud-count').innerText = `${trips.length}회`;
       document.getElementById('hud-battery').innerText = `${totalBat.toFixed(1)}%`;
 
@@ -538,7 +536,7 @@
       const tpmsFL = findValueByKeys(rawVehicleObj, ['tpms_pressure_fl', 'pressure_fl']);
       const tpmsFR = findValueByKeys(rawVehicleObj, ['tpms_pressure_fr', 'pressure_fr']);
       const tpmsRL = findValueByKeys(rawVehicleObj, ['tpms_pressure_rl', 'pressure_rl']);
-      const tpmsRR = findValueByKeys(rawVehicleObj, ['tpms_pressure_rr', 'pressure_rr']);
+      const tpmsRR = findValueByKeys(rawValueByKeys, ['tpms_pressure_rr', 'pressure_rr']);
       const temp = findValueByKeys(rawVehicleObj, ['outside_temp', 'ambient_temp']);
 
       document.getElementById('v-state-text').innerText = state ? String(state).toUpperCase() : '-';
