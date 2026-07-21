@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla Matrix System v1007 (My Vehicle Sync)</title>
+  <title>Tesla Control System v1008</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
   
@@ -19,34 +19,34 @@
   <!-- 1. 보안 설정 및 로그인 -->
   <div id="authContainer" class="w-full max-w-md p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 mx-4">
     <div id="setupView" class="hidden">
-      <h2 class="text-2xl font-bold text-blue-500 mb-2 text-center">🗺️ Tesla Infra Configuration (v1007)</h2>
+      <h2 class="text-2xl font-bold text-blue-500 mb-2 text-center">🗺️ Tesla Direct Config (v1008)</h2>
       <div class="space-y-4">
         <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Firebase Project ID</label>
-          <input type="text" id="cfg-projectId" value="teslacam-93532" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Vehicle ID</label>
-          <input type="text" id="cfg-vehicleId" value="3744141651867089" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">User UID</label>
-          <input type="text" id="cfg-userUid" value="dwHcQZWCzBSzmJx8Q5qNkZjAH6d2" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Endpoint (백업용)</label>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Endpoint</label>
           <input type="text" id="cfg-endpoint" value="https://sgp.cloud.appwrite.io/v1" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Project ID</label>
+          <input type="text" id="cfg-projectId" value="6a5e41d1001169a62cfd" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Database ID</label>
+          <input type="text" id="cfg-dbId" value="6a5e424100124e73ee67" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite API Key (선택)</label>
+          <input type="password" id="cfg-apiKey" placeholder="필요시 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Kakao JavaScript API Key</label>
           <input type="text" id="cfg-kakaoKey" value="159c5d7588efc5939d431f005912f9f3" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
         </div>
-        <button onclick="saveAndEncryptConfig()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition mt-4">설정 저장 및 내 차량 연동하기</button>
+        <button onclick="saveAndEncryptConfig()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition mt-4">설정 저장 및 데이터 로드</button>
       </div>
     </div>
 
     <div id="loginView" class="hidden">
-      <h2 class="text-2xl font-bold text-center mb-6 text-blue-400">Tesla Dashboard <span class="bg-blue-600 text-white text-xs px-2 py-1 rounded-full align-middle ml-1">v1007</span></h2>
+      <h2 class="text-2xl font-bold text-center mb-6 text-blue-400">Tesla Dashboard <span class="bg-blue-600 text-white text-xs px-2 py-1 rounded-full align-middle ml-1">v1008</span></h2>
       <div class="space-y-4">
         <input type="password" id="loginPassword" onkeydown="if(event.key === 'Enter') handleLogin()" placeholder="비밀번호 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-3 text-white font-mono text-center text-lg focus:outline-none">
         <div id="loginError" class="text-red-500 text-xs text-center hidden">❌ 비밀번호 오류 또는 복호화 실패</div>
@@ -55,15 +55,15 @@
     </div>
   </div>
 
-  <!-- 2. 관제 레이어 -->
+  <!-- 2. 메인 대시보드 -->
   <div id="appDashboard" class="hidden w-full min-h-screen flex flex-col md:flex-row bg-gray-900 text-gray-100">
     <div class="w-full md:w-80 bg-gray-800 p-5 flex flex-col justify-between border-r border-gray-700 space-y-6">
       <div class="space-y-5">
-        <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">⚡ Tesla Control <span class="text-xs bg-blue-900/60 text-blue-300 border border-blue-700 px-1.5 py-0.5 rounded">v1007</span></h1>
+        <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">⚡ Tesla Control <span class="text-xs bg-blue-900/60 text-blue-300 border border-blue-700 px-1.5 py-0.5 rounded">v1008</span></h1>
 
         <div class="grid grid-cols-2 gap-1 bg-gray-950 p-1 rounded-lg border border-gray-700">
-          <button id="btn-tab-driving" onclick="switchTab('driving')" class="py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition">주행 정보</button>
-          <button id="btn-tab-vehicle" onclick="switchTab('vehicle')" class="py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition">내 차량 정보</button>
+          <button id="btn-tab-driving" onclick="switchTab('driving')" class="py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition">주행 정보 (driving)</button>
+          <button id="btn-tab-vehicle" onclick="switchTab('vehicle')" class="py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition">내 차량 정보 (vehicle)</button>
         </div>
 
         <div id="drivingFilterSection" class="space-y-3 bg-gray-900/60 p-3 rounded-lg border border-gray-700">
@@ -93,14 +93,14 @@
         </div>
 
         <div class="pt-2">
-          <div id="syncStatus" class="text-xs text-blue-400 bg-gray-900/50 p-2 rounded border border-gray-700 font-mono text-center break-all">내 차량 데이터 로드 중...</div>
+          <div id="syncStatus" class="text-xs text-blue-400 bg-gray-900/50 p-2 rounded border border-gray-700 font-mono text-center break-all">데이터 로드 중...</div>
         </div>
       </div>
       <button onclick="resetAppConfig()" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-2 rounded transition">🔑 인증 정보 초기화</button>
     </div>
 
     <div class="flex-1 p-4 flex flex-col space-y-4 overflow-y-auto">
-      <!-- 탭 1: 주행 지도 -->
+      <!-- 탭 1: 주행 지도 (driving) -->
       <div id="panel-driving" class="flex-1 flex flex-col space-y-4">
         <div class="bg-gray-800 p-4 rounded-xl shadow-lg flex-1 flex flex-col justify-between space-y-4">
           <div id="map" class="rounded-lg bg-gray-700 shadow-inner flex-1"></div>
@@ -113,11 +113,11 @@
         </div>
       </div>
 
-      <!-- 탭 2: 내 차량 정보 -->
+      <!-- 탭 2: 내 차량 정보 (vehicle) -->
       <div id="panel-vehicle" class="hidden flex-1 space-y-4">
         <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 space-y-6">
           <div class="flex justify-between items-center">
-            <h2 class="text-xl font-bold text-blue-400 flex items-center gap-2">🚗 내 차량 실시간 상태 (ID: 3744141651867089)</h2>
+            <h2 class="text-xl font-bold text-blue-400 flex items-center gap-2">🚗 내 차량 정보 (vehicle 컬렉션)</h2>
             <span id="v-last-update" class="text-xs text-gray-400 font-mono">-</span>
           </div>
 
@@ -125,7 +125,7 @@
             <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">현재 상태</span><span id="v-state-text" class="text-lg font-bold text-green-400">-</span></div>
             <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">총 누적 주행거리</span><span id="v-odometer" class="text-lg font-bold text-white">-</span></div>
             <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">배터리 잔량</span><span id="v-battery" class="text-lg font-bold text-yellow-400">-</span></div>
-            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">차량 ID</span><span id="v-name" class="text-lg font-bold text-blue-400 truncate block">3744141651867089</span></div>
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700"><span class="text-xs text-gray-400 block mb-1">차량 명칭 / VIN</span><span id="v-name" class="text-lg font-bold text-blue-400 truncate block">-</span></div>
           </div>
 
           <div class="bg-slate-900/40 p-5 rounded-xl border border-blue-900/40 space-y-3">
@@ -175,12 +175,15 @@
     }
 
     function saveAndEncryptConfig() {
+      let ep = document.getElementById('cfg-endpoint').value.trim() || 'https://sgp.cloud.appwrite.io/v1';
+      if (ep.endsWith('/')) ep = ep.slice(0, -1);
+
       const config = {
-        projectId: document.getElementById('cfg-projectId').value.trim() || 'teslacam-93532',
-        vehicleId: document.getElementById('cfg-vehicleId').value.trim() || '3744141651867089',
-        userUid: document.getElementById('cfg-userUid').value.trim() || 'dwHcQZWCzBSzmJx8Q5qNkZjAH6d2',
-        endpoint: document.getElementById('cfg-endpoint').value.trim() || 'https://sgp.cloud.appwrite.io/v1',
-        kakaoKey: document.getElementById('cfg-kakaoKey').value.trim() || '159c5d7588efc5939d431f005912f9f3'
+        endpoint: ep,
+        projectId: document.getElementById('cfg-projectId').value.trim(),
+        dbId: document.getElementById('cfg-dbId').value.trim(),
+        apiKey: document.getElementById('cfg-apiKey').value.trim(),
+        kakaoKey: document.getElementById('cfg-kakaoKey').value.trim()
       };
       localStorage.setItem(STORAGE_CONFIG_KEY, CryptoJS.AES.encrypt(JSON.stringify(config), "emillie00").toString());
       initializeApp(config);
@@ -204,6 +207,23 @@
         initMap();
         await loadViewerData();
       });
+    }
+
+    // Appwrite 컬렉션 직접 수집 함수
+    async function fetchAppwriteDocuments(collectionId) {
+      const base = `${configObj.endpoint}/databases/${configObj.dbId}`;
+      const url = `${base}/collections/${collectionId}/documents?limit=5000`;
+      const headers = { 'X-Appwrite-Project': configObj.projectId };
+      if (configObj.apiKey) headers['X-Appwrite-Key'] = configObj.apiKey;
+
+      try {
+        const res = await fetch(url, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          return data.documents || [];
+        }
+      } catch(e) { console.error(`Fetch Error [${collectionId}]:`, e); }
+      return [];
     }
 
     function parseDocumentPayload(doc) {
@@ -241,95 +261,55 @@
 
     async function loadViewerData() {
       const statusEl = document.getElementById('syncStatus');
-      statusEl.innerText = "📥 차량(3744141651867089) 데이터 연동 중...";
+      statusEl.innerText = "📥 Appwrite 데이터 수집 중...";
       allTrips = []; rawVehicleObj = null;
 
-      // Firestore REST API를 직접 조회하여 하위 컬렉션 파싱
-      const project = configObj.projectId || 'teslacam-93532';
-      const vehicleId = configObj.vehicleId || '3744141651867089';
-
-      const drivingUrl = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/vehicle/${vehicleId}/driving`;
-      const vehicleUrl = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/vehicle/${vehicleId}/vehicle_state`;
-
+      // 1. [driving] 컬렉션만 단독 수집
       try {
-        const res = await fetch(drivingUrl);
-        if (res.ok) {
-          const data = await res.json();
-          const docs = data.documents || [];
+        const drivingDocs = await fetchAppwriteDocuments('driving');
+        drivingDocs.forEach(doc => {
+          const p = parseDocumentPayload(doc);
+          
+          let ts = doc.$createdAt || findValueByKeys(p, ['date', 'timestamp', 'time', 'start_date']);
+          if (typeof ts === 'string') ts = new Date(ts).getTime();
 
-          docs.forEach(doc => {
-            const fields = doc.fields || {};
-            const p = {};
-            
-            // Firestore REST JSON 필드 변환
-            for (let key in fields) {
-              const valObj = fields[key];
-              if (valObj.stringValue) p[key] = valObj.stringValue;
-              else if (valObj.doubleValue) p[key] = Number(valObj.doubleValue);
-              else if (valObj.integerValue) p[key] = Number(valObj.integerValue);
-              else if (valObj.booleanValue) p[key] = valObj.booleanValue;
-              else if (valObj.arrayValue) {
-                p[key] = (valObj.arrayValue.values || []).map(item => {
-                  if (item.mapValue) {
-                    const m = {};
-                    for (let mk in item.mapValue.fields) {
-                      const mv = item.mapValue.fields[mk];
-                      m[mk] = mv.doubleValue ? Number(mv.doubleValue) : (mv.integerValue ? Number(mv.integerValue) : mv.stringValue);
-                    }
-                    return m;
-                  }
-                  return item;
-                });
-              }
-            }
+          const locList = p.location_list || p.path || p.locations || p.coords || [];
 
-            let ts = p.date || doc.createTime;
-            if (typeof ts === 'string') ts = new Date(ts).getTime();
+          let dist = Number(p.moveKM || p.distance || 0);
+          let bat = Number(p.useBattery || p.battery_used || 0);
 
-            const locList = p.location_list || p.path || [];
-            let dist = Number(p.moveKM || 0);
-            let bat = Number(p.useBattery || 0);
-
-            if (dist === 0 && Array.isArray(locList) && locList.length > 1) {
-              const firstOdo = Number(locList[0]?.odometer || 0);
-              const lastOdo = Number(locList[locList.length - 1]?.odometer || 0);
-              if (lastOdo > firstOdo) dist = lastOdo - firstOdo;
-            }
-
-            allTrips.push({
-              id: doc.name.split('/').pop(),
-              timestamp: ts || Date.now(),
-              moveKM: dist,
-              useBattery: bat,
-              drivingTime: p.drivingTime || '',
-              path: locList
-            });
-          });
-        }
-      } catch (e) { console.error("Firestore driving fetch error:", e); }
-
-      // vehicle_state 조회
-      try {
-        const vRes = await fetch(vehicleUrl);
-        if (vRes.ok) {
-          const vData = await vRes.json();
-          const vDocs = vData.documents || [];
-          if (vDocs.length > 0) {
-            vDocs.sort((a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime());
-            const fields = vDocs[0].fields || {};
-            rawVehicleObj = {};
-            for (let k in fields) {
-              const v = fields[k];
-              rawVehicleObj[k] = v.stringValue || v.doubleValue || v.integerValue || v.booleanValue;
-            }
-            renderVehicleTab(vDocs[0].createTime);
+          // odometer 보정
+          if (dist === 0 && Array.isArray(locList) && locList.length > 1) {
+            const firstOdo = Number(locList[0]?.odometer || 0);
+            const lastOdo = Number(locList[locList.length - 1]?.odometer || 0);
+            if (lastOdo > firstOdo) dist = lastOdo - firstOdo;
           }
+
+          allTrips.push({ 
+            id: doc.$id,
+            timestamp: ts || Date.now(), 
+            createdAtStr: doc.$createdAt,
+            moveKM: dist, 
+            useBattery: bat,
+            drivingTime: p.drivingTime || '',
+            path: locList
+          });
+        });
+      } catch (e) { console.error("driving collection error:", e); }
+
+      // 2. [vehicle] 컬렉션만 단독 수집
+      try {
+        const vehicleDocs = await fetchAppwriteDocuments('vehicle');
+        if (vehicleDocs.length > 0) {
+          vehicleDocs.sort((a, b) => new Date(b.$createdAt || 0).getTime() - new Date(a.$createdAt || 0).getTime());
+          rawVehicleObj = parseDocumentPayload(vehicleDocs[0]);
+          renderVehicleTab(vehicleDocs[0].$createdAt || vehicleDocs[0].date);
         }
-      } catch (e) { console.error("Firestore vehicle_state error:", e); }
+      } catch (e) { console.error("vehicle collection error:", e); }
 
       allTrips.sort((a, b) => b.timestamp - a.timestamp);
       document.getElementById('tripCountBadge').innerText = `${allTrips.length}개`;
-      statusEl.innerText = `✅ 내 차량 데이터 수집 성공 (${allTrips.length}건)`;
+      statusEl.innerText = `✅ 수집 완료 (주행: ${allTrips.length}건)`;
 
       onFilterModeChange();
     }
@@ -476,6 +456,10 @@
       let lat = pt.latitude || pt.lat || pt.y;
       let lng = pt.longitude || pt.lng || pt.x;
 
+      if (Array.isArray(pt) && pt.length >= 2) {
+        lat = pt[0]; lng = pt[1];
+      }
+
       if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
         return new kakao.maps.LatLng(Number(lat), Number(lng));
       }
@@ -493,6 +477,10 @@
         totalBat += trip.useBattery;
 
         let rawPath = trip.path;
+        if (typeof rawPath === 'string') {
+          try { rawPath = JSON.parse(rawPath); } catch(e){}
+        }
+
         if (Array.isArray(rawPath) && rawPath.length > 0) {
           const linePath = rawPath.map(pt => {
             const loc = extractLatLng(pt);
@@ -532,27 +520,46 @@
       const dateObj = new Date(detectedTime);
       document.getElementById('v-last-update').innerText = `동기화: ${!isNaN(dateObj.getTime()) ? dateObj.toLocaleString('ko-KR') : '-'}`;
 
-      const state = rawVehicleObj.state || rawVehicleObj.status || '-';
-      const odo = rawVehicleObj.odometer || '-';
-      const bat = rawVehicleObj.battery_level || rawVehicleObj.battery || '-';
+      const state = findValueByKeys(rawVehicleObj, ['state', 'vehicle_state', 'charging_state', 'status']);
+      const odo = findValueByKeys(rawVehicleObj, ['odometer', 'mileage']);
+      const bat = findValueByKeys(rawVehicleObj, ['battery_level', 'usable_battery_level', 'battery', 'charge_state']);
+      const vin = findValueByKeys(rawVehicleObj, ['vin', 'display_name', 'vehicle_name', 'car_name', 'id']);
+      
+      const eff = findValueByKeys(rawVehicleObj, ['efficiency', 'avg_efficiency', 'eff']);
+      const energy = findValueByKeys(rawVehicleObj, ['energy_used', 'used_energy']);
+      const cap = findValueByKeys(rawVehicleObj, ['nominal_full_pack_energy', 'pack_capacity']);
+      const gear = findValueByKeys(rawVehicleObj, ['gear_shift', 'gear', 'shift_state']);
 
-      document.getElementById('v-state-text').innerText = String(state).toUpperCase();
-      document.getElementById('brief-state').innerText = String(state);
+      const tpmsFL = findValueByKeys(rawVehicleObj, ['tpms_pressure_fl', 'pressure_fl']);
+      const tpmsFR = findValueByKeys(rawVehicleObj, ['tpms_pressure_fr', 'pressure_fr']);
+      const tpmsRL = findValueByKeys(rawVehicleObj, ['tpms_pressure_rl', 'pressure_rl']);
+      const tpmsRR = findValueByKeys(rawVehicleObj, ['tpms_pressure_rr', 'pressure_rr']);
+      const temp = findValueByKeys(rawVehicleObj, ['outside_temp', 'ambient_temp']);
 
-      if (odo !== '-') {
+      document.getElementById('v-state-text').innerText = state ? String(state).toUpperCase() : '-';
+      document.getElementById('brief-state').innerText = state ? String(state) : '-';
+
+      if (odo !== null && odo !== undefined) {
         let val = Number(odo);
         document.getElementById('v-odometer').innerText = val < 100000 ? `${(val * 1.60934).toFixed(1)} km` : `${val.toFixed(1)} km`;
       } else {
         document.getElementById('v-odometer').innerText = '-';
       }
 
-      document.getElementById('v-battery').innerText = bat !== '-' ? `${bat}%` : '-';
-      document.getElementById('brief-battery').innerText = bat !== '-' ? `${bat}%` : '-';
+      document.getElementById('v-battery').innerText = bat !== null && bat !== undefined ? `${bat}%` : '-';
+      document.getElementById('brief-battery').innerText = bat !== null && bat !== undefined ? `${bat}%` : '-';
+      document.getElementById('v-name').innerText = vin || '-';
 
-      document.getElementById('tire-fl').innerText = rawVehicleObj.tpms_pressure_fl ? `${rawVehicleObj.tpms_pressure_fl} psi` : '-';
-      document.getElementById('tire-fr').innerText = rawVehicleObj.tpms_pressure_fr ? `${rawVehicleObj.tpms_pressure_fr} psi` : '-';
-      document.getElementById('tire-rl').innerText = rawVehicleObj.tpms_pressure_rl ? `${rawVehicleObj.tpms_pressure_rl} psi` : '-';
-      document.getElementById('tire-rr').innerText = rawVehicleObj.tpms_pressure_rr ? `${rawVehicleObj.tpms_pressure_rr} psi` : '-';
+      document.getElementById('v-eff-val').innerText = eff !== null && eff !== undefined ? `${eff} km/kWh` : '-';
+      document.getElementById('v-eff-energy').innerText = energy !== null && energy !== undefined ? `${energy} kWh` : '-';
+      document.getElementById('v-eff-capacity').innerText = cap !== null && cap !== undefined ? `${cap} kWh` : '-';
+      document.getElementById('v-gear').innerText = gear || '-';
+
+      document.getElementById('tire-fl').innerText = tpmsFL !== null && tpmsFL !== undefined ? `${tpmsFL} psi` : '-';
+      document.getElementById('tire-fr').innerText = tpmsFR !== null && tpmsFR !== undefined ? `${tpmsFR} psi` : '-';
+      document.getElementById('tire-rl').innerText = tpmsRL !== null && tpmsRL !== undefined ? `${tpmsRL} psi` : '-';
+      document.getElementById('tire-rr').innerText = tpmsRR !== null && tpmsRR !== undefined ? `${tpmsRR} psi` : '-';
+      document.getElementById('v-tire-temp').innerText = temp !== null && temp !== undefined ? `${temp}°C` : '-';
     }
 
     function clearMap() {
