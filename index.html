@@ -27,19 +27,19 @@
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Project ID</label>
-          <input type="text" id="cfg-projectId" placeholder="Project ID 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+          <input type="text" id="cfg-projectId" value="6a5e41d1001169a62cfd" placeholder="Project ID 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Database ID</label>
-          <input type="text" id="cfg-dbId" placeholder="Database ID 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+          <input type="text" id="cfg-dbId" value="6a5e424100124e73ee67" placeholder="Database ID 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
         </div>
         <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite API Key</label>
-          <input type="password" id="cfg-apiKey" placeholder="Appwrite API Key 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite API Key (선택사항)</label>
+          <input type="password" id="cfg-apiKey" placeholder="보통 빈칸으로 유지" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Kakao JavaScript API Key</label>
-          <input type="text" id="cfg-kakaoKey" placeholder="카카오 발급 JS 키 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+          <input type="text" id="cfg-kakaoKey" value="159c5d7588efc5939d431f005912f9f3" placeholder="카카오 발급 JS 키 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
         </div>
         <button onclick="saveAndEncryptConfig()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition mt-4">설정 저장 및 가동하기</button>
       </div>
@@ -184,6 +184,19 @@
       });
     }
 
+    async function fetchDocumentsFallback(base, headers, collectionId) {
+      // 1차 시도: 쿼리 없이 기본 문서 100개 요청 (가장 안전한 방식)
+      let response = await fetch(`${base}/collections/${collectionId}/documents?limit=100`, { headers });
+      if (response.ok) return await response.json();
+
+      // 2차 시도: queries[] 형식 시도
+      const url = `${base}/collections/${collectionId}/documents?queries[]=${encodeURIComponent('limit(100)')}`;
+      response = await fetch(url, { headers });
+      if (response.ok) return await response.json();
+
+      throw new Error(`HTTP ${response.status}`);
+    }
+
     async function loadViewerData() {
       const statusEl = document.getElementById('syncStatus');
       statusEl.innerText = "📥 Appwrite 데이터 수집 중...";
@@ -195,61 +208,54 @@
         headers['X-Appwrite-Key'] = configObj.apiKey;
       }
 
-      // 1. driving 데이터 로드 (안전한 쿼리 요청)
+      // 1. driving 데이터 수집
       try {
-        const url = `${base}/collections/driving/documents?queries[]=${encodeURIComponent('orderDesc("date")')}&queries[]=${encodeURIComponent('limit(100)')}`;
-        const res = await fetch(url, { headers });
+        const dData = await fetchDocumentsFallback(base, headers, 'driving');
+        const docs = dData.documents || [];
         
-        if (res.ok) {
-          const dData = await res.json();
-          const docs = dData.documents || [];
-          
-          docs.forEach(doc => {
-            let parsed = {};
-            if (typeof doc.rawData === 'string') {
-              try { parsed = JSON.parse(doc.rawData); } catch(e){}
-            } else if (typeof doc.rawData === 'object') {
-              parsed = doc.rawData || {};
-            }
-
-            allTrips.push({ 
-              timestamp: doc.date || Date.now(), 
-              moveKM: Number(parsed.moveKM || parsed.distance || parsed.drive_km || 0), 
-              useBattery: Number(parsed.useBattery || parsed.battery_used || 0) 
-            });
-          });
-        } else {
-          const errText = await res.text();
-          console.error("driving Fetch Failed:", res.status, errText);
-          statusEl.innerText = `⚠️ driving 로드 실패 (${res.status})`;
-        }
-      } catch (e) {
-        console.error("driving Error:", e);
-      }
-
-      // 2. vehicle_state 데이터 로드
-      try {
-        const vUrl = `${base}/collections/${VEHICLE_STATE_COLLECTION_ID}/documents?queries[]=${encodeURIComponent('orderDesc("date")')}&queries[]=${encodeURIComponent('limit(1)')}`;
-        const res = await fetch(vUrl, { headers });
-        
-        if (res.ok) {
-          const vData = await res.json();
-          if (vData.documents && vData.documents.length > 0) {
-            const latestDoc = vData.documents[0];
-            if (typeof latestDoc.rawData === 'string') {
-              try { rawVehicleObj = JSON.parse(latestDoc.rawData); } catch(e){}
-            } else {
-              rawVehicleObj = latestDoc.rawData || {};
-            }
-            renderVehicleTab(latestDoc.date);
+        docs.forEach(doc => {
+          let parsed = doc;
+          if (typeof doc.rawData === 'string') {
+            try { parsed = { ...doc, ...JSON.parse(doc.rawData) }; } catch(e){}
+          } else if (typeof doc.rawData === 'object' && doc.rawData !== null) {
+            parsed = { ...doc, ...doc.rawData };
           }
-        }
+
+          allTrips.push({ 
+            timestamp: doc.date || doc.$createdAt || Date.now(), 
+            moveKM: Number(parsed.moveKM || parsed.distance || parsed.drive_km || 0), 
+            useBattery: Number(parsed.useBattery || parsed.battery_used || 0) 
+          });
+        });
       } catch (e) {
-        console.error("vehicle_state Error:", e);
+        console.error("driving 컬렉션 수집 실패:", e);
+        statusEl.innerText = `⚠️ driving 로드 에러: ${e.message}`;
       }
 
-      allTrips.sort((a, b) => b.timestamp - a.timestamp);
-      statusEl.innerText = `✅ 로드 성공 (주행: ${allTrips.length}개)`;
+      // 2. vehicle_state 데이터 수집
+      try {
+        const vData = await fetchDocumentsFallback(base, headers, VEHICLE_STATE_COLLECTION_ID);
+        if (vData.documents && vData.documents.length > 0) {
+          const latestDoc = vData.documents[0];
+          if (typeof latestDoc.rawData === 'string') {
+            try { rawVehicleObj = JSON.parse(latestDoc.rawData); } catch(e){}
+          } else {
+            rawVehicleObj = latestDoc.rawData || latestDoc;
+          }
+          renderVehicleTab(latestDoc.date || latestDoc.$createdAt);
+        }
+      } catch (e) {
+        console.error("vehicle_state 수집 실패:", e);
+      }
+
+      allTrips.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      
+      if (allTrips.length > 0) {
+        statusEl.innerText = `✅ 로드 성공 (주행: ${allTrips.length}개)`;
+      } else if (!statusEl.innerText.includes('에러')) {
+        statusEl.innerText = `⚠️ 문서 0개 (컬렉션 비어있음/권한확인)`;
+      }
+      
       setFilterMode('daily');
       updateHUD();
     }
@@ -334,7 +340,7 @@
       } else {
         document.getElementById('panel-driving').classList.add('hidden');
         document.getElementById('panel-vehicle').classList.remove('hidden');
-        btnVehicle.className = "py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition";
+        btnVehicle.className = "py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition";
         btnDriving.className = "py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition";
         vehicleBrief.classList.remove('hidden');
         drivingFilter.classList.add('hidden');
