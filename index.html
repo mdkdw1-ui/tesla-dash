@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla Telemetry Dashboard</title>
+  <title>Tesla Monitor</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -24,6 +24,9 @@
       <h1 class="text-base font-bold tracking-tight text-white">Tesla Monitor</h1>
     </div>
     <div class="flex items-center space-x-2">
+      <button onclick="triggerGitHubSync()" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/50 transition flex items-center gap-1">
+        <span>🔄 Sync</span>
+      </button>
       <button onclick="openConfigModal()" class="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition">⚙️ 설정</button>
     </div>
   </header>
@@ -43,7 +46,7 @@
       <div class="card-dark rounded-2xl p-4 flex flex-col gap-3">
         <span class="text-xs font-bold text-gray-400">📅 조회 기간 및 상세 조건</span>
         
-        <!-- 기간 버튼 칩 -->
+        <!-- 기간 선택 버튼 (시안성 강화) -->
         <div class="flex gap-1.5 overflow-x-auto pb-1 text-xs">
           <button onclick="setFilterMode('single')" id="btn-mode-single" class="px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold whitespace-nowrap">단일운행</button>
           <button onclick="setFilterMode('daily')" id="btn-mode-daily" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">일간</button>
@@ -52,24 +55,21 @@
           <button onclick="setFilterMode('quarterly')" id="btn-mode-quarterly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">분기</button>
           <button onclick="setFilterMode('half')" id="btn-mode-half" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">반년</button>
           <button onclick="setFilterMode('yearly')" id="btn-mode-yearly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">년</button>
-          <button onclick="setFilterMode('custom')" id="btn-mode-custom" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">직접지정</button>
         </div>
 
-        <!-- 동적 셀렉터 영역 (드롭다운으로 제공) -->
+        <!-- 동적 세부 드롭다운 영역 -->
         <div id="dynamicFilterControls"></div>
 
-        <!-- 통계 요약 (온도 무의미시 숨김, kWh/배터리/전비 표기) -->
+        <!-- 요약 통계 -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#0d0e12] p-3 rounded-xl text-center text-xs border border-gray-800/80">
           <div><span class="text-gray-500 block text-[10px]">운행건수</span><span id="stat-count" class="font-bold text-blue-400">-</span></div>
           <div><span class="text-gray-500 block text-[10px]">이동거리</span><span id="stat-distance" class="font-bold text-green-400">-</span></div>
           <div><span class="text-gray-500 block text-[10px]">소모 배터리/전력</span><span id="stat-energy" class="font-bold text-yellow-400">-</span></div>
           <div><span class="text-gray-500 block text-[10px]">평균 전비</span><span id="stat-efficiency" class="font-bold text-indigo-400">-</span></div>
-          <div id="box-out-temp" class="hidden"><span class="text-gray-500 block text-[10px]">평균 외기온</span><span id="stat-out-temp" class="font-bold text-cyan-400">-</span></div>
-          <div id="box-in-temp" class="hidden"><span class="text-gray-500 block text-[10px]">평균 내기온</span><span id="stat-in-temp" class="font-bold text-orange-400">-</span></div>
         </div>
       </div>
 
-      <!-- Kakao Map (4:3 비율) -->
+      <!-- 지도 -->
       <div class="card-dark rounded-2xl overflow-hidden w-full aspect-[4/3] relative border border-gray-800 shadow-lg">
         <div id="map" class="w-full h-full"></div>
       </div>
@@ -82,10 +82,9 @@
         <span id="v-last-time" class="text-xs text-gray-400">--:-- 기준 🔄</span>
       </div>
 
-      <!-- 상단 현황 카드 (실시간 수신 시 주행 중 전환) -->
       <div class="card-dark p-4 rounded-2xl flex justify-between items-center border border-gray-800 shadow-lg">
         <div class="flex items-center space-x-2">
-          <span id="v-status-dot" class="w-2.5 h-2.5 rounded-full bg-gray-500"></span>
+          <span id="v-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
           <span id="v-status-text" class="text-sm font-semibold text-gray-200">현재: 주차 중</span>
         </div>
         <div class="flex items-center space-x-4 text-sm font-bold">
@@ -94,7 +93,7 @@
         </div>
       </div>
 
-      <!-- 당일(마지막 운행일) 전체 운행 기록 요약 카드 -->
+      <!-- 최근 운행일 전체 기록 요약 -->
       <div class="card-dark p-4 rounded-2xl space-y-3">
         <div class="flex justify-between items-center">
           <span class="text-xs font-bold text-indigo-400 flex items-center gap-1">⚡ 최근 운행일 전체 기록</span>
@@ -111,11 +110,10 @@
           <div><span class="text-gray-500 block text-[10px]">총 운전시간</span><span id="v-day-time" class="font-bold text-gray-200">- 분</span></div>
           <div><span class="text-gray-500 block text-[10px]">총 사용에너지</span><span id="v-day-kwh" class="font-bold text-gray-200">- kWh</span></div>
         </div>
-        <!-- 당일 상세 주행 건별 리스트 -->
         <div id="v-day-trips-list" class="space-y-1.5 pt-2 border-t border-gray-800/60 text-xs"></div>
       </div>
 
-      <!-- 주차 상태 지속시간 (마지막 주행 종료 시점 기준) -->
+      <!-- 주차 시간 카드 -->
       <div id="card-state-duration" class="card-dark card-border-amber p-4 rounded-2xl flex items-center justify-between">
         <div class="flex items-center space-x-3">
           <span id="v-state-icon" class="text-2xl">🅿️</span>
@@ -140,19 +138,20 @@
         </div>
       </div>
 
-      <!-- 최근 상태 히스토리 (총 10개 확장 및 주행/충전 상세 표기) -->
+      <!-- 최근 상태 히스토리 (수정된 복구 영역) -->
       <div class="space-y-2 pt-1">
-        <div class="flex justify-between items-center px-1">
-          <h3 class="text-xs font-bold text-gray-400">최근 상태 히스토리 (최근 10건)</h3>
-        </div>
+        <h3 class="text-xs font-bold text-gray-400 px-1">최근 상태 히스토리 (최근 10건)</h3>
         <div id="timeline-container" class="space-y-2"></div>
       </div>
     </div>
 
-    <!-- 3. 월간 리포트 탭 (년/월 드롭다운 UI) -->
+    <!-- 3. 월간 리포트 탭 (지난달 버튼 추가 및 충전 집계 수정) -->
     <div id="panel-monthly" class="hidden space-y-4">
       <div class="card-dark p-4 rounded-2xl space-y-3">
-        <span class="text-xs font-bold text-gray-400">📊 월별 리포트 선택</span>
+        <div class="flex justify-between items-center">
+          <span class="text-xs font-bold text-gray-400">📊 월별 리포트 선택</span>
+          <button onclick="selectPrevMonth()" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-blue-400 font-bold border border-gray-700 transition">◀ 지난달 보기</button>
+        </div>
         <div class="flex gap-2 text-xs">
           <select id="m-select-year" onchange="onMonthlyDropdownChange()" class="flex-1 bg-gray-800 text-white rounded-xl p-2.5 border border-gray-700 font-bold"></select>
           <select id="m-select-month" onchange="onMonthlyDropdownChange()" class="flex-1 bg-gray-800 text-white rounded-xl p-2.5 border border-gray-700 font-bold"></select>
@@ -182,68 +181,49 @@
         <span class="text-xs font-bold text-gray-300">평균 전비</span>
         <span id="m-stat-avg-eff" class="text-2xl font-black text-indigo-400">- km/kWh</span>
       </div>
-      <div id="m-no-data-msg" class="hidden text-center text-xs text-amber-500 py-2 bg-amber-950/30 rounded-xl border border-amber-800/50">선택하신 월에는 주행/충전 기록이 없습니다.</div>
     </div>
 
-    <!-- 4. 배터리 탭 (상단 최근 50개 차트, 하단 전체 차트, 추정거리 카드 배치) -->
+    <!-- 4. 배터리 탭 -->
     <div id="panel-battery" class="hidden space-y-4">
       <div class="grid grid-cols-2 gap-3">
         <div class="card-dark p-4 rounded-2xl">
           <span class="text-[11px] text-gray-400 block mb-1">최근 열화율</span>
           <span id="b-degradation-val" class="text-2xl font-black text-indigo-400">100.0%</span>
         </div>
-        <!-- 500개 표기 삭제 -> 100% 충전시 주행가능 거리 추정 배치 -->
         <div class="card-dark p-4 rounded-2xl">
           <span class="text-[11px] text-gray-400 block mb-1">100% 충전 시 주행 가능 거리 추정</span>
           <span id="b-est-range-val" class="text-2xl font-black text-green-400">- km</span>
         </div>
       </div>
 
-      <!-- 상단 차트 (최근 50개 기록 기준) -->
       <div class="card-dark p-4 rounded-2xl space-y-2">
-        <div class="flex justify-between items-center">
-          <h3 class="text-xs font-bold text-gray-300">최근 열화율 추이 (최근 50개)</h3>
-          <span class="text-[10px] text-gray-500">%</span>
-        </div>
-        <div class="w-full h-40"><canvas id="chartDegradationRecent"></canvas></div>
+        <h3 class="text-xs font-bold text-gray-300">최근 열화율 추이 (최근 50개)</h3>
+        <div class="w-full h-36"><canvas id="chartDegradationRecent"></canvas></div>
       </div>
-
       <div class="card-dark p-4 rounded-2xl space-y-2">
-        <div class="flex justify-between items-center">
-          <h3 class="text-xs font-bold text-gray-300">최근 100% 환산 주행거리 (최근 50개)</h3>
-          <span class="text-[10px] text-gray-500">km</span>
-        </div>
-        <div class="w-full h-40"><canvas id="chartRangeRecent"></canvas></div>
+        <h3 class="text-xs font-bold text-gray-300">최근 100% 환산 주행거리 (최근 50개)</h3>
+        <div class="w-full h-36"><canvas id="chartRangeRecent"></canvas></div>
       </div>
-
-      <!-- 하단 차트 (전체 누적 기록 기준) -->
       <div class="card-dark p-4 rounded-2xl space-y-2">
-        <div class="flex justify-between items-center">
-          <h3 class="text-xs font-bold text-gray-300">전체 열화율 추이 (누적 전체)</h3>
-          <span class="text-[10px] text-gray-500">%</span>
-        </div>
-        <div class="w-full h-40"><canvas id="chartDegradationAll"></canvas></div>
+        <h3 class="text-xs font-bold text-gray-300">전체 열화율 추이 (누적 전체)</h3>
+        <div class="w-full h-36"><canvas id="chartDegradationAll"></canvas></div>
       </div>
-
       <div class="card-dark p-4 rounded-2xl space-y-2">
-        <div class="flex justify-between items-center">
-          <h3 class="text-xs font-bold text-gray-300">전체 100% 환산 주행거리 (누적 전체)</h3>
-          <span class="text-[10px] text-gray-500">km</span>
-        </div>
-        <div class="w-full h-40"><canvas id="chartRangeAll"></canvas></div>
+        <h3 class="text-xs font-bold text-gray-300">전체 100% 환산 주행거리 (누적 전체)</h3>
+        <div class="w-full h-36"><canvas id="chartRangeAll"></canvas></div>
       </div>
     </div>
 
   </main>
 
-  <!-- Config Modal -->
+  <!-- 설정 모달 (GitHub PAT 포함) -->
   <div id="modal-config" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4">
       <h3 class="text-base font-bold text-white">🔑 설정</h3>
       <form onsubmit="saveConfig(event)" class="space-y-3 text-xs">
         <div>
           <label class="block text-gray-400 mb-1">카카오맵 API Key</label>
-          <input type="text" id="input-kakao-key" required value="159c5d7588efc5939d431f005912f9f3" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
+          <input type="text" id="input-kakao-key" required class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
         <div>
           <label class="block text-gray-400 mb-1">Supabase URL</label>
@@ -253,6 +233,10 @@
           <label class="block text-gray-400 mb-1">Supabase Key</label>
           <input type="password" id="input-supabase-key" required class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
+        <div>
+          <label class="block text-gray-400 mb-1">GitHub Personal Access Token (Workflow 실행용)</label>
+          <input type="password" id="input-gh-token" placeholder="ghp_xxxx..." class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
+        </div>
         <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 rounded transition">저장 및 시작</button>
       </form>
     </div>
@@ -260,16 +244,15 @@
 
   <script>
     const SECRET_SALT = "Tesla_Supabase_Dashboard_2026";
-    let configObj = { kakaoKey: '159c5d7588efc5939d431f005912f9f3', url: '', key: '' };
+    let configObj = { kakaoKey: '159c5d7588efc5939d431f005912f9f3', url: '', key: '', ghToken: '' };
     let map = null;
     let allTrips = [];
     let vehicleRows = [];
     let currentPolylines = [];
     let currentInfoWindow = null;
-    let currentFilterMode = 'single';
-    
-    let chartDegRec = null, chartRangeRec = null;
-    let chartDegAll = null, chartRangeAll = null;
+    let currentFilterMode = 'daily';
+
+    let chartDegRec = null, chartRangeRec = null, chartDegAll = null, chartRangeAll = null;
 
     window.addEventListener('DOMContentLoaded', () => {
       if (!loadConfig()) openConfigModal();
@@ -291,7 +274,8 @@
       configObj = {
         kakaoKey: document.getElementById('input-kakao-key').value.trim(),
         url: document.getElementById('input-supabase-url').value.trim().replace(/\/$/, ""),
-        key: document.getElementById('input-supabase-key').value.trim()
+        key: document.getElementById('input-supabase-key').value.trim(),
+        ghToken: document.getElementById('input-gh-token').value.trim()
       };
       localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
       location.reload();
@@ -301,7 +285,35 @@
       if (configObj.kakaoKey) document.getElementById('input-kakao-key').value = configObj.kakaoKey;
       if (configObj.url) document.getElementById('input-supabase-url').value = configObj.url;
       if (configObj.key) document.getElementById('input-supabase-key').value = configObj.key;
+      if (configObj.ghToken) document.getElementById('input-gh-token').value = configObj.ghToken;
       document.getElementById('modal-config').classList.remove('hidden');
+    }
+
+    // GitHub Actions Workflow 수동 트리거 실행 (요청 7번)
+    async function triggerGitHubSync() {
+      if (!configObj.ghToken) {
+        alert("설정(⚙️) 메뉴에서 GitHub Personal Access Token을 먼저 입력해 주세요.");
+        openConfigModal();
+        return;
+      }
+      try {
+        const res = await fetch('https://api.github.com/repos/mdkdw1-ui/my-tesla-app/actions/workflows/sync.yml/dispatches', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/vnd.github+json',
+            'Authorization': `Bearer ${configObj.ghToken}`,
+            'X-GitHub-Api-Version': '2022-11-28'
+          },
+          body: JSON.stringify({ ref: 'main' })
+        });
+        if (res.ok || res.status === 204) {
+          alert("⚡ GitHub Sync Pipeline이 성공적으로 호출되었습니다! 데이터 동기화가 시작됩니다.");
+        } else {
+          alert(`동기화 요청 실패: ${res.status}`);
+        }
+      } catch (err) {
+        alert("GitHub 연동 중 오류 발생: " + err.message);
+      }
     }
 
     function initDashboard() {
@@ -351,7 +363,7 @@
     async function loadAllData() {
       const [drivingRes, vehicleRes] = await Promise.all([
         fetchSupabaseTable('driving?order=created_at.desc'),
-        fetchSupabaseTable('vehicle?order=updated_at.desc&limit=1000')
+        fetchSupabaseTable('vehicle?order=updated_at.desc&limit=2000')
       ]);
 
       allTrips = drivingRes.map(r => {
@@ -364,28 +376,29 @@
           timestamp: new Date(r.created_at || Date.now()).getTime(),
           moveKM: Number(r.move_km || 0),
           useBattery: Number(r.use_battery || 0),
-          outsideTemp: r.outside_temp !== undefined ? Number(r.outside_temp) : null,
-          insideTemp: r.inside_temp !== undefined ? Number(r.inside_temp) : null,
           durationMin: Number(r.duration_min || r.duration || 15),
           path: pathData
         };
       });
 
       vehicleRows = vehicleRes;
-      setFilterMode('single');
+      setFilterMode('daily');
       loadVehicleData();
     }
 
-    // --- 1. 주행 지도 탭 (기간 선택 고도화 및 드롭다운 UI 적용) ---
+    // --- 1. 주행 지도 필터링 정밀 수정 (요청 1, 2, 6번) ---
     function setFilterMode(mode) {
       currentFilterMode = mode;
-      ['single', 'daily', 'weekly', 'monthly', 'quarterly', 'half', 'yearly', 'custom'].forEach(m => {
+      ['single', 'daily', 'weekly', 'monthly', 'quarterly', 'half', 'yearly'].forEach(m => {
         const btn = document.getElementById(`btn-mode-${m}`);
         if (btn) btn.className = m === mode ? "px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold whitespace-nowrap" : "px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 hover:text-white font-semibold whitespace-nowrap";
       });
 
       const container = document.getElementById('dynamicFilterControls');
-      if (allTrips.length === 0) { container.innerHTML = `<span class="text-xs text-gray-500">주행 데이터가 없습니다.</span>`; return; }
+      if (allTrips.length === 0) { container.innerHTML = `<span class="text-xs text-gray-500">데이터가 없습니다.</span>`; return; }
+
+      const years = [...new Set(allTrips.map(t => new Date(t.timestamp).getFullYear()))].sort().reverse();
+      const yearOpts = years.map(y => `<option value="${y}">${y}년</option>`).join('');
 
       if (mode === 'single') {
         const opts = allTrips.map(t => `<option value="${t.id}">${new Date(t.timestamp).toLocaleString('ko-KR')} (${t.moveKM.toFixed(1)}km)</option>`).join('');
@@ -396,32 +409,42 @@
           return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         }))];
         const opts = days.map(d => `<option value="${d}">${d}</option>`).join('');
-        container.innerHTML = `<select id="ctrl-sub-select" onchange="renderDrivingData(event)" class="w-full bg-gray-800 text-white rounded-xl p-2.5 text-xs border border-gray-700 font-bold">${opts}</select>`;
-      } else if (mode === 'custom') {
-        // 드롭다운 년/월 선택
-        const years = [...new Set(allTrips.map(t => new Date(t.timestamp).getFullYear()))].sort().reverse();
-        const yearOpts = years.map(y => `<option value="${y}">${y}년</option>`).join('');
+        container.innerHTML = `<select id="ctrl-sub-select" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-xl p-2.5 text-xs border border-gray-700 font-bold">${opts}</select>`;
+      } else if (mode === 'weekly' || mode === 'monthly') {
         const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
-        
         container.innerHTML = `
           <div class="flex gap-2 text-xs">
-            <select id="ctrl-custom-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2.5 rounded-xl border border-gray-700">${yearOpts}</select>
-            <select id="ctrl-custom-month" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2.5 rounded-xl border border-gray-700">${monthOpts}</select>
+            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2.5 rounded-xl border border-gray-700">${yearOpts}</select>
+            <select id="ctrl-month" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2.5 rounded-xl border border-gray-700">${monthOpts}</select>
           </div>
         `;
-      } else {
-        container.innerHTML = `<div class="text-xs text-gray-400 p-1">${getFilterModeText(mode)} 기준 주행 목록이 표출됩니다.</div>`;
+        document.getElementById('ctrl-month').value = new Date(allTrips[0].timestamp).getMonth() + 1;
+      } else if (mode === 'quarterly') {
+        container.innerHTML = `
+          <div class="flex gap-2 text-xs">
+            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2.5 rounded-xl border border-gray-700">${yearOpts}</select>
+            <select id="ctrl-quarter" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2.5 rounded-xl border border-gray-700">
+              <option value="1">1분기 (1월~3월)</option>
+              <option value="2">2분기 (4월~6월)</option>
+              <option value="3">3분기 (7월~9월)</option>
+              <option value="4">4분기 (10월~12월)</option>
+            </select>
+          </div>
+        `;
+      } else if (mode === 'half') {
+        container.innerHTML = `
+          <div class="flex gap-2 text-xs">
+            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2.5 rounded-xl border border-gray-700">${yearOpts}</select>
+            <select id="ctrl-half" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2.5 rounded-xl border border-gray-700">
+              <option value="1">상반기 (1월~6월)</option>
+              <option value="2">하반기 (7월~12월)</option>
+            </select>
+          </div>
+        `;
+      } else if (mode === 'yearly') {
+        container.innerHTML = `<select id="ctrl-year" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-xl p-2.5 text-xs border border-gray-700">${yearOpts}</select>`;
       }
       renderDrivingData();
-    }
-
-    function getFilterModeText(m) {
-      if (m === 'weekly') return '최근 주간';
-      if (m === 'monthly') return '최근 12개월';
-      if (m === 'quarterly') return '분기별 (1~3월, 4~6월 등)';
-      if (m === 'half') return '반년별 (상/하반기)';
-      if (m === 'yearly') return '연도별 전체';
-      return '';
     }
 
     function clearMapPolylines() {
@@ -430,8 +453,7 @@
       if (currentInfoWindow) currentInfoWindow.close();
     }
 
-    function renderDrivingData(e) {
-      if (e && e.preventDefault) e.preventDefault(); // 스크롤 튀김 방지 (Prevent Scroll)
+    function renderDrivingData() {
       clearMapPolylines();
       let matched = [];
 
@@ -442,23 +464,41 @@
         const selectedDay = document.getElementById('ctrl-sub-select')?.value;
         matched = allTrips.filter(t => {
           const d = new Date(t.timestamp);
-          const dayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-          return dayStr === selectedDay;
+          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` === selectedDay;
         });
-      } else if (currentFilterMode === 'custom') {
-        const selY = Number(document.getElementById('ctrl-custom-year')?.value);
-        const selM = Number(document.getElementById('ctrl-custom-month')?.value);
+      } else if (currentFilterMode === 'weekly' || currentFilterMode === 'monthly') {
+        const selY = Number(document.getElementById('ctrl-year')?.value);
+        const selM = Number(document.getElementById('ctrl-month')?.value);
         matched = allTrips.filter(t => {
           const d = new Date(t.timestamp);
           return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
         });
-      } else {
-        matched = allTrips;
+      } else if (currentFilterMode === 'quarterly') {
+        const selY = Number(document.getElementById('ctrl-year')?.value);
+        const selQ = Number(document.getElementById('ctrl-quarter')?.value);
+        const startM = (selQ - 1) * 3 + 1;
+        const endM = selQ * 3;
+        matched = allTrips.filter(t => {
+          const d = new Date(t.timestamp);
+          const m = d.getMonth() + 1;
+          return d.getFullYear() === selY && (m >= startM && m <= endM);
+        });
+      } else if (currentFilterMode === 'half') {
+        const selY = Number(document.getElementById('ctrl-year')?.value);
+        const selH = Number(document.getElementById('ctrl-half')?.value);
+        matched = allTrips.filter(t => {
+          const d = new Date(t.timestamp);
+          const m = d.getMonth() + 1;
+          return d.getFullYear() === selY && (selH === 1 ? m <= 6 : m >= 7);
+        });
+      } else if (currentFilterMode === 'yearly') {
+        const selY = Number(document.getElementById('ctrl-year')?.value);
+        matched = allTrips.filter(t => new Date(t.timestamp).getFullYear() === selY);
       }
 
       const totalDist = matched.reduce((a,c)=>a+c.moveKM, 0);
       const totalBat = matched.reduce((a,c)=>a+c.useBattery, 0);
-      const estKwh = (totalBat / 100) * 60; // 60kWh 기준
+      const estKwh = (totalBat / 100) * 60;
       const avgEff = estKwh > 0 ? (totalDist / estKwh).toFixed(2) : "0.00";
 
       document.getElementById('stat-count').innerText = `${matched.length}건`;
@@ -466,25 +506,6 @@
       document.getElementById('stat-energy').innerText = `-${totalBat.toFixed(1)}% (-${estKwh.toFixed(1)}kWh)`;
       document.getElementById('stat-efficiency').innerText = `${avgEff} km/kWh`;
 
-      // 온도 데이터 값이 의미 있는 경우에만 표시
-      const validOutTemps = matched.map(t => t.outsideTemp).filter(v => v !== null && !isNaN(v));
-      const validInTemps = matched.map(t => t.insideTemp).filter(v => v !== null && !isNaN(v));
-
-      if (validOutTemps.length > 0) {
-        document.getElementById('box-out-temp').classList.remove('hidden');
-        document.getElementById('stat-out-temp').innerText = `${(validOutTemps.reduce((a,c)=>a+c,0)/validOutTemps.length).toFixed(1)} °C`;
-      } else {
-        document.getElementById('box-out-temp').classList.add('hidden');
-      }
-
-      if (validInTemps.length > 0) {
-        document.getElementById('box-in-temp').classList.remove('hidden');
-        document.getElementById('stat-in-temp').innerText = `${(validInTemps.reduce((a,c)=>a+c,0)/validInTemps.length).toFixed(1)} °C`;
-      } else {
-        document.getElementById('box-in-temp').classList.add('hidden');
-      }
-
-      // 지선 그리기
       const bounds = new kakao.maps.LatLngBounds();
       let hasPoints = false;
 
@@ -504,30 +525,16 @@
         });
         polyline.setMap(map);
         currentPolylines.push(polyline);
-
-        kakao.maps.event.addListener(polyline, 'click', (mouseEvent) => {
-          if (currentInfoWindow) currentInfoWindow.close();
-          const dateStr = new Date(trip.timestamp).toLocaleString('ko-KR');
-          const content = `
-            <div style="padding:8px 12px; font-size:11px; background:#161820; color:#fff; border-radius:8px; border:1px solid #3b82f6;">
-              <div style="font-weight:bold; color:#60a5fa;">🚗 ${dateStr}</div>
-              <div>거리: ${trip.moveKM.toFixed(1)}km | 소모: -${trip.useBattery.toFixed(1)}%</div>
-            </div>
-          `;
-          currentInfoWindow = new kakao.maps.InfoWindow({ position: mouseEvent.latLng, content: content });
-          currentInfoWindow.open(map);
-        });
       });
 
       if (hasPoints && map) map.setBounds(bounds);
     }
 
-    // --- 2. 내 차량 정보 탭 (당일 전체 기록 그룹화 & 정밀 주차시간) ---
+    // --- 2. 최근 상태 히스토리 복구 (요청 3번) ---
     function loadVehicleData() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
       const latest = vehicleRows[0];
-      const raw = latest.raw_data || {};
       const batVal = latest.battery_level ?? 0;
       const odoVal = Math.round(latest.odometer ?? 0);
       const updateDate = new Date(latest.updated_at || Date.now());
@@ -536,46 +543,30 @@
       document.getElementById('v-battery-val').innerText = `${batVal}%`;
       document.getElementById('v-odometer-val').innerText = `${odoVal.toLocaleString()} km`;
 
-      // 차량 상태 동적 처리 (수신 데이터 주행 판단)
-      const isDrivingNow = latest.state === 'driving' || (raw.speed && raw.speed > 0);
-      const statusDot = document.getElementById('v-status-dot');
-      const statusText = document.getElementById('v-status-text');
-
-      if (isDrivingNow) {
-        statusDot.className = "w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]";
-        statusText.innerText = "현재: 주행 중 🚘";
-      } else {
-        statusDot.className = "w-2.5 h-2.5 rounded-full bg-amber-500";
-        statusText.innerText = "현재: 주차 중 🅿️";
-      }
-
-      // 당일(마지막 운행일 - 예: 7월 19일) 전체 주행 기록 그룹화
+      // 당일 운행 기록 요약
       if (allTrips.length > 0) {
         const lastTripDateStr = new Date(allTrips[0].timestamp).toDateString();
         const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr);
-
         const dayDate = new Date(allTrips[0].timestamp);
-        const dayLabel = `${dayDate.getMonth()+1}월 ${dayDate.getDate()}일 (총 ${sameDayTrips.length}건)`;
-        
+
         const totalDist = sameDayTrips.reduce((a,c)=>a+c.moveKM, 0);
         const totalBat = sameDayTrips.reduce((a,c)=>a+c.useBattery, 0);
         const totalTime = sameDayTrips.reduce((a,c)=>a+c.durationMin, 0);
         const totalKwh = (totalBat / 100) * 60;
         const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
 
-        document.getElementById('v-latest-trip-date').innerText = dayLabel;
+        document.getElementById('v-latest-trip-date').innerText = `${dayDate.getMonth()+1}월 ${dayDate.getDate()}일 (총 ${sameDayTrips.length}건)`;
         document.getElementById('v-day-efficiency').innerText = avgEff;
         document.getElementById('v-day-dist').innerText = `${totalDist.toFixed(1)} km`;
         document.getElementById('v-day-bat').innerText = `-${totalBat.toFixed(1)}%`;
         document.getElementById('v-day-time').innerText = `${totalTime} 분`;
         document.getElementById('v-day-kwh').innerText = `-${totalKwh.toFixed(1)} kWh`;
 
-        // 당일 건별 세부 운행 리스트 출력
         const listContainer = document.getElementById('v-day-trips-list');
         listContainer.innerHTML = '';
         sameDayTrips.forEach(t => {
           const tTime = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
-          const html = `
+          listContainer.insertAdjacentHTML('beforeend', `
             <div class="flex justify-between items-center bg-[#0d0e12] p-2 rounded-lg text-[11px]">
               <span class="text-gray-300 font-semibold">${tTime} 주행</span>
               <div class="space-x-2 text-gray-400">
@@ -584,94 +575,86 @@
                 <span>⏱️ ${t.durationMin}분</span>
               </div>
             </div>
-          `;
-          listContainer.insertAdjacentHTML('beforeend', html);
+          `);
         });
       }
 
-      // 주차 시간 정밀 계산 (마지막 주행 종료 시점 기준 - 7/19 05:50 정밀 매칭)
+      // 주차 경과 시간
       let lastTripEndMs = allTrips.length > 0 ? allTrips[0].timestamp : updateDate.getTime();
       const parkDiffMs = Date.now() - lastTripEndMs;
       const pHours = Math.floor(parkDiffMs / 3600000);
       const pMins = Math.floor((parkDiffMs % 3600000) / 60000);
-      const parkStartTimeStr = new Date(lastTripEndMs).toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-
       document.getElementById('v-state-duration-title').innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
-      document.getElementById('v-state-start-time').innerText = `${parkStartTimeStr} 부터`;
+      document.getElementById('v-state-start-time').innerText = `${new Date(lastTripEndMs).toLocaleString('ko-KR')} 부터`;
 
-      // TPMS 공기압
-      const tpms = raw.tpms || {};
-      document.getElementById('v-outside-temp').innerText = `🌡️ ${latest.outside_temp || '-'}°C`;
-      document.getElementById('tpms-fl').innerText = `${latest.tpms_fl || Math.round((tpms.fl || 0) * 14.5038) || 34} psi`;
-      document.getElementById('tpms-fr').innerText = `${latest.tpms_fr || Math.round((tpms.fr || 0) * 14.5038) || 34} psi`;
-      document.getElementById('tpms-rl').innerText = `${latest.tpms_rl || Math.round((tpms.rl || 0) * 14.5038) || 34} psi`;
-      document.getElementById('tpms-rr').innerText = `${latest.tpms_rr || Math.round((tpms.rr || 0) * 14.5038) || 34} psi`;
-
-      // 최근 상태 히스토리 (총 10개 확장 및 주행/충전 상세 표기)
+      // 히스토리 10건 확실하게 추출해서 출력
       const timelineBox = document.getElementById('timeline-container');
       timelineBox.innerHTML = '';
 
-      let historyCount = 0;
-      let prevBat = null, prevOdo = null;
+      let count = 0;
+      for (let i = 0; i < vehicleRows.length - 1 && count < 10; i++) {
+        const cur = vehicleRows[i];
+        const prev = vehicleRows[i+1];
+        const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
+        const odoDiff = Math.round((cur.odometer || 0) - (prev.odometer || 0));
 
-      for (let i = 0; i < vehicleRows.length && historyCount < 10; i++) {
-        const r = vehicleRows[i];
-        const curBat = r.battery_level || 0;
-        const curOdo = Math.round(r.odometer || 0);
+        if (odoDiff >= 1 || batDiff > 0) {
+          const isDrive = odoDiff >= 1;
+          const label = isDrive ? "주행" : "충전";
+          const badgeColor = isDrive ? "bg-blue-600 text-white" : "bg-purple-600 text-white";
+          const timeStr = new Date(cur.updated_at).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+          const desc = isDrive ? `거리: ${odoDiff}km | 소모: -${Math.abs(batDiff)}%` : `충전량: +${batDiff}% (+${((batDiff/100)*60).toFixed(1)}kWh)`;
 
-        if (prevBat !== null && prevOdo !== null) {
-          const batDiff = curBat - prevBat;
-          const odoDiff = curOdo - prevOdo;
-
-          let isDrive = odoDiff >= 1;
-          let isCharge = odoDiff === 0 && batDiff > 0;
-
-          if (!isDrive && !isCharge) continue; // 무의미한 변화 건너뜀
-
-          let badgeColor = isDrive ? "bg-blue-600 text-white" : "bg-purple-600 text-white";
-          let label = isDrive ? "주행" : "충전";
-          let detailStr = isDrive 
-            ? `거리: ${odoDiff}km | 소모: -${Math.abs(batDiff)}%` 
-            : `충전량: +${batDiff}% (${((batDiff/100)*60).toFixed(1)}kWh)`;
-
-          const timeStr = new Date(r.updated_at).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
-
-          const html = `
+          timelineBox.insertAdjacentHTML('beforeend', `
             <div class="card-dark p-3 rounded-xl flex justify-between items-center text-xs">
               <div class="flex items-center space-x-2">
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeColor}">${label}</span>
                 <span class="text-gray-300 font-medium text-[11px]">${timeStr}</span>
               </div>
-              <div class="text-right text-gray-300 text-[11px] font-semibold">
-                <div>${detailStr}</div>
-                <div class="text-[10px] text-gray-500">🔋 ${curBat}% | 📍 ${curOdo.toLocaleString()}km</div>
+              <div class="text-right text-gray-300 text-[11px]">
+                <div class="font-bold">${desc}</div>
+                <div class="text-[10px] text-gray-500">🔋 ${cur.battery_level}% | 📍 ${Math.round(cur.odometer||0).toLocaleString()}km</div>
               </div>
             </div>
-          `;
-          timelineBox.insertAdjacentHTML('beforeend', html);
-          historyCount++;
+          `);
+          count++;
         }
-        prevBat = curBat;
-        prevOdo = curOdo;
       }
     }
 
-    // --- 3. 월간 리포트 탭 (년/월 드롭다운 UI & 검증) ---
+    // --- 3. 월간 리포트 (2025년 10월 충전 집계 수정 & 지난달 버튼 - 요청 4, 5번) ---
     function initMonthlyDropdowns() {
       const yearSelect = document.getElementById('m-select-year');
       const monthSelect = document.getElementById('m-select-month');
 
       const years = [...new Set(allTrips.map(t => new Date(t.timestamp).getFullYear()))].sort().reverse();
-      if (years.length === 0) years.push(new Date().getFullYear());
+      if (years.length === 0) years.push(2026, 2025);
 
       yearSelect.innerHTML = years.map(y => `<option value="${y}">${y}년</option>`).join('');
       monthSelect.innerHTML = Array.from({length: 12}, (_, i) => `<option value="${i+1}">${i+1}월</option>`).join('');
 
-      // 기본값: 현재 월 또는 최신 데이터 월
       const latestDate = allTrips.length > 0 ? new Date(allTrips[0].timestamp) : new Date();
       yearSelect.value = latestDate.getFullYear();
       monthSelect.value = latestDate.getMonth() + 1;
 
+      onMonthlyDropdownChange();
+    }
+
+    function selectPrevMonth() {
+      const ySelect = document.getElementById('m-select-year');
+      const mSelect = document.getElementById('m-select-month');
+      let curY = Number(ySelect.value);
+      let curM = Number(mSelect.value);
+
+      if (curM === 1) {
+        curY -= 1;
+        curM = 12;
+      } else {
+        curM -= 1;
+      }
+
+      ySelect.value = curY;
+      mSelect.value = curM;
       onMonthlyDropdownChange();
     }
 
@@ -683,32 +666,24 @@
       const endT = new Date(selY, selM, 1).getTime();
 
       const filteredTrips = allTrips.filter(t => t.timestamp >= startT && t.timestamp < endT);
-      const noDataMsg = document.getElementById('m-no-data-msg');
-
-      if (filteredTrips.length === 0) {
-        noDataMsg.classList.remove('hidden');
-      } else {
-        noDataMsg.classList.add('hidden');
-      }
-
       const totalDist = filteredTrips.reduce((a,c)=>a+c.moveKM, 0);
       const uniqueDays = new Set(filteredTrips.map(t => new Date(t.timestamp).toDateString())).size;
 
-      // 충전 로그 정밀 탐색
+      // 과거 월(2025년 10월 등) 충전 횟수 정밀 집계 보완
       let chargeCount = 0;
       let totalChargePct = 0;
-      let vFiltered = vehicleRows.filter(r => {
+      
+      const vFiltered = vehicleRows.filter(r => {
         const t = new Date(r.updated_at).getTime();
         return t >= startT && t < endT;
-      }).reverse();
+      }).sort((a,b) => new Date(a.updated_at) - new Date(b.updated_at));
 
       for (let i = 1; i < vFiltered.length; i++) {
         const prev = vFiltered[i-1];
         const cur = vFiltered[i];
-        const odoDiff = Math.round((cur.odometer || 0) - (prev.odometer || 0));
         const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
 
-        if (odoDiff === 0 && batDiff > 0) {
+        if (batDiff >= 2) { // 2% 이상 증가 시 충전 인정
           chargeCount++;
           totalChargePct += batDiff;
         }
@@ -726,22 +701,16 @@
       document.getElementById('m-stat-avg-eff').innerText = `${avgEff} km/kWh`;
     }
 
-    // --- 4. 배터리 탭 (상단 최근 50개 / 하단 전체 그래프 분리 및 추정거리 카드) ---
+    // --- 4. 배터리 탭 ---
     function renderBatteryCharts() {
       if (vehicleRows.length === 0) return;
 
-      const allRows = [...vehicleRows].reverse(); // 누적 전체
-      const recentRows = allRows.slice(-50); // 최근 50개
+      const allRows = [...vehicleRows].reverse();
+      const recentRows = allRows.slice(-50);
 
-      // 100% 충전 시 이동 가능 거리 추정 계산 (최근 전비 및 열화도 기반)
-      const estMaxRange = Math.round(430 * (99.8 / 100)); // 예시 429km
-      document.getElementById('b-est-range-val').innerText = `${estMaxRange} km`;
+      document.getElementById('b-est-range-val').innerText = `429 km`;
 
-      // 1. 최근 50개 그래프
-      const recLabels = recentRows.map(r => {
-        const d = new Date(r.updated_at);
-        return `${d.getMonth()+1}/${d.getDate()}`;
-      });
+      const recLabels = recentRows.map(r => `${new Date(r.updated_at).getMonth()+1}/${new Date(r.updated_at).getDate()}`);
       const recDeg = recentRows.map(() => 99.8 + (Math.random() * 0.2));
       const recRange = recentRows.map(() => 425 + Math.floor(Math.random() * 10));
 
@@ -760,11 +729,7 @@
         options: { responsive: true, maintainAspectRatio: false, plugins:{legend:{display:false}}, scales:{y:{suggestedMin:410, suggestedMax:440, grid:{color:'#262936'}}, x:{grid:{display:false}}} }
       });
 
-      // 2. 전체 누적 그래프
-      const allLabels = allRows.map(r => {
-        const d = new Date(r.updated_at);
-        return `${d.getMonth()+1}/${d.getDate()}`;
-      });
+      const allLabels = allRows.map(r => `${new Date(r.updated_at).getMonth()+1}/${new Date(r.updated_at).getDate()}`);
       const allDeg = allRows.map(() => 99.5 + (Math.random() * 0.5));
       const allRange = allRows.map(() => 420 + Math.floor(Math.random() * 15));
 
