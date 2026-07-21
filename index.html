@@ -188,7 +188,21 @@
       });
     }
 
-    // rawData 파싱 통합 유틸리티
+    // 100% 안전한 문서 수집 함수 (쿼리 파라미터 에러 차단)
+    async function fetchDocumentsBulletproof(baseUrl, headers, collectionId) {
+      const url = `${baseUrl}/collections/${collectionId}/documents`;
+      try {
+        const res = await fetch(url, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          return data.documents || [];
+        }
+      } catch(e) {
+        console.error("Fetch Error:", e);
+      }
+      return [];
+    }
+
     function parseDocumentPayload(doc) {
       let res = { ...doc };
       if (typeof doc.rawData === 'string') {
@@ -211,46 +225,38 @@
       const headers = { 'X-Appwrite-Project': configObj.projectId };
       if (configObj.apiKey) headers['X-Appwrite-Key'] = configObj.apiKey;
 
-      // 1. driving 수집
+      // 1. driving 데이터 수집
       try {
-        const res = await fetch(`${base}/collections/driving/documents?queries[0]=limit(100)`, { headers });
-        if (res.ok) {
-          const data = await res.json();
-          (data.documents || []).forEach(doc => {
-            const p = parseDocumentPayload(doc);
-            
-            // 날짜 타임스탬프 정확 파싱 ($createdAt 또는 date ms)
-            let ts = p.date || p.$createdAt;
-            if (typeof ts === 'string' && !isNaN(Date.parse(ts))) ts = new Date(ts).getTime();
-            else ts = Number(ts) || Date.now();
+        const docs = await fetchDocumentsBulletproof(base, headers, 'driving');
+        docs.forEach(doc => {
+          const p = parseDocumentPayload(doc);
+          
+          let ts = p.date || p.$createdAt;
+          if (typeof ts === 'string' && !isNaN(Date.parse(ts))) ts = new Date(ts).getTime();
+          else ts = Number(ts) || Date.now();
 
-            allTrips.push({ 
-              timestamp: ts, 
-              createdAtStr: doc.$createdAt,
-              moveKM: Number(p.moveKM || p.distance || p.drive_km || 0), 
-              useBattery: Number(p.useBattery || p.battery_used || 0),
-              path: p.path || p.locations || p.coords || p.route || []
-            });
+          allTrips.push({ 
+            timestamp: ts, 
+            createdAtStr: doc.$createdAt,
+            moveKM: Number(p.moveKM || p.distance || p.drive_km || 0), 
+            useBattery: Number(p.useBattery || p.battery_used || 0),
+            path: p.path || p.locations || p.coords || p.route || []
           });
-        }
+        });
       } catch (e) { console.error("driving Error:", e); }
 
-      // 2. vehicle_state 수집 (Appwrite 생성시점인 $createdAt 기준 내림차순 정렬)
+      // 2. vehicle_state 데이터 수집 ($createdAt 기준 최신순 정렬)
       try {
-        const vRes = await fetch(`${base}/collections/${VEHICLE_STATE_COLLECTION_ID}/documents?queries[0]=limit(100)`, { headers });
-        if (vRes.ok) {
-          const vData = await vRes.json();
-          const docs = vData.documents || [];
-          if (docs.length > 0) {
-            docs.sort((a, b) => new Date(b.$createdAt).getTime() - new Date(a.$createdAt).getTime());
-            const latestDoc = docs[0];
-            rawVehicleObj = parseDocumentPayload(latestDoc);
-            renderVehicleTab(latestDoc.$createdAt || latestDoc.date);
-          }
+        const vDocs = await fetchDocumentsBulletproof(base, headers, VEHICLE_STATE_COLLECTION_ID);
+        if (vDocs.length > 0) {
+          vDocs.sort((a, b) => new Date(b.$createdAt).getTime() - new Date(a.$createdAt).getTime());
+          const latestDoc = vDocs[0];
+          rawVehicleObj = parseDocumentPayload(latestDoc);
+          renderVehicleTab(latestDoc.$createdAt || latestDoc.date);
         }
       } catch (e) { console.error("vehicle_state Error:", e); }
 
-      // 주행 데이터 최신순 정렬 ($createdAt 우선, 이후 timestamp)
+      // 최신순 정렬
       allTrips.sort((a, b) => new Date(b.createdAtStr || b.timestamp).getTime() - new Date(a.createdAtStr || a.timestamp).getTime());
       statusEl.innerText = `✅ 로드 성공 (주행: ${allTrips.length}개)`;
       
@@ -310,7 +316,6 @@
         return;
       }
 
-      // 날짜(YYYY-MM-DD) 추출
       const uniqueDays = [...new Set(allTrips.map(t => {
         const d = new Date(t.timestamp);
         return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
@@ -413,7 +418,7 @@
       } else {
         document.getElementById('panel-driving').classList.add('hidden');
         document.getElementById('panel-vehicle').classList.remove('hidden');
-        btnVehicle.className = "py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition";
+        btnVehicle.className = "py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition";
         btnDriving.className = "py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition";
         vehicleBrief.classList.remove('hidden');
         drivingFilter.classList.add('hidden');
