@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla & Supabase 대시보드</title>
+  <title>Tesla Telemetry Dashboard</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- CryptoJS (AES 암호화용) -->
@@ -54,7 +54,7 @@
         <!-- 동적 셀렉트 박스 (년/월 선택용) -->
         <div id="ctrl-sub-container" class="hidden flex-col gap-1.5">
           <label id="ctrl-sub-label" class="text-xs text-gray-400">선택</label>
-          <select id="ctrl-select" onchange="loadDrivingData()" class="bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+          <select id="ctrl-select" onchange="renderDrivingData()" class="bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
           </select>
         </div>
 
@@ -70,7 +70,7 @@
           </div>
           <div class="flex justify-between items-center text-sm">
             <span class="text-gray-400">총 배터리 소모</span>
-            <span id="stat-energy" class="font-bold text-yellow-400">- kWh</span>
+            <span id="stat-energy" class="font-bold text-yellow-400">- %</span>
           </div>
         </div>
 
@@ -80,10 +80,8 @@
       </aside>
 
       <!-- 지도 영역 -->
-      <div class="flex-1 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-lg min-h-[450px] relative">
-        <div id="map" class="w-full h-full flex items-center justify-center text-gray-500 text-sm">
-          지도를 불러오는 중...
-        </div>
+      <div class="flex-1 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-lg min-h-[500px] relative">
+        <div id="map" class="w-full h-full min-h-[500px]"></div>
       </div>
     </div>
 
@@ -178,28 +176,28 @@
 
   </main>
 
-  <!-- 3. API 키 설정 입력 모달 (최초 실행 시 또는 설정 변경 시) -->
+  <!-- 3. API 키 설정 입력 모달 -->
   <div id="modal-config" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-6">
       <div class="border-b border-gray-800 pb-3">
         <h3 class="text-lg font-bold text-white flex items-center gap-2">🔑 API & 접속 정보 설정</h3>
-        <p class="text-xs text-gray-400 mt-1">입력된 정보는 AES로 암호화되어 브라우저에 안전하게 저장됩니다.</p>
+        <p class="text-xs text-gray-400 mt-1">정보는 AES로 암호화되어 브라우저에 저장됩니다.</p>
       </div>
 
       <form id="config-form" onsubmit="saveConfig(event)" class="space-y-4">
         <div>
           <label class="block text-xs font-semibold text-gray-300 mb-1">카카오맵 JavaScript API Key</label>
-          <input type="text" id="input-kakao-key" required placeholder="예: 8a7c1b2c..." class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+          <input type="text" id="input-kakao-key" required value="159c5d7588efc5939d431f005912f9f3" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500 font-mono">
         </div>
 
         <div>
           <label class="block text-xs font-semibold text-gray-300 mb-1">Supabase Project URL</label>
-          <input type="url" id="input-supabase-url" required placeholder="https://xxxx.supabase.co" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+          <input type="url" id="input-supabase-url" required placeholder="https://xxxx.supabase.co" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500 font-mono">
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-gray-300 mb-1">Supabase Anon Key</label>
-          <input type="password" id="input-supabase-key" required placeholder="eyJh..." class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+          <label class="block text-xs font-semibold text-gray-300 mb-1">Supabase Service Role / Anon Key</label>
+          <input type="password" id="input-supabase-key" required placeholder="eyJh..." class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500 font-mono">
         </div>
 
         <div class="pt-2 flex gap-2">
@@ -211,18 +209,15 @@
     </div>
   </div>
 
-  <!-- 자바스크립트 로직 -->
   <script>
-    // AES 암호화 복호화 키 (고유 비밀키)
     const SECRET_SALT = "Tesla_Supabase_Dashboard_2026_Secure_Key";
 
-    let configObj = { kakaoKey: '', url: '', key: '' };
+    let configObj = { kakaoKey: '159c5d7588efc5939d431f005912f9f3', url: '', key: '' };
     let map = null;
     let allTrips = [];
     let currentPolylines = [];
-    const strokeColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+    const strokeColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
-    // 페이지 진입 시 실행
     window.addEventListener('DOMContentLoaded', () => {
       const loaded = loadConfig();
       if (!loaded) {
@@ -232,7 +227,6 @@
       }
     });
 
-    // 암호화 유틸
     function encryptData(text) {
       return CryptoJS.AES.encrypt(text, SECRET_SALT).toString();
     }
@@ -246,7 +240,6 @@
       }
     }
 
-    // 설정 로드
     function loadConfig() {
       const encryptedData = localStorage.getItem('tesla_dashboard_config');
       if (!encryptedData) return false;
@@ -262,7 +255,6 @@
       }
     }
 
-    // 설정 저장
     function saveConfig(e) {
       e.preventDefault();
       const kakaoKey = document.getElementById('input-kakao-key').value.trim();
@@ -274,7 +266,7 @@
       localStorage.setItem('tesla_dashboard_config', encrypted);
 
       document.getElementById('modal-config').classList.add('hidden');
-      location.reload(); // 키 저장 후 페이지 새로고침으로 SDK 재로드
+      location.reload();
     }
 
     function openConfigModal() {
@@ -284,7 +276,6 @@
       document.getElementById('modal-config').classList.remove('hidden');
     }
 
-    // 대시보드 초기화 (동적 카카오 SDK 로딩)
     function initDashboard() {
       loadKakaoSdk(configObj.kakaoKey, () => {
         initMap();
@@ -293,26 +284,24 @@
       });
     }
 
-    // 카카오 지도 SDK 동적 로딩
     function loadKakaoSdk(appKey, callback) {
       if (window.kakao && window.kakao.maps) {
-        callback();
+        kakao.maps.load(callback);
         return;
       }
       const script = document.createElement('script');
       script.type = 'text/javascript';
-      script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false`;
+      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false`;
       script.onload = () => {
         kakao.maps.load(callback);
       };
       script.onerror = () => {
-        alert("카카오맵 API 키가 올바르지 않거나 동메인 허용 설정이 맞지 않습니다.");
+        alert("카카오맵 API 키가 올바르지 않거나 Kakao Developers의 Web 도메인(https://mdkdw1-ui.github.io) 설정이 맞지 않습니다.");
         openConfigModal();
       };
       document.head.appendChild(script);
     }
 
-    // 탭 전환
     function switchTab(tabName) {
       const btnDriving = document.getElementById('btn-tab-driving');
       const btnVehicle = document.getElementById('btn-tab-vehicle');
@@ -324,7 +313,7 @@
         btnVehicle.className = "px-4 py-2 text-sm font-semibold rounded-lg bg-gray-800 text-gray-400 hover:text-white transition";
         panelDriving.classList.remove('hidden');
         panelVehicle.classList.add('hidden');
-        if (map) map.relayout();
+        if (map) setTimeout(() => map.relayout(), 100);
       } else {
         btnVehicle.className = "px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white transition";
         btnDriving.className = "px-4 py-2 text-sm font-semibold rounded-lg bg-gray-800 text-gray-400 hover:text-white transition";
@@ -334,18 +323,15 @@
       }
     }
 
-    // 카카오맵 초기화
     function initMap() {
       const container = document.getElementById('map');
-      container.innerHTML = '';
       const options = {
         center: new kakao.maps.LatLng(37.5665, 126.9780),
-        level: 7
+        level: 5
       };
       map = new kakao.maps.Map(container, options);
     }
 
-    // Supabase REST API 통신 (Range: 0-4999 적용)
     async function fetchSupabaseTable(queryPath) {
       if (!configObj.url || !configObj.key) return [];
       const endpoint = `${configObj.url}/rest/v1/${queryPath}`;
@@ -364,12 +350,10 @@
       }
     }
 
-    // --- [주행 데이터 관련] ---
+    // --- [주행 데이터 처리] ---
     async function loadDrivingData() {
-      if (allTrips.length === 0) {
-        allTrips = await fetchSupabaseTable('driving?order=created_at.desc');
-        populateSubSelectorOptions();
-      }
+      allTrips = await fetchSupabaseTable('driving?order=created_at.desc');
+      populateSubSelectorOptions();
       renderDrivingData();
     }
 
@@ -393,7 +377,7 @@
 
       if (mode === 'yearly') {
         subLabel.innerText = '년도 선택';
-        const years = [...new Set(allTrips.map(t => new Date(t.timestamp || t.created_at).getFullYear()))].filter(y => !isNaN(y)).sort((a,b)=>b-a);
+        const years = [...new Set(allTrips.map(t => new Date(t.created_at).getFullYear()))].filter(y => !isNaN(y)).sort((a,b)=>b-a);
         years.forEach(y => {
           const opt = document.createElement('option');
           opt.value = y; opt.innerText = `${y}년`;
@@ -402,7 +386,7 @@
       } else if (mode === 'monthly') {
         subLabel.innerText = '월 선택';
         const months = [...new Set(allTrips.map(t => {
-          const d = new Date(t.timestamp || t.created_at);
+          const d = new Date(t.created_at);
           return !isNaN(d.getTime()) ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` : null;
         }))].filter(Boolean).sort().reverse();
         months.forEach(m => {
@@ -413,16 +397,31 @@
       }
     }
 
+    function extractLatLng(pt) {
+      if (!pt) return null;
+      let lat = pt.latitude || pt.lat || pt.y;
+      let lng = pt.longitude || pt.lng || pt.x;
+
+      if (Array.isArray(pt) && pt.length >= 2) {
+        lat = pt[0]; lng = pt[1];
+      }
+
+      if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+        return new kakao.maps.LatLng(Number(lat), Number(lng));
+      }
+      return null;
+    }
+
     function renderDrivingData() {
       const mode = document.getElementById('ctrl-mode').value;
       const subVal = document.getElementById('ctrl-select').value;
 
       let matched = allTrips;
       if (mode === 'yearly') {
-        matched = allTrips.filter(t => String(new Date(t.timestamp || t.created_at).getFullYear()) === subVal);
+        matched = allTrips.filter(t => String(new Date(t.created_at).getFullYear()) === subVal);
       } else if (mode === 'monthly') {
         matched = allTrips.filter(t => {
-          const d = new Date(t.timestamp || t.created_at);
+          const d = new Date(t.created_at);
           const mStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
           return mStr === subVal;
         });
@@ -430,12 +429,12 @@
 
       // HUD 업데이트
       document.getElementById('stat-count').innerText = `${matched.length} 건`;
-      const totalDist = matched.reduce((acc, cur) => acc + (Number(cur.distance) || 0), 0);
-      document.getElementById('stat-distance').innerText = `${totalDist.toFixed(1)} km`;
-      const totalEnergy = matched.reduce((acc, cur) => acc + (Number(cur.energy_used) || 0), 0);
-      document.getElementById('stat-energy').innerText = `${totalEnergy.toFixed(1)} kWh`;
+      const totalDist = matched.reduce((acc, cur) => acc + (Number(cur.move_km) || 0), 0);
+      document.getElementById('stat-distance').innerText = `${totalDist.toFixed(2)} km`;
+      const totalBat = matched.reduce((acc, cur) => acc + (Number(cur.use_battery) || 0), 0);
+      document.getElementById('stat-energy').innerText = `${totalBat.toFixed(1)} %`;
 
-      // 지도 상 경로 다시 그리기
+      // 지도 초기화 후 다시 그리기
       currentPolylines.forEach(p => p.setMap(null));
       currentPolylines = [];
 
@@ -444,24 +443,31 @@
       let hasCoords = false;
 
       matched.forEach((trip, idx) => {
-        let coords = trip.path || trip.coordinates;
-        if (typeof coords === 'string') {
-          try { coords = JSON.parse(coords); } catch(e) { coords = []; }
+        let rawPath = trip.location_list;
+        if (typeof rawPath === 'string') {
+          try { rawPath = JSON.parse(rawPath); } catch(e){ rawPath = []; }
         }
 
-        if (Array.isArray(coords) && coords.length > 0) {
-          const linePath = coords.map(c => new kakao.maps.LatLng(c.lat || c[0], c.lng || c[1]));
-          linePath.forEach(latlng => bounds.extend(latlng));
-          hasCoords = true;
+        if (Array.isArray(rawPath) && rawPath.length > 0) {
+          const linePath = rawPath.map(pt => {
+            const loc = extractLatLng(pt);
+            if (loc) {
+              bounds.extend(loc);
+              hasCoords = true;
+            }
+            return loc;
+          }).filter(Boolean);
 
-          const polyline = new kakao.maps.Polyline({
-            path: linePath,
-            strokeWeight: 4,
-            strokeColor: strokeColors[idx % strokeColors.length],
-            strokeOpacity: 0.8
-          });
-          polyline.setMap(map);
-          currentPolylines.push(polyline);
+          if (linePath.length > 0) {
+            const polyline = new kakao.maps.Polyline({
+              path: linePath,
+              strokeWeight: 4,
+              strokeColor: strokeColors[idx % strokeColors.length],
+              strokeOpacity: 0.8
+            });
+            polyline.setMap(map);
+            currentPolylines.push(polyline);
+          }
         }
       });
 
@@ -470,30 +476,31 @@
       }
     }
 
-    // --- [내 차량 정보 로직] ---
+    // --- [내 차량 정보 처리] ---
     async function loadVehicleData() {
-      const data = await fetchSupabaseTable('vehicle?order=created_at.desc&limit=1');
+      const data = await fetchSupabaseTable('vehicle?order=updated_at.desc&limit=1');
       if (data && data.length > 0) {
         const v = data[0];
+        const raw = v.raw_data || {};
         
-        document.getElementById('v-last-update').innerText = `최신 동기화: ${new Date(v.created_at || v.timestamp).toLocaleString()}`;
-        document.getElementById('v-state-badge').innerText = v.state || 'ONLINE';
+        document.getElementById('v-last-update').innerText = `최신 동기화: ${new Date(v.updated_at || v.created_at).toLocaleString()}`;
+        document.getElementById('v-state-badge').innerText = (v.state || 'ONLINE').toUpperCase();
         document.getElementById('v-state-badge').className = "px-3 py-1 text-xs font-bold rounded-full bg-green-900/60 text-green-400 border border-green-700";
 
-        document.getElementById('v-state-text').innerText = v.state || '-';
+        document.getElementById('v-state-text').innerText = v.state ? String(v.state).toUpperCase() : '-';
         document.getElementById('v-odometer').innerText = `${v.odometer ? Number(v.odometer).toLocaleString() : '-'} km`;
         document.getElementById('v-battery').innerText = `${v.battery_level ?? '-'}%`;
-        document.getElementById('v-temp').innerText = `${v.outside_temp ?? '-'}℃`;
+        document.getElementById('v-temp').innerText = `${raw.outside_temp || raw.ambient_temp || '-'}℃`;
 
-        document.getElementById('v-eff-val').innerText = v.efficiency ? `${v.efficiency} km/kWh` : '-';
-        document.getElementById('v-eff-energy').innerText = v.energy_used ? `${v.energy_used} kWh` : '-';
-        document.getElementById('v-eff-capacity').innerText = v.nominal_full_pack_energy ? `${v.nominal_full_pack_energy} kWh` : '-';
-        document.getElementById('v-gear').innerText = v.gear || 'P';
+        document.getElementById('v-eff-val').innerText = raw.efficiency ? `${raw.efficiency} km/kWh` : '-';
+        document.getElementById('v-eff-energy').innerText = raw.energy_used ? `${raw.energy_used} kWh` : '-';
+        document.getElementById('v-eff-capacity').innerText = raw.nominal_full_pack_energy ? `${raw.nominal_full_pack_energy} kWh` : '-';
+        document.getElementById('v-gear').innerText = raw.gear_shift || raw.gear || 'P';
 
-        document.getElementById('tire-fl').innerText = v.tpms_pressure_fl ? `${v.tpms_pressure_fl} PSI` : '-';
-        document.getElementById('tire-fr').innerText = v.tpms_pressure_fr ? `${v.tpms_pressure_fr} PSI` : '-';
-        document.getElementById('tire-rl').innerText = v.tpms_pressure_rl ? `${v.tpms_pressure_rl} PSI` : '-';
-        document.getElementById('tire-rr').innerText = v.tpms_pressure_rr ? `${v.tpms_pressure_rr} PSI` : '-';
+        document.getElementById('tire-fl').innerText = v.tpms_fl !== undefined ? `${v.tpms_fl} PSI` : '-';
+        document.getElementById('tire-fr').innerText = v.tpms_fr !== undefined ? `${v.tpms_fr} PSI` : '-';
+        document.getElementById('tire-rl').innerText = v.tpms_rl !== undefined ? `${v.tpms_rl} PSI` : '-';
+        document.getElementById('tire-rr').innerText = v.tpms_rr !== undefined ? `${v.tpms_rr} PSI` : '-';
       }
     }
   </script>
