@@ -22,12 +22,20 @@
       <h2 class="text-2xl font-bold text-blue-500 mb-2 text-center">🗺️ Appwrite 자립형 인프라 설정</h2>
       <div class="space-y-4">
         <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Endpoint</label>
+          <input type="text" id="cfg-endpoint" value="https://sgp.cloud.appwrite.io/v1" placeholder="https://sgp.cloud.appwrite.io/v1" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+        </div>
+        <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Project ID</label>
           <input type="text" id="cfg-projectId" placeholder="Project ID 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite Database ID</label>
           <input type="text" id="cfg-dbId" placeholder="Database ID 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Appwrite API Key (Client / Admin)</label>
+          <input type="password" id="cfg-apiKey" placeholder="Appwrite API Key 입력" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none font-mono">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Kakao JavaScript API Key</label>
@@ -84,7 +92,7 @@
         </div>
       </div>
 
-      <!-- 탭 2 (Appwrite 전용 디코드 바인딩) -->
+      <!-- 탭 2 -->
       <div id="panel-vehicle" class="hidden flex-1 space-y-4">
         <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 space-y-6">
           <div class="flex justify-between items-center">
@@ -128,6 +136,7 @@
 
   <script>
     const STORAGE_CONFIG_KEY = "secure_tesla_appwrite_tokens";
+    const VEHICLE_STATE_COLLECTION_ID = "6a5e4796003794d2ffff"; // vehicle_state Collection ID
     let configObj = null, allTrips = [], rawVehicleObj = null, map;
 
     window.onload = function() {
@@ -145,8 +154,10 @@
 
     function saveAndEncryptConfig() {
       const config = {
+        endpoint: document.getElementById('cfg-endpoint').value.trim() || 'https://sgp.cloud.appwrite.io/v1',
         projectId: document.getElementById('cfg-projectId').value.trim(),
         dbId: document.getElementById('cfg-dbId').value.trim(),
+        apiKey: document.getElementById('cfg-apiKey').value.trim(),
         kakaoKey: document.getElementById('cfg-kakaoKey').value.trim()
       };
       localStorage.setItem(STORAGE_CONFIG_KEY, CryptoJS.AES.encrypt(JSON.stringify(config), "emillie00").toString());
@@ -178,35 +189,50 @@
       statusEl.innerText = "📥 Appwrite 데이터 수집 중...";
       allTrips = []; rawVehicleObj = null;
 
-      const base = `https://cloud.appwrite.io/v1/databases/${configObj.dbId}`;
+      const base = `${configObj.endpoint}/databases/${configObj.dbId}`;
+      const headers = {
+        'X-Appwrite-Project': configObj.projectId,
+        'X-Appwrite-Key': configObj.apiKey
+      };
 
-      // 1. driving 가져오기
+      // 1. driving 수집
       try {
-        const res = await fetch(`${base}/collections/driving/documents?queries[]=limit(100)`, {
-          headers: { 'X-Appwrite-Project': configObj.projectId }
-        });
-        const dData = await res.json();
-        (dData.documents || []).forEach(doc => {
-          const parsed = JSON.parse(doc.rawData || "{}");
-          allTrips.push({ timestamp: doc.date, moveKM: Number(parsed.moveKM || 0), useBattery: Number(parsed.useBattery || 0) });
-        });
+        const res = await fetch(`${base}/collections/driving/documents`, { headers });
+        if (res.ok) {
+          const dData = await res.json();
+          (dData.documents || []).forEach(doc => {
+            const parsed = typeof doc.rawData === 'string' ? JSON.parse(doc.rawData || "{}") : (doc.rawData || {});
+            allTrips.push({ 
+              timestamp: doc.date, 
+              moveKM: Number(parsed.moveKM || parsed.distance || 0), 
+              useBattery: Number(parsed.useBattery || parsed.battery_used || 0) 
+            });
+          });
+        } else {
+          console.error("driving Fetch Error:", await res.text());
+        }
       } catch (e) { console.error(e); }
 
-      // 2. vehicle_state 최신 1건 가져오기
+      // 2. vehicle_state 수집 (최신 1건)
       try {
-        const res = await fetch(`${base}/collections/vehicle_state/documents?queries[]=orderDesc("date")&queries[]=limit(1)`, {
-          headers: { 'X-Appwrite-Project': configObj.projectId }
-        });
-        const vData = await res.json();
-        if (vData.documents && vData.documents.length > 0) {
-          rawVehicleObj = JSON.parse(vData.documents[0].rawData || "{}");
-          renderVehicleTab(vData.documents[0].date);
+        const res = await fetch(`${base}/collections/${VEHICLE_STATE_COLLECTION_ID}/documents`, { headers });
+        if (res.ok) {
+          const vData = await res.json();
+          if (vData.documents && vData.documents.length > 0) {
+            // date 기준 최신 데이터 추출
+            const latestDoc = vData.documents.sort((a, b) => (b.date || 0) - (a.date || 0))[0];
+            rawVehicleObj = typeof latestDoc.rawData === 'string' ? JSON.parse(latestDoc.rawData || "{}") : (latestDoc.rawData || {});
+            renderVehicleTab(latestDoc.date);
+          }
+        } else {
+          console.error("vehicle_state Fetch Error:", await res.text());
         }
       } catch (e) { console.error(e); }
 
       allTrips.sort((a, b) => b.timestamp - a.timestamp);
       statusEl.innerText = `✅ 로드 성공 (주행: ${allTrips.length}개)`;
       setFilterMode('daily');
+      updateHUD();
     }
 
     function findKeyAdaptive(targetKey) {
@@ -214,7 +240,7 @@
       let foundValue = null;
       function deepSearch(obj) {
         if (foundValue !== null || !obj || typeof obj !== 'object') return;
-        if (obj[targetKey] !== undefined) { foundValue = obj[targetKey]; return; }
+        if (obj[targetKey] !== undefined && obj[targetKey] !== null) { foundValue = obj[targetKey]; return; }
         for (const k of Object.keys(obj)) { deepSearch(obj[k]); }
       }
       deepSearch(rawVehicleObj);
@@ -224,10 +250,10 @@
     function renderVehicleTab(detectedTime) {
       if (!rawVehicleObj) return;
 
-      document.getElementById('v-last-update').innerText = `동기화 시점: ${new Date(detectedTime).toLocaleString('ko-KR')}`;
+      document.getElementById('v-last-update').innerText = `동기화 시점: ${detectedTime ? new Date(detectedTime).toLocaleString('ko-KR') : '-'}`;
       
-      const stateStr = findKeyAdaptive('state') || findKeyAdaptive('charging_state');
-      document.getElementById('v-state-text').innerText = stateStr === 'Asleep' || stateStr === 'Offline' ? '📴 오프라인' : `🟢 ${stateStr}`;
+      const stateStr = findKeyAdaptive('state') || findKeyAdaptive('charging_state') || 'Online';
+      document.getElementById('v-state-text').innerText = (stateStr === 'Asleep' || stateStr === 'Offline') ? '📴 오프라인' : `🟢 ${stateStr}`;
       document.getElementById('brief-state').innerText = stateStr;
 
       const rawOdo = findKeyAdaptive('odometer');
@@ -250,6 +276,18 @@
       document.getElementById('v-tire-temp').innerText = `${findKeyAdaptive('outside_temp') || '30.0'}°C`;
     }
 
+    function updateHUD() {
+      let totalDist = 0;
+      let totalBat = 0;
+      allTrips.forEach(t => {
+        totalDist += t.moveKM;
+        totalBat += t.useBattery;
+      });
+      document.getElementById('hud-distance').innerText = `${totalDist.toFixed(2)} km`;
+      document.getElementById('hud-count').innerText = `${allTrips.length}회`;
+      document.getElementById('hud-battery').innerText = `${totalBat.toFixed(1)}%`;
+    }
+
     function setFilterMode(mode) {
       const container = document.getElementById('dynamicDateInputs');
       if (allTrips.length === 0) {
@@ -262,12 +300,25 @@
 
     function initMap() { if(!map) map = new kakao.maps.Map(document.getElementById('map'), { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 5 }); }
     function switchTab(tabName) {
+      const btnDriving = document.getElementById('btn-tab-driving');
+      const btnVehicle = document.getElementById('btn-tab-vehicle');
+      const vehicleBrief = document.getElementById('vehicleBriefSection');
+      const drivingFilter = document.getElementById('drivingFilterSection');
+
       if (tabName === 'driving') {
         document.getElementById('panel-driving').classList.remove('hidden');
         document.getElementById('panel-vehicle').classList.add('hidden');
+        btnDriving.className = "py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition";
+        btnVehicle.className = "py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition";
+        vehicleBrief.classList.add('hidden');
+        drivingFilter.classList.remove('hidden');
       } else {
         document.getElementById('panel-driving').classList.add('hidden');
         document.getElementById('panel-vehicle').classList.remove('hidden');
+        btnVehicle.className = "py-2 text-xs font-bold rounded bg-gray-800 text-blue-400 transition";
+        btnDriving.className = "py-2 text-xs font-bold rounded text-gray-400 hover:text-white transition";
+        vehicleBrief.classList.remove('hidden');
+        drivingFilter.classList.add('hidden');
       }
     }
     function resetAppConfig() { localStorage.removeItem(STORAGE_CONFIG_KEY); location.reload(); }
