@@ -31,7 +31,7 @@
     </div>
   </header>
 
-  <!-- Navigation Tabs (순서 변경: 내 차량 정보가 첫 번째) -->
+  <!-- Navigation Tabs -->
   <div class="bg-[#12141c] border-b border-gray-800 px-2 py-2 flex justify-around text-xs font-semibold overflow-x-auto">
     <button onclick="switchTab('vehicle')" id="btn-tab-vehicle" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition whitespace-nowrap">🚗 차량정보</button>
     <button onclick="switchTab('driving')" id="btn-tab-driving" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap">🗺️ 주행지도</button>
@@ -41,7 +41,7 @@
 
   <main class="flex-1 p-3 md:p-6 max-w-2xl mx-auto w-full flex flex-col gap-4">
 
-    <!-- 1. 내 차량 정보 탭 (첫 번째 화면) -->
+    <!-- 1. 내 차량 정보 탭 -->
     <div id="panel-vehicle" class="space-y-4">
       <div class="flex justify-between items-center px-1">
         <h2 class="text-lg font-extrabold text-white">최근 차량 상태</h2>
@@ -111,12 +111,11 @@
       </div>
     </div>
 
-    <!-- 2. 주행 지도 탭 (두 번째 화면) -->
+    <!-- 2. 주행 지도 탭 -->
     <div id="panel-driving" class="hidden flex-1 flex flex-col gap-3">
       <div class="card-dark rounded-2xl p-4 flex flex-col gap-3">
         <span class="text-xs font-bold text-gray-400">📅 조회 기간 및 상세 조건</span>
         
-        <!-- 기간 선택 버튼 -->
         <div class="flex gap-1.5 overflow-x-auto pb-1 text-xs">
           <button onclick="setFilterMode('single')" id="btn-mode-single" class="px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold whitespace-nowrap">단일운행</button>
           <button onclick="setFilterMode('daily')" id="btn-mode-daily" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">일간</button>
@@ -127,14 +126,12 @@
           <button onclick="setFilterMode('yearly')" id="btn-mode-yearly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">년</button>
         </div>
 
-        <!-- 동적 세부 드롭다운 + 화살표 이동 버튼 영역 -->
         <div class="flex items-center gap-2">
           <button onclick="shiftDrivingFilter(-1)" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold rounded-xl text-xs transition">◀</button>
           <div id="dynamicFilterControls" class="flex-1"></div>
           <button onclick="shiftDrivingFilter(1)" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold rounded-xl text-xs transition">▶</button>
         </div>
 
-        <!-- 요약 통계 -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#0d0e12] p-3 rounded-xl text-center text-xs border border-gray-800/80">
           <div><span class="text-gray-500 block text-[10px]">운행건수</span><span id="stat-count" class="font-bold text-blue-400">-</span></div>
           <div><span class="text-gray-500 block text-[10px]">이동거리</span><span id="stat-distance" class="font-bold text-green-400">-</span></div>
@@ -143,7 +140,6 @@
         </div>
       </div>
 
-      <!-- 지도 -->
       <div class="card-dark rounded-2xl overflow-hidden w-full aspect-[4/3] relative border border-gray-800 shadow-lg">
         <div id="map" class="w-full h-full"></div>
       </div>
@@ -379,6 +375,43 @@
       } catch (err) { return []; }
     }
 
+    // driving_time 텍스트("12분", "1시간2분" 등)를 파싱하여 총 분(minutes) 숫자로 변환하는 함수
+    function parseDrivingTimeToMinutes(val) {
+      if (!val) return 0;
+      if (typeof val === 'number') return Math.round(val);
+      let str = String(val).trim();
+      let totalMins = 0;
+
+      // 시간 추출 (예: "1시간 2분" 또는 "1시간2분")
+      const hourMatch = str.match(/(\d+)\s*시간/);
+      if (hourMatch) {
+        totalMins += parseInt(hourMatch[1], 10) * 60;
+      }
+
+      // 분 추출 (예: "31분", 또는 시간 뒤에 오는 "2분")
+      const minMatch = str.match(/(\d+)\s*분/);
+      if (minMatch) {
+        // 만약 시간과 분이 같이 있을 때 뒤쪽 분 숫자를 정확히 잡기 위함
+        const matches = str.matchAll(/(\d+)\s*(시간|분)/g);
+        let foundMin = false;
+        for (const match of matches) {
+          if (match[2] === '분') {
+            totalMins += parseInt(match[1], 10);
+            foundMin = true;
+          }
+        }
+        if (!foundMin) {
+          totalMins += parseInt(minMatch[1], 10);
+        }
+      } else if (!hourMatch) {
+        // "분"이나 "시간" 글자가 없고 숫자만 있는 경우
+        const numOnly = parseFloat(str);
+        if (!isNaN(numOnly)) totalMins = Math.round(numOnly);
+      }
+
+      return totalMins > 0 ? totalMins : 15; // 기본값 Fallback
+    }
+
     async function loadAllData() {
       const [drivingRes, vehicleRes] = await Promise.all([
         fetchSupabaseTable('driving?order=created_at.desc'),
@@ -390,19 +423,23 @@
         if (typeof pathData === 'string') {
           try { pathData = JSON.parse(pathData); } catch(e) { pathData = []; }
         }
+        
+        // driving_time 컬럼을 직접 읽어서 분 단위 숫자로 변환
+        const rawTimeStr = r.driving_time ?? r.duration_min ?? r.duration ?? r.drive_time ?? r.time;
+        const dMin = parseDrivingTimeToMinutes(rawTimeStr);
+
         return {
           id: r.id,
           timestamp: new Date(r.created_at || Date.now()).getTime(),
           moveKM: Number(r.move_km || 0),
           useBattery: Number(r.use_battery || 0),
-          durationMin: Number(r.duration_min || r.duration || 15),
+          durationMin: dMin,
           path: pathData
         };
       });
 
       vehicleRows = vehicleRes || [];
       
-      // 첫 화면 기본값: 내 차량 정보
       switchTab('vehicle');
       setFilterMode('daily');
       loadVehicleData();
@@ -493,21 +530,13 @@
         let m = Number(mSel.value);
         let w = Number(wSel.value) + offset;
 
-        if (w < 1) {
-          m -= 1;
-          if (m < 1) { m = 12; y -= 1; }
-          w = 5;
-        } else if (w > 5) {
-          m += 1;
-          if (m > 12) { m = 1; y += 1; }
-          w = 1;
-        }
+        if (w < 1) { m -= 1; if (m < 1) { m = 12; y -= 1; } w = 5; }
+        else if (w > 5) { m += 1; if (m > 12) { m = 1; y += 1; } w = 1; }
 
         if (ySel) ySel.value = y;
         if (mSel) mSel.value = m;
         if (wSel) wSel.value = w;
         renderDrivingData();
-
       } else if (currentFilterMode === 'monthly') {
         const ySel = document.getElementById('ctrl-year');
         const mSel = document.getElementById('ctrl-month');
@@ -521,7 +550,6 @@
         if (ySel) ySel.value = y;
         if (mSel) mSel.value = m;
         renderDrivingData();
-
       } else if (currentFilterMode === 'quarterly') {
         const ySel = document.getElementById('ctrl-year');
         const qSel = document.getElementById('ctrl-quarter');
@@ -535,7 +563,6 @@
         if (ySel) ySel.value = y;
         if (qSel) qSel.value = q;
         renderDrivingData();
-
       } else if (currentFilterMode === 'half') {
         const ySel = document.getElementById('ctrl-year');
         const hSel = document.getElementById('ctrl-half');
@@ -544,17 +571,14 @@
         let h = Number(hSel.value);
 
         if (offset === -1) {
-          if (h === 1) { h = 2; y -= 1; }
-          else { h = 1; }
+          if (h === 1) { h = 2; y -= 1; } else { h = 1; }
         } else {
-          if (h === 2) { h = 1; y += 1; }
-          else { h = 2; }
+          if (h === 2) { h = 1; y += 1; } else { h = 2; }
         }
 
         if (ySel) ySel.value = y;
         if (hSel) hSel.value = h;
         renderDrivingData();
-
       } else if (currentFilterMode === 'yearly') {
         const ySel = document.getElementById('ctrl-year');
         if (ySel && ySel.selectedIndex !== -1) {
@@ -658,7 +682,6 @@
         polyline.setMap(map);
         currentPolylines.push(polyline);
 
-        // 지도 선 클릭 시 언제 기록인지 팝업창(InfoWindow) 출력
         kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
           if (currentInfoWindow) currentInfoWindow.close();
 
@@ -671,6 +694,7 @@
               <div style="font-weight:bold; color:#60A5FA; margin-bottom:4px;">🕒 ${tripDate}</div>
               <div>📍 이동 거리: <b>${trip.moveKM.toFixed(1)} km</b></div>
               <div>🔋 소모 배터리: <b>-${trip.useBattery.toFixed(1)}%</b></div>
+              <div>⏱️ 주행 시간: <b>${trip.durationMin}분</b></div>
             </div>
           `;
 
@@ -698,7 +722,6 @@
       document.getElementById('v-battery-val').innerText = `${batVal}%`;
       document.getElementById('v-odometer-val').innerText = `${odoVal.toLocaleString()} km`;
 
-      // TPMS 타이어 공기압 추출
       let rawObj = latest.raw_data;
       if (typeof rawObj === 'string') {
         try { rawObj = JSON.parse(rawObj); } catch(e) { rawObj = {}; }
@@ -716,7 +739,6 @@
       document.getElementById('tpms-rl').innerText = `${toPsi(rl)} psi`;
       document.getElementById('tpms-rr').innerText = `${toPsi(rr)} psi`;
 
-      // 당일 운행 기록 요약
       if (allTrips.length > 0) {
         const lastTripDateStr = new Date(allTrips[0].timestamp).toDateString();
         const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr);
@@ -752,7 +774,6 @@
         });
       }
 
-      // 주차 경과 시간 계산
       let lastTripEndMs = allTrips.length > 0 ? allTrips[0].timestamp : updateDate.getTime();
       let parkingBaseMs = Math.max(lastTripEndMs, updateDate.getTime());
       const parkDiffMs = Math.max(0, Date.now() - parkingBaseMs);
@@ -761,7 +782,6 @@
       document.getElementById('v-state-duration-title').innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
       document.getElementById('v-state-start-time').innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
 
-      // 최근 상태 히스토리
       const timelineBox = document.getElementById('timeline-container');
       timelineBox.innerHTML = '';
 
