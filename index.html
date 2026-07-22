@@ -374,8 +374,8 @@
           <input type="password" id="input-gh-token" placeholder="ghp_xxxx..." class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
         <div>
-          <label class="block text-gray-400 mb-1">Tesla Vehicle ID / VIN</label>
-          <input type="text" id="input-vehicle-id" placeholder="차량 ID 입력" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
+          <label class="block text-gray-400 mb-1">Tesla Vehicle ID (숫자 ID)</label>
+          <input type="text" id="input-vehicle-id" placeholder="차량 숫자 ID 입력 (VIN 아님)" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
         <div>
           <label class="block text-gray-400 mb-1">ntfy 알림 토픽</label>
@@ -402,7 +402,6 @@
     
     const VERCEL_BACKEND_URL = "https://my-tesla-app-six.vercel.app/api/exchange"; 
     const CLIENT_ID = "272ac00a-248e-4fa7-8027-1fc06e8e9a24";
-    // 🔥 GitHub Pages 정확한 배포 주소로 설정
     const REDIRECT_URI = "https://mdkdw1-ui.github.io/tesla-dash";
 
     let accessToken = localStorage.getItem('tesla_access_token') || "";
@@ -630,6 +629,7 @@
       } catch (err) { addLog(`❌ [ERR-TOKEN-02] 백엔드 통신 오류: ${err.message}`); }
     }
 
+    // 🔥 안드로이드 코틀린 앱과의 브릿지 연동
     async function handleToggleChange(checkbox) {
       const labelText = document.getElementById('toggleLabelText');
 
@@ -641,12 +641,25 @@
           labelText.innerText = '기능 ON';
           labelText.style.color = '#10b981';
           addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언을 구동합니다.');
+
+          // 코틀린 안드로이드 네이티브 서비스 호출
+          if (window.AndroidBridge) {
+            const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
+            const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
+            window.AndroidBridge.startGuardianService(accessToken, configObj.vehicleId, interval, topic);
+          }
+
           startMonitoring();
         } else {
           checkbox.checked = false;
           labelText.innerText = '기능 OFF';
           labelText.style.color = '#aaa';
           stopMonitoring();
+
+          if (window.AndroidBridge) {
+            window.AndroidBridge.stopGuardianService();
+          }
+
           addLog(`🛑 [감시모드 중단] 사유 코드: ${sentryResult.errorCode}`);
           addLog(`💡 진단 상세: ${sentryResult.errorMessage}`);
           alert(`차량 감시 모드를 활성화할 수 없습니다.\n오류 코드: ${sentryResult.errorCode}\n${sentryResult.errorMessage}`);
@@ -654,6 +667,11 @@
       } else {
         labelText.innerText = '기능 OFF';
         labelText.style.color = '#aaa';
+
+        if (window.AndroidBridge) {
+          window.AndroidBridge.stopGuardianService();
+        }
+
         stopMonitoring();
       }
     }
@@ -857,7 +875,6 @@
       } catch (err) { return []; }
     }
 
-    // 주소 정제 함수 ('고양시', '서울특별시', '경기도' 제거)
     function cleanAddress(addr) {
       if (!addr || typeof addr !== 'string') return '';
       return addr
@@ -895,7 +912,6 @@
       });
     }
 
-    // 운행시간 파싱 및 2차 검증 함수 (57분 -> 57, 1시간2분 -> 62)
     function parseDrivingTimeToMinutes(r) {
       if (!r) return 1;
 
@@ -923,7 +939,6 @@
         if (total > 0) minsFromDrivingTime = total;
       }
 
-      // 2차 검증: start_time과 end_time 차이 계산
       let minsFromTimeDiff = null;
       const sTime = r.start_time || r.started_at;
       const eTime = r.end_time || r.ended_at || r.created_at;
@@ -1039,7 +1054,6 @@
       }
     }
 
-    // 행정구역 명칭 단위 줄바꿈 보정 HTML 생성
     function buildSequentialRouteHtml(tripsArray) {
       if (!tripsArray || tripsArray.length === 0) return "";
       const sorted = [...tripsArray].sort((a, b) => a.timestamp - b.timestamp);
@@ -1139,7 +1153,6 @@
           `);
         }
 
-        // 주행 기록 카드 2줄 레이아웃 적용
         sameDayTrips.forEach(t => {
           const startLoc = cleanAddress(t.startDong);
           const endLoc = cleanAddress(t.endDong);
@@ -1154,13 +1167,11 @@
 
           listContainer.insertAdjacentHTML('beforeend', `
             <div class="bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800/80 space-y-1 text-xs">
-              <!-- 1행: 출발지 → 도착지 -->
               <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap">
                 <span class="address-tag text-blue-300">${startLoc}</span>
                 <span class="text-indigo-400">→</span>
                 <span class="address-tag text-emerald-300">${endLoc}</span>
               </div>
-              <!-- 2행: 주행 상세 정보 -->
               <div class="text-gray-400 text-[11px] leading-relaxed">
                 주행 ${moveKmStr}km, 시간 ${t.durationMin}분, 배터리 ${batDetail}, 총 주행거리 ${odoStr}km
               </div>
@@ -1169,7 +1180,6 @@
         });
       }
 
-      // 최근 상태 히스토리 타임라인 2줄 레이아웃 적용
       const timelineBox = document.getElementById('timeline-container');
       timelineBox.innerHTML = '';
 
@@ -1226,7 +1236,6 @@
 
             groupHtml += `
               <div class="bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800/80 space-y-1 text-xs">
-                <!-- 1행: [주행] 시각 출발지 → 도착지 -->
                 <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap">
                   <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 주행</span>
                   <span class="text-gray-400 text-[11px] font-mono mr-1">${evt.timeStr}</span>
@@ -1234,7 +1243,6 @@
                   <span class="text-indigo-400">→</span>
                   <span class="address-tag text-emerald-300">${evt.endDong}</span>
                 </div>
-                <!-- 2행: 주행 상세 -->
                 <div class="text-gray-400 text-[11px] leading-relaxed">
                   주행 ${evt.odoDiff}km, 시간 ${evt.durationMin ? evt.durationMin + '분' : '-'}, 배터리 ${batDetail}, 총 주행거리 ${evt.odo.toLocaleString()}km
                 </div>
