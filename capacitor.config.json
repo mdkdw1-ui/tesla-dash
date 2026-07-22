@@ -3,6 +3,7 @@
   "appName": "Tesla Dashboard",
   "webDir": "www",
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "hostname": "localhost"
   }
 }
