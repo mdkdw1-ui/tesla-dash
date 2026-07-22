@@ -40,7 +40,7 @@
     </div>
   </header>
 
-  <!-- Navigation Tabs (감시가디언 탭 추가됨) -->
+  <!-- Navigation Tabs -->
   <div class="bg-[#12141c] border-b border-gray-800 px-2 py-2 flex justify-around text-xs font-semibold overflow-x-auto">
     <button onclick="switchTab('vehicle')" id="btn-tab-vehicle" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition whitespace-nowrap">🚗 차량정보</button>
     <button onclick="switchTab('guardian')" id="btn-tab-guardian" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap">🛡️ 감시가디언</button>
@@ -121,7 +121,7 @@
       </div>
     </div>
 
-    <!-- 2. 감시 가디언 탭 (새로 통합된 파트) -->
+    <!-- 2. 감시 가디언 탭 -->
     <div id="panel-guardian" class="hidden space-y-4">
       <div class="card-dark p-4 rounded-2xl border border-red-500/30 space-y-4">
         
@@ -164,20 +164,10 @@
           </div>
         </div>
 
-        <!-- 가디언 설정 입력창 -->
-        <div class="space-y-3 text-xs">
-          <div>
-            <label class="block text-gray-400 mb-1">Vehicle ID (또는 VIN)</label>
-            <input type="text" id="guardianVehicleId" placeholder="차량 ID 입력" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white font-mono">
-          </div>
-          <div>
-            <label class="block text-gray-400 mb-1">ntfy 알림 토픽</label>
-            <input type="text" id="guardianNtfyTopic" value="MJYAz6ZyjXiujaTDpJ" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white font-mono">
-          </div>
-          <div>
-            <label class="block text-gray-400 mb-1">모니터링 주기 (초)</label>
-            <input type="number" id="guardianPollInterval" value="5" min="2" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white font-mono">
-          </div>
+        <!-- 감시 주기 조절 (밖에서 조절 가능) -->
+        <div class="space-y-1 text-xs">
+          <label class="block text-gray-400">모니터링 주기 (초)</label>
+          <input type="number" id="guardianPollInterval" value="5" min="2" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white font-mono">
         </div>
 
         <!-- 테스트 버튼 -->
@@ -336,10 +326,10 @@
 
   </main>
 
-  <!-- 설정 모달 -->
+  <!-- 설정 모달 (Vehicle ID 및 ntfy 토픽 암호화 저장 항목 통합됨) -->
   <div id="modal-config" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4">
-      <h3 class="text-base font-bold text-white">🔑 설정</h3>
+      <h3 class="text-base font-bold text-white">🔑 설정 (암호화 저장)</h3>
       <form onsubmit="saveConfig(event)" class="space-y-3 text-xs">
         <div>
           <label class="block text-gray-400 mb-1">카카오맵 API Key</label>
@@ -357,6 +347,14 @@
           <label class="block text-gray-400 mb-1">GitHub Personal Access Token (Workflow 실행용)</label>
           <input type="password" id="input-gh-token" placeholder="ghp_xxxx..." class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
+        <div>
+          <label class="block text-gray-400 mb-1">Tesla Vehicle ID / VIN</label>
+          <input type="text" id="input-vehicle-id" placeholder="차량 ID 입력" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
+        </div>
+        <div>
+          <label class="block text-gray-400 mb-1">ntfy 알림 토픽</label>
+          <input type="text" id="input-ntfy-topic" placeholder="MJYAz6ZyjXiujaTDpJ" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
+        </div>
         <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 rounded transition">저장 및 시작</button>
       </form>
     </div>
@@ -367,7 +365,14 @@
     // 1. 공통 환경 설정 및 변수
     // ==========================================
     const SECRET_SALT = "Tesla_Supabase_Dashboard_2026";
-    let configObj = { kakaoKey: '159c5d7588efc5939d431f005912f9f3', url: '', key: '', ghToken: '' };
+    let configObj = { 
+      kakaoKey: '159c5d7588efc5939d431f005912f9f3', 
+      url: '', 
+      key: '', 
+      ghToken: '', 
+      vehicleId: '', 
+      ntfyTopic: 'MJYAz6ZyjXiujaTDpJ' 
+    };
     
     // 테슬라 가디언 & OAuth 설정
     const VERCEL_BACKEND_URL = "https://my-tesla-app-six.vercel.app/api/exchange"; 
@@ -400,8 +405,11 @@
       }
 
       // 2. 설정 로드 및 대시보드 초기화
-      if (!loadConfig()) openConfigModal();
-      else initDashboard();
+      if (!loadConfig()) {
+        openConfigModal();
+      } else {
+        initDashboard();
+      }
     });
 
     function loadConfig() {
@@ -420,7 +428,9 @@
         kakaoKey: document.getElementById('input-kakao-key').value.trim(),
         url: document.getElementById('input-supabase-url').value.trim().replace(/\/$/, ""),
         key: document.getElementById('input-supabase-key').value.trim(),
-        ghToken: document.getElementById('input-gh-token').value.trim()
+        ghToken: document.getElementById('input-gh-token').value.trim(),
+        vehicleId: document.getElementById('input-vehicle-id').value.trim(),
+        ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
       };
       localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
       location.reload();
@@ -431,6 +441,8 @@
       if (configObj.url) document.getElementById('input-supabase-url').value = configObj.url;
       if (configObj.key) document.getElementById('input-supabase-key').value = configObj.key;
       if (configObj.ghToken) document.getElementById('input-gh-token').value = configObj.ghToken;
+      if (configObj.vehicleId) document.getElementById('input-vehicle-id').value = configObj.vehicleId;
+      if (configObj.ntfyTopic) document.getElementById('input-ntfy-topic').value = configObj.ntfyTopic;
       document.getElementById('modal-config').classList.remove('hidden');
     }
 
@@ -543,8 +555,11 @@
     }
 
     async function checkGuardianVehicleState() {
-      const vehicleId = document.getElementById('guardianVehicleId').value.trim();
-      if (!vehicleId || !accessToken) return;
+      const vehicleId = configObj.vehicleId;
+      if (!vehicleId || !accessToken) {
+        addLog('⚠️ 설정된 Vehicle ID가 없습니다. ⚙️ 설정에서 입력해주세요.');
+        return;
+      }
 
       try {
         const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${vehicleId}/vehicle_data`, {
@@ -567,11 +582,10 @@
           } else if (sentryActive) {
             updateGuardianStatusUI('sentry', '🛡️ 감시 모드 작동 중');
             
-            // 🚨 감시 모드 중 새 이벤트 감지 시 자동 액션
             if (!lastSentryState) {
               addLog('🚨 감시 모드 위협 감지! 자동 전조등 점멸 및 알림 전송');
               await flashLights();
-              await sendNtfyNotification('테슬라 보안 경고', '감시 모드 이벤트가 감지되어 전조등을 자동으로 깜빡였습니다!');
+              await sendNtfyNotification('Tesla Security Warning', 'Sentry mode threat detected! Headlights flashed automatically.');
             }
           } else {
             updateGuardianStatusUI('sleep', '🌙 대기/주차 모드');
@@ -585,7 +599,8 @@
     }
 
     async function flashLights() {
-      const vehicleId = document.getElementById('guardianVehicleId').value.trim();
+      const vehicleId = configObj.vehicleId;
+      if (!vehicleId) return;
       try {
         const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${vehicleId}/command/flash_lights`, {
           method: 'POST',
@@ -599,8 +614,7 @@
     }
 
     async function sendNtfyNotification(title, message) {
-      const topic = document.getElementById('guardianNtfyTopic').value.trim();
-      if (!topic) return;
+      const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
       try {
         const res = await fetch(`https://ntfy.sh/${topic}`, {
           method: 'POST',
@@ -614,7 +628,7 @@
     }
 
     function testFlashLights() { if(accessToken) flashLights(); else alert('로그인을 먼저 진행해주세요.'); }
-    function testNtfy() { sendNtfyNotification('테슬라 가디언 테스트', 'ntfy 연동 테스트 메시지입니다.'); }
+    function testNtfy() { sendNtfyNotification('Tesla Guardian Test', 'This is a test notification from your Tesla Guardian system.'); }
 
     // ==========================================
     // 4. 기존 대시보드 데이터 연동 로직
