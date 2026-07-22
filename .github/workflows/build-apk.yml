@@ -3,18 +3,17 @@ name: Build Android APK
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js (웹 빌드 및 패키징용)
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -28,15 +27,21 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install dependencies & Build
+      - name: Prepare Web Assets
         run: |
-          # 의존성 설치 및 웹 자산(index.html, www/icon.png)을 안드로이드 프로젝트에 반영하는 명령어
-          # 예: npm install 후 npx cap sync 등 사용 중인 프레임워크에 맞게 수정
-          npm install
-          
+          mkdir -p www
+          cp index.html www/
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Initialize & Sync Capacitor
+        run: |
+          npx cap add android || true
+          npx cap sync android
+
       - name: Build APK with Gradle
         run: |
-          # 안드로이드 프로젝트 디렉토리로 이동하여 Gradle 빌드 실행 (예: android 폴더 기준)
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
@@ -44,5 +49,5 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
+          name: TeslaDashboard-debug.apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
