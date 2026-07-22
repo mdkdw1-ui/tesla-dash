@@ -409,7 +409,6 @@
       } catch (err) { return []; }
     }
 
-    // 주소 포맷팅 규칙 적용 함수: 서울은 "중구 신사1동", 그 외 지역은 "평창 누산리" 형태로 가공
     function formatAddressString(region1, region2, region3) {
       const r1 = (region1 || "").trim();
       const r2 = (region2 || "").trim();
@@ -422,7 +421,6 @@
       }
     }
 
-    // 좌표 -> 가공된 행정구역 포맷 변환 비동기 함수 (캐시 적용)
     function getNeighborhood(lat, lng) {
       return new Promise((resolve) => {
         if (!lat || !lng || !geocoder) { resolve("위치 미상"); return; }
@@ -652,10 +650,11 @@
         if (hSel) hSel.value = h;
         renderDrivingData();
       } else if (currentFilterMode === 'yearly') {
-        const ysel = document.getElementById('ctrl-year');
-        if (ysel && ysel.selectedIndex !== -1) {
-          const nextIdx = ysel.selectedIndex - offset;
-          if (nextIdx >= 0 && nextIdx < ysel.options.length) { ysel.selectedIndex = nextIdx; renderDrivingData(); }
+        // [오타 수정] ysel -> ySel로 정상 수정
+        const ySel = document.getElementById('ctrl-year');
+        if (ySel && ySel.selectedIndex !== -1) {
+          const nextIdx = ySel.selectedIndex - offset;
+          if (nextIdx >= 0 && nextIdx < ySel.options.length) { ySel.selectedIndex = nextIdx; renderDrivingData(); }
         }
       } else if (currentFilterMode === 'single') {
         const sel = document.getElementById('ctrl-select');
@@ -724,7 +723,6 @@
         matched = allTrips.filter(t => new Date(t.timestamp).getFullYear() === selY);
       }
 
-      // 주간~연간 뷰일 경우 날짜 단위로 합산하여 최장 운행 거리 TOP 5 표시 (지도 아래쪽에 위치)
       const top5Container = document.getElementById('top5-container');
       const top5List = document.getElementById('top5-list');
       if (currentFilterMode !== 'single' && currentFilterMode !== 'daily') {
@@ -747,14 +745,11 @@
           top5List.innerHTML = `<span class="text-gray-500">해당 기간 데이터가 없습니다.</span>`;
         } else {
           top5List.innerHTML = dailyArray.map((item, idx) => {
-            // [요청 반영] 서울 -> 일산 -> 서울처럼 여러 번 운행하여 이동한 전체 경로의 주요 경유지 흐름을 모두 추출하여 표시
-            // 각 운행 건의 출발지와 마지막 운행의 도착지를 연결하여 전체 흐름을 한 줄로 구성
             let routePoints = [];
             item.trips.forEach((trip, tIdx) => {
               if (tIdx === 0) routePoints.push(trip.startDong);
               routePoints.push(trip.endDong);
             });
-            // 중복되는 연속 동 이름 제거 (예: 서울, 일산, 서울)
             let uniqueRoute = routePoints.filter((val, i, arr) => i === 0 || val !== arr[i-1]);
             let fullRouteStr = uniqueRoute.join(' ➔ ');
 
@@ -1069,7 +1064,6 @@
         filteredTrips = allTrips.filter(t => t.timestamp >= startT && t.timestamp < endT);
       }
 
-      // 일자별로 시간 합산
       let dailyTimeGroup = {};
       filteredTrips.forEach(t => {
         const d = new Date(t.timestamp);
@@ -1096,7 +1090,6 @@
         }).join('');
       }
 
-      // 일자별로 거리 합산
       let dailyDistGroup = {};
       filteredTrips.forEach(t => {
         const d = new Date(t.timestamp);
@@ -1170,7 +1163,7 @@
       chartDegAll = new Chart(document.getElementById('chartDegradationAll'), {
         type: 'line',
         data: { labels: allLabels, datasets: [{ data: allDeg, borderColor: '#a7f3d0', tension: 0.3, pointRadius: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins:{legend:{display:false}}, scales:{y:{suggestedMin:95, suggestedMax:100, grid:{color:#262936'}}, x:{grid:{display:false}}} }
+        options: { responsive: true, maintainAspectRatio: false, plugins:{legend:{display:false}}, scales:{y:{suggestedMin:95, suggestedMax:100, grid:{color:'#262936'}}, x:{grid:{display:false}}} }
       });
 
       chartRangeAll = new Chart(document.getElementById('chartRangeAll'), {
