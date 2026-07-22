@@ -13,6 +13,8 @@
     .card-border-amber { border: 1px solid #d97706; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-thumb { background: #262936; border-radius: 4px; }
+    /* 긴 주소가 줄바꿈되지 않고 말줄임표 처리되거나 한 줄로 예쁘게 정렬되도록 설정 */
+    .single-line-address { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   </style>
 </head>
 <body class="min-h-screen flex flex-col pb-10">
@@ -414,11 +416,8 @@
       const r3 = (region3 || "").trim();
 
       if (r1.includes("서울")) {
-        // 서울인 경우: 구 + 동 (예: 중구 신사1동) -> 구 이름이 r2, 동 이름이 r3
         return `${r2} ${r3}`.trim();
       } else {
-        // 서울 외 지역인 경우: 시/군/구 + 리 또는 동 (예: 평창 누산리) -> r2(시/군/구 또는 읍/면) + r3(리 또는 동)
-        // 카카오 주소 체계에 따라 r2가 시/군/구이고 r3가 읍/면/동/리일 수 있으므로 적절히 조합
         return `${r2} ${r3}`.trim();
       }
     }
@@ -433,7 +432,6 @@
         geocoder.coord2RegionCode(lng, lat, (result, status) => {
           if (status === kakao.maps.services.Status.OK) {
             for (let i = 0; i < result.length; i++) {
-              // 행정동(H) 또는 법정동(B)
               if (result[i].region_type === 'H' || result[i].region_type === 'B') {
                 const item = result[i];
                 const formatted = formatAddressString(item.region_1depth_name, item.region_2depth_name, item.region_3depth_name);
@@ -654,10 +652,10 @@
         if (hSel) hSel.value = h;
         renderDrivingData();
       } else if (currentFilterMode === 'yearly') {
-        const ySel = document.getElementById('ctrl-year');
-        if (ySel && ySel.selectedIndex !== -1) {
-          const nextIdx = ySel.selectedIndex - offset;
-          if (nextIdx >= 0 && nextIdx < ySel.options.length) { ySel.selectedIndex = nextIdx; renderDrivingData(); }
+        const ysel = document.getElementById('ctrl-year');
+        if (ysel && ysel.selectedIndex !== -1) {
+          const nextIdx = ysel.selectedIndex - offset;
+          if (nextIdx >= 0 && nextIdx < ysel.options.length) { ysel.selectedIndex = nextIdx; renderDrivingData(); }
         }
       } else if (currentFilterMode === 'single') {
         const sel = document.getElementById('ctrl-select');
@@ -732,7 +730,6 @@
       if (currentFilterMode !== 'single' && currentFilterMode !== 'daily') {
         top5Container.classList.remove('hidden');
 
-        // 날짜별로 그룹화하여 거리 합산 및 해당 일자의 총 이동 경로 구성
         let dailyGroup = {};
         matched.forEach(t => {
           const d = new Date(t.timestamp);
@@ -750,14 +747,24 @@
           top5List.innerHTML = `<span class="text-gray-500">해당 기간 데이터가 없습니다.</span>`;
         } else {
           top5List.innerHTML = dailyArray.map((item, idx) => {
-            // 해당 일자의 첫 주행 출발지와 마지막 주행 도착지 조합
-            const firstTrip = item.trips[0];
-            const lastTrip = item.trips[item.trips.length - 1];
+            // [요청 반영] 서울 -> 일산 -> 서울처럼 여러 번 운행하여 이동한 전체 경로의 주요 경유지 흐름을 모두 추출하여 표시
+            // 각 운행 건의 출발지와 마지막 운행의 도착지를 연결하여 전체 흐름을 한 줄로 구성
+            let routePoints = [];
+            item.trips.forEach((trip, tIdx) => {
+              if (tIdx === 0) routePoints.push(trip.startDong);
+              routePoints.push(trip.endDong);
+            });
+            // 중복되는 연속 동 이름 제거 (예: 서울, 일산, 서울)
+            let uniqueRoute = routePoints.filter((val, i, arr) => i === 0 || val !== arr[i-1]);
+            let fullRouteStr = uniqueRoute.join(' ➔ ');
+
             return `
-              <div class="flex justify-between items-center bg-[#0d0e12] p-2 rounded-xl border border-gray-800">
-                <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
-                <span class="text-amber-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
-                <span class="text-gray-400">📍 ${firstTrip.startDong} ➔ ${lastTrip.endDong}</span>
+              <div class="flex flex-col gap-1 bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800">
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
+                  <span class="text-amber-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
+                </div>
+                <div class="text-gray-400 text-[11px] single-line-address">📍 경로: ${fullRouteStr}</div>
               </div>
             `;
           }).join('');
@@ -878,8 +885,8 @@
           const tTime = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
           listContainer.insertAdjacentHTML('beforeend', `
             <div class="flex justify-between items-center bg-[#0d0e12] p-2 rounded-lg text-[11px]">
-              <span class="text-gray-300 font-semibold">${tTime} (${t.startDong} ➔ ${t.endDong})</span>
-              <div class="space-x-2 text-gray-400">
+              <span class="text-gray-300 font-semibold single-line-address max-w-[150px]">${tTime} (${t.startDong} ➔ ${t.endDong})</span>
+              <div class="space-x-1 text-gray-400 whitespace-nowrap">
                 <span>📍 ${t.moveKM.toFixed(1)}km</span>
                 <span>🔋 -${t.useBattery.toFixed(1)}%</span>
                 <span>⏱️ ${t.durationMin}분</span>
@@ -1105,15 +1112,21 @@
         distContainer.innerHTML = `<span class="text-gray-500">기록이 없습니다.</span>`;
       } else {
         distContainer.innerHTML = topDistList.map((item, idx) => {
-          const firstTrip = item.trips[0];
-          const lastTrip = item.trips[item.trips.length - 1];
+          let routePoints = [];
+          item.trips.forEach((trip, tIdx) => {
+            if (tIdx === 0) routePoints.push(trip.startDong);
+            routePoints.push(trip.endDong);
+          });
+          let uniqueRoute = routePoints.filter((val, i, arr) => i === 0 || val !== arr[i-1]);
+          let fullRouteStr = uniqueRoute.join(' ➔ ');
+
           return `
             <div class="bg-[#0d0e12] p-2 rounded-lg border border-gray-800 space-y-1">
               <div class="flex justify-between">
                 <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
                 <span class="text-green-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
               </div>
-              <div class="text-[10px] text-gray-400">📍 ${firstTrip.startDong} ➔ ${lastTrip.endDong}</div>
+              <div class="text-[10px] text-gray-400 single-line-address">📍 ${fullRouteStr}</div>
             </div>
           `;
         }).join('');
@@ -1157,7 +1170,7 @@
       chartDegAll = new Chart(document.getElementById('chartDegradationAll'), {
         type: 'line',
         data: { labels: allLabels, datasets: [{ data: allDeg, borderColor: '#a7f3d0', tension: 0.3, pointRadius: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins:{legend:{display:false}}, scales:{y:{suggestedMin:95, suggestedMax:100, grid:{color:'#262936'}}, x:{grid:{display:false}}} }
+        options: { responsive: true, maintainAspectRatio: false, plugins:{legend:{display:false}}, scales:{y:{suggestedMin:95, suggestedMax:100, grid:{color:#262936'}}, x:{grid:{display:false}}} }
       });
 
       chartRangeAll = new Chart(document.getElementById('chartRangeAll'), {
