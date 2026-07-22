@@ -140,14 +140,15 @@
         </div>
       </div>
 
-      <!-- 주간~연간 뷰일 때 표시될 최장 운행 TOP 5 영역 -->
-      <div id="top5-container" class="card-dark rounded-2xl p-4 hidden space-y-3">
-        <h3 id="top5-title" class="text-xs font-bold text-amber-400">🔥 해당 기간 최장 운행 거리 TOP 5</h3>
-        <div id="top5-list" class="space-y-2 text-xs"></div>
-      </div>
-
+      <!-- 지도 영역 -->
       <div class="card-dark rounded-2xl overflow-hidden w-full aspect-[4/3] relative border border-gray-800 shadow-lg">
         <div id="map" class="w-full h-full"></div>
+      </div>
+
+      <!-- 주행 정보 탭 아래쪽에 위치한 최장 운행 TOP 5 영역 -->
+      <div id="top5-container" class="card-dark rounded-2xl p-4 hidden space-y-3">
+        <h3 id="top5-title" class="text-xs font-bold text-amber-400">🔥 해당 기간 일자별 최장 운행 거리 TOP 5</h3>
+        <div id="top5-list" class="space-y-2 text-xs"></div>
       </div>
     </div>
 
@@ -204,14 +205,14 @@
         <span id="m-stat-avg-eff" class="text-2xl font-black text-indigo-400">- km/kWh</span>
       </div>
 
-      <!-- 월간 리포트 하단: 최장 시간 TOP 5 및 최장 거리 TOP 5 -->
+      <!-- 월간 리포트 하단: 일자별 최장 시간 TOP 5 및 일자별 최장 거리 TOP 5 -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div class="card-dark p-4 rounded-2xl space-y-2">
-          <h4 class="text-xs font-bold text-blue-400">⏱️ 이달의 최장 운행 시간 TOP 5</h4>
+          <h4 class="text-xs font-bold text-blue-400">⏱️ 이달의 일자별 최장 운행 시간 TOP 5</h4>
           <div id="m-top5-time-list" class="space-y-1.5 text-xs"></div>
         </div>
         <div class="card-dark p-4 rounded-2xl space-y-2">
-          <h4 class="text-xs font-bold text-green-400">📍 이달의 최장 운행 거리 TOP 5</h4>
+          <h4 class="text-xs font-bold text-green-400">📍 이달의 일자별 최장 운행 거리 TOP 5</h4>
           <div id="m-top5-dist-list" class="space-y-1.5 text-xs"></div>
         </div>
       </div>
@@ -287,7 +288,7 @@
     let currentInfoWindow = null;
     let currentFilterMode = 'daily';
 
-    let addressCache = {}; // 좌표 변환 캐싱용
+    let addressCache = {}; 
     let chartDegRec = null, chartRangeRec = null, chartDegAll = null, chartRangeAll = null;
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -358,7 +359,6 @@
       });
     }
 
-    // libraries=services 추가 완료
     function loadKakaoSdk(appKey, callback) {
       if (window.kakao && window.kakao.maps) { 
         kakao.maps.load(() => {
@@ -407,7 +407,23 @@
       } catch (err) { return []; }
     }
 
-    // 좌표 -> 행정동 변환 비동기 함수 (캐시 적용)
+    // 주소 포맷팅 규칙 적용 함수: 서울은 "중구 신사1동", 그 외 지역은 "평창 누산리" 형태로 가공
+    function formatAddressString(region1, region2, region3) {
+      const r1 = (region1 || "").trim();
+      const r2 = (region2 || "").trim();
+      const r3 = (region3 || "").trim();
+
+      if (r1.includes("서울")) {
+        // 서울인 경우: 구 + 동 (예: 중구 신사1동) -> 구 이름이 r2, 동 이름이 r3
+        return `${r2} ${r3}`.trim();
+      } else {
+        // 서울 외 지역인 경우: 시/군/구 + 리 또는 동 (예: 평창 누산리) -> r2(시/군/구 또는 읍/면) + r3(리 또는 동)
+        // 카카오 주소 체계에 따라 r2가 시/군/구이고 r3가 읍/면/동/리일 수 있으므로 적절히 조합
+        return `${r2} ${r3}`.trim();
+      }
+    }
+
+    // 좌표 -> 가공된 행정구역 포맷 변환 비동기 함수 (캐시 적용)
     function getNeighborhood(lat, lng) {
       return new Promise((resolve) => {
         if (!lat || !lng || !geocoder) { resolve("위치 미상"); return; }
@@ -416,14 +432,13 @@
 
         geocoder.coord2RegionCode(lng, lat, (result, status) => {
           if (status === kakao.maps.services.Status.OK) {
-            // 행정동(H) 또는 법정동(B) 중 동(region_type === 'H' 혹은 'B') 찾기
             for (let i = 0; i < result.length; i++) {
+              // 행정동(H) 또는 법정동(B)
               if (result[i].region_type === 'H' || result[i].region_type === 'B') {
-                const addr = result[i].address_name; // 예: "서울특별시 강남구 역삼1동"
-                const tokens = addr.split(' ');
-                const dong = tokens[tokens.length - 1]; // 마지막 단어(동) 추출
-                addressCache[key] = dong;
-                resolve(dong);
+                const item = result[i];
+                const formatted = formatAddressString(item.region_1depth_name, item.region_2depth_name, item.region_3depth_name);
+                addressCache[key] = formatted;
+                resolve(formatted);
                 return;
               }
             }
@@ -485,7 +500,6 @@
 
       vehicleRows = vehicleRes || [];
       
-      // 모든 주행 건의 출발지/도착지 동 비동기 프리로드
       for (let t of allTrips) {
         if (t.path && t.path.length > 0) {
           const firstPt = t.path[0];
@@ -712,22 +726,38 @@
         matched = allTrips.filter(t => new Date(t.timestamp).getFullYear() === selY);
       }
 
-      // 요구사항 4: 주간, 월간, 분기, 반년, 연간 뷰일 경우 최장 운행 거리 TOP 5 표시
+      // 주간~연간 뷰일 경우 날짜 단위로 합산하여 최장 운행 거리 TOP 5 표시 (지도 아래쪽에 위치)
       const top5Container = document.getElementById('top5-container');
       const top5List = document.getElementById('top5-list');
       if (currentFilterMode !== 'single' && currentFilterMode !== 'daily') {
         top5Container.classList.remove('hidden');
-        const sortedTop5 = [...matched].sort((a,b) => b.moveKM - a.moveKM).slice(0, 5);
-        if (sortedTop5.length === 0) {
+
+        // 날짜별로 그룹화하여 거리 합산 및 해당 일자의 총 이동 경로 구성
+        let dailyGroup = {};
+        matched.forEach(t => {
+          const d = new Date(t.timestamp);
+          const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          if (!dailyGroup[dayKey]) {
+            dailyGroup[dayKey] = { dateStr: dayKey, totalDist: 0, trips: [] };
+          }
+          dailyGroup[dayKey].totalDist += t.moveKM;
+          dailyGroup[dayKey].trips.push(t);
+        });
+
+        const dailyArray = Object.values(dailyGroup).sort((a,b) => b.totalDist - a.totalDist).slice(0, 5);
+
+        if (dailyArray.length === 0) {
           top5List.innerHTML = `<span class="text-gray-500">해당 기간 데이터가 없습니다.</span>`;
         } else {
-          top5List.innerHTML = sortedTop5.map((t, idx) => {
-            const dt = new Date(t.timestamp).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+          top5List.innerHTML = dailyArray.map((item, idx) => {
+            // 해당 일자의 첫 주행 출발지와 마지막 주행 도착지 조합
+            const firstTrip = item.trips[0];
+            const lastTrip = item.trips[item.trips.length - 1];
             return `
               <div class="flex justify-between items-center bg-[#0d0e12] p-2 rounded-xl border border-gray-800">
-                <span class="text-gray-300 font-bold">${idx+1}. ${dt}</span>
-                <span class="text-amber-400 font-extrabold">${t.moveKM.toFixed(1)} km</span>
-                <span class="text-gray-400">📍 ${t.startDong} ➔ ${t.endDong}</span>
+                <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
+                <span class="text-amber-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
+                <span class="text-gray-400">📍 ${firstTrip.startDong} ➔ ${lastTrip.endDong}</span>
               </div>
             `;
           }).join('');
@@ -766,7 +796,6 @@
         polyline.setMap(map);
         currentPolylines.push(polyline);
 
-        // 요구사항 3: 지도 선 클릭 시 인포윈도우에 동 정보(출발지 ➔ 도착지) 표시
         kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
           if (currentInfoWindow) currentInfoWindow.close();
 
@@ -843,7 +872,6 @@
         document.getElementById('v-day-time').innerText = `${totalTime} 분`;
         document.getElementById('v-day-kwh').innerText = `-${totalKwh.toFixed(1)} kWh`;
 
-        // 요구사항 1: 차량정보 - 최근 운행일 전체 기록 각 주행마다 [동 ➔ 동] 표시
         const listContainer = document.getElementById('v-day-trips-list');
         listContainer.innerHTML = '';
         sameDayTrips.forEach(t => {
@@ -869,7 +897,6 @@
       document.getElementById('v-state-duration-title').innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
       document.getElementById('v-state-start-time').innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
 
-      // 요구사항 2: 차량정보 - 최근 상태 히스토리에서 주행 관련 동 및 시간 표시
       const timelineBox = document.getElementById('timeline-container');
       timelineBox.innerHTML = '';
 
@@ -891,7 +918,6 @@
           const isDrive = odoDiff >= 2;
           let routeStr = "";
           if (isDrive) {
-            // 해당 시간대 근처의 주행 데이터 매칭해서 동 이름 가져오기
             const matchedTrip = allTrips.find(t => Math.abs(t.timestamp - curDate.getTime()) < 3600000);
             routeStr = matchedTrip ? ` [${matchedTrip.startDong} ➔ ${matchedTrip.endDong}]` : "";
           }
@@ -1027,7 +1053,6 @@
       renderMonthlyTop5(filteredTrips);
     }
 
-    // 요구사항 5: 월간 리포트 탭 내 최장 운행 시간 TOP 5 및 최장 운행 거리 TOP 5 (이동 동 정보 포함)
     function renderMonthlyTop5(filteredTrips) {
       if (!filteredTrips) {
         const selY = Number(document.getElementById('m-select-year').value);
@@ -1037,38 +1062,58 @@
         filteredTrips = allTrips.filter(t => t.timestamp >= startT && t.timestamp < endT);
       }
 
-      // 최장 운행 시간 TOP 5
-      const topTimeList = [...filteredTrips].sort((a,b) => b.durationMin - a.durationMin).slice(0, 5);
+      // 일자별로 시간 합산
+      let dailyTimeGroup = {};
+      filteredTrips.forEach(t => {
+        const d = new Date(t.timestamp);
+        const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        if (!dailyTimeGroup[dayKey]) dailyTimeGroup[dayKey] = { dateStr: dayKey, totalMin: 0 };
+        dailyTimeGroup[dayKey].totalMin += t.durationMin;
+      });
+      const topTimeList = Object.values(dailyTimeGroup).sort((a,b) => b.totalMin - a.totalMin).slice(0, 5);
+
       const timeContainer = document.getElementById('m-top5-time-list');
       if (topTimeList.length === 0) {
         timeContainer.innerHTML = `<span class="text-gray-500">기록이 없습니다.</span>`;
       } else {
-        timeContainer.innerHTML = topTimeList.map((t, idx) => {
-          const dt = new Date(t.timestamp).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+        timeContainer.innerHTML = topTimeList.map((item, idx) => {
+          const hours = Math.floor(item.totalMin / 60);
+          const mins = item.totalMin % 60;
+          const timeStr = hours > 0 ? `${hours}시간 ${mins}분` : `${mins}분`;
           return `
             <div class="flex justify-between items-center bg-[#0d0e12] p-1.5 rounded-lg border border-gray-800">
-              <span class="text-gray-300 font-bold">${idx+1}. ${dt}</span>
-              <span class="text-blue-400 font-extrabold">${t.durationMin}분</span>
+              <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
+              <span class="text-blue-400 font-extrabold">${timeStr}</span>
             </div>
           `;
         }).join('');
       }
 
-      // 최장 운행 거리 TOP 5 (각 이동 경로 동 정보 제공)
-      const topDistList = [...filteredTrips].sort((a,b) => b.moveKM - a.moveKM).slice(0, 5);
+      // 일자별로 거리 합산
+      let dailyDistGroup = {};
+      filteredTrips.forEach(t => {
+        const d = new Date(t.timestamp);
+        const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        if (!dailyDistGroup[dayKey]) dailyDistGroup[dayKey] = { dateStr: dayKey, totalDist: 0, trips: [] };
+        dailyDistGroup[dayKey].totalDist += t.moveKM;
+        dailyDistGroup[dayKey].trips.push(t);
+      });
+      const topDistList = Object.values(dailyDistGroup).sort((a,b) => b.totalDist - a.totalDist).slice(0, 5);
+
       const distContainer = document.getElementById('m-top5-dist-list');
       if (topDistList.length === 0) {
         distContainer.innerHTML = `<span class="text-gray-500">기록이 없습니다.</span>`;
       } else {
-        distContainer.innerHTML = topDistList.map((t, idx) => {
-          const dt = new Date(t.timestamp).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+        distContainer.innerHTML = topDistList.map((item, idx) => {
+          const firstTrip = item.trips[0];
+          const lastTrip = item.trips[item.trips.length - 1];
           return `
             <div class="bg-[#0d0e12] p-2 rounded-lg border border-gray-800 space-y-1">
               <div class="flex justify-between">
-                <span class="text-gray-300 font-bold">${idx+1}. ${dt}</span>
-                <span class="text-green-400 font-extrabold">${t.moveKM.toFixed(1)} km</span>
+                <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
+                <span class="text-green-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
               </div>
-              <div class="text-[10px] text-gray-400">📍 ${t.startDong} ➔ ${t.endDong}</div>
+              <div class="text-[10px] text-gray-400">📍 ${firstTrip.startDong} ➔ ${lastTrip.endDong}</div>
             </div>
           `;
         }).join('');
