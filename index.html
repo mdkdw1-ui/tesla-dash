@@ -36,7 +36,8 @@
       <h1 class="text-base font-bold tracking-tight text-white">Tesla Dashboard (APK)</h1>
     </div>
     <div class="flex items-center space-x-2">
-      <span id="sync-status-indicator" class="text-[10px] text-gray-500 font-mono">🅿️ 포그라운드 대기</span>
+      <!-- 포그라운드 상태 표시 (백그라운드에선 안 보이므로 포그라운드 상태만 제어) -->
+      <span id="sync-status-indicator" class="text-[10px] text-gray-400 font-mono bg-gray-800/80 px-2 py-1 rounded-md border border-gray-700">🅿️ 포그라운드 대기</span>
       <button onclick="handleRefresh(false)" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/50 transition flex items-center gap-1">
         <span>🔄 갱신</span>
       </button>
@@ -47,7 +48,7 @@
     </div>
   </header>
 
-  <!-- 1. 최상단 양대 축 메인 탭 (테슬라 모니터 vs 감시 가디언) -->
+  <!-- 메인 탭 -->
   <div class="bg-[#12141c] border-b border-gray-800 p-2">
     <div class="grid grid-cols-2 gap-2 max-w-2xl mx-auto">
       <button onclick="switchMainTab('monitor')" id="btn-main-monitor" class="py-2.5 rounded-xl font-bold text-sm bg-blue-600 text-white transition flex items-center justify-center gap-1.5 shadow-lg">
@@ -61,12 +62,10 @@
 
   <main class="flex-1 p-3 md:p-6 max-w-2xl mx-auto w-full flex flex-col gap-4">
 
-    <!-- ================================================================= -->
-    <!-- [메인 축 1] 테슬라 모니터 영역 (앱이 켜져 있을 때만 Supabase 수신)    -->
-    <!-- ================================================================= -->
+    <!-- [메인 축 1] 테슬라 모니터 영역 -->
     <div id="main-panel-monitor" class="space-y-4">
       
-      <!-- 서브 4개 탭 (grid-cols-4 균등 분할로 모바일 화면 밖 넘침 완벽 방지) -->
+      <!-- 서브 4개 탭 -->
       <div class="bg-[#161820] border border-gray-800 p-1 rounded-xl grid grid-cols-4 gap-1 text-center text-xs font-semibold">
         <button onclick="switchSubTab('vehicle')" id="btn-sub-vehicle" class="py-2 rounded-lg bg-blue-600 text-white font-bold transition">차량 정보</button>
         <button onclick="switchSubTab('driving')" id="btn-sub-driving" class="py-2 rounded-lg text-gray-400 hover:text-white transition">주행 지도</button>
@@ -282,9 +281,7 @@
 
     </div>
 
-    <!-- ================================================================= -->
-    <!-- [메인 축 2] 감시 가디언 영역 (앱 전환 후에도 백그라운드 전용 유지)     -->
-    <!-- ================================================================= -->
+    <!-- [메인 축 2] 감시 가디언 영역 -->
     <div id="main-panel-guardian" class="hidden space-y-4">
       <div class="card-dark p-4 rounded-2xl border border-red-500/30 space-y-4 shadow-xl">
         
@@ -390,9 +387,6 @@
   </div>
 
   <script>
-    // ==========================================
-    // 1. 공통 환경 설정 및 상태 변수
-    // ==========================================
     const SECRET_SALT = "Tesla_Supabase_Dashboard_2026";
     let configObj = { 
       kakaoKey: '159c5d7588efc5939d431f005912f9f3', 
@@ -414,7 +408,7 @@
     let monitorTimer = null;
     let drivingSyncTimer = null;
     let lastSentryState = false;
-    let isAppInForeground = true; // [중요] 앱 포그라운드 상태 플래그
+    let isAppInForeground = true; 
 
     let map = null, geocoder = null;
     let allTrips = [], vehicleRows = [];
@@ -423,11 +417,7 @@
     let addressCache = {}; 
     let chartDegRec = null, chartRangeRec = null, chartDegAll = null, chartRangeAll = null;
 
-    // ==========================================
-    // 2. APK 라이프사이클 이벤트 (포그라운드/백그라운드 전환 감지)
-    // ==========================================
-    document.addEventListener('DOMContentLoaded', () => {
-      // WebView 백그라운드 전환 감지
+    window.addEventListener('DOMContentLoaded', () => {
       document.addEventListener('visibilitychange', handleAppVisibilityChange);
 
       const urlParams = new URLSearchParams(window.location.search);
@@ -446,18 +436,22 @@
       }
     });
 
-    // 백그라운드 전환 시 Supabase 주행 정보 동기화 중단!
+    // 앱 포그라운드/백그라운드 감지 핸들러
     function handleAppVisibilityChange() {
+      const indicator = document.getElementById('sync-status-indicator');
       if (document.hidden) {
         isAppInForeground = false;
-        console.log('📱 앱 백그라운드 전환: Supabase 주행/차량 정보 폴링 일시정지');
-        stopDrivingSyncLoop(); // Supabase Polling 정지
-        const indicator = document.getElementById('sync-status-indicator');
-        if (indicator) indicator.innerText = "⏸️ 백그라운드 (Supabase 정지)";
+        console.log('📱 앱 백그라운드 전환: Supabase 주행/차량 정보 폴링 일시정지 (화면 미출력으로 상태 표시 변경 생략)');
+        stopDrivingSyncLoop(); 
+        // 💡 백그라운드에서는 화면이 보이지 않으므로 헤더 문구를 건드리지 않음
       } else {
         isAppInForeground = true;
-        console.log('📱 앱 포그라운드 전환: Supabase 주행/차량 정보 복구');
-        handleRefresh(true); // 복귀 시 Supabase 최신 데이터 1회 수신
+        console.log('📱 앱 포그라운드 복귀: Supabase 주행/차량 정보 복구');
+        if (indicator) {
+          indicator.innerText = "🅿️ 포그라운드 대기";
+          indicator.className = "text-[10px] text-gray-400 font-mono bg-gray-800/80 px-2 py-1 rounded-md border border-gray-700";
+        }
+        handleRefresh(true); 
       }
     }
 
@@ -536,9 +530,6 @@
       if (subTab === 'battery') renderBatteryCharts();
     }
 
-    // ==========================================
-    // 3. Supabase 데이터 조회 (포그라운드 전용)
-    // ==========================================
     function loadCachedDataFirst() {
       try {
         const cachedVehicle = localStorage.getItem('tesla_cached_vehicle');
@@ -556,24 +547,25 @@
     }
 
     async function handleRefresh(isSilent = false) {
-      // 앱이 백그라운드에 있으면 Supabase 주행 데이터 가져오기 차단
       if (!isAppInForeground && isSilent) return;
 
       const indicator = document.getElementById('sync-status-indicator');
-      if (indicator && !isSilent) indicator.innerText = "⏳ 포그라운드 최신화 중...";
+      if (indicator && !isSilent) {
+        indicator.innerText = "⏳ 갱신 중...";
+      }
 
       const drivingState = await checkTeslaDrivingStatus();
 
       if (drivingState.isDriving && isAppInForeground) {
         if (indicator) {
-          indicator.innerText = `🚘 주행 중 (${drivingState.speed} km/h) - 5분 동기화`;
-          indicator.className = "text-[10px] text-blue-400 font-mono font-bold animate-pulse";
+          indicator.innerText = `🚘 주행 중 (${drivingState.speed} km/h)`;
+          indicator.className = "text-[10px] text-blue-400 font-mono font-bold bg-blue-950/40 px-2 py-1 rounded-md border border-blue-800/50 animate-pulse";
         }
         startDrivingSyncLoop();
       } else {
-        if (indicator) {
+        if (indicator && isAppInForeground) {
           indicator.innerText = "🅿️ 포그라운드 대기";
-          indicator.className = "text-[10px] text-gray-500 font-mono";
+          indicator.className = "text-[10px] text-gray-400 font-mono bg-gray-800/80 px-2 py-1 rounded-md border border-gray-700";
         }
         stopDrivingSyncLoop();
       }
@@ -607,7 +599,6 @@
 
     function startDrivingSyncLoop() {
       if (drivingSyncTimer) clearInterval(drivingSyncTimer);
-      // 포그라운드 상태에서만 주기적 Supabase 수신
       drivingSyncTimer = setInterval(() => {
         if (isAppInForeground) handleRefresh(true);
       }, 5 * 60 * 1000);
@@ -617,9 +608,6 @@
       if (drivingSyncTimer) { clearInterval(drivingSyncTimer); drivingSyncTimer = null; }
     }
 
-    // ==========================================
-    // 4. 🛡️ 감시 가디언 (백그라운드 전용 계속 실행)
-    // ==========================================
     function addLog(msg) {
       const logBox = document.getElementById('tmLogBox');
       if (!logBox) return;
@@ -728,7 +716,6 @@
       checkGuardianVehicleState();
       
       if (monitorTimer) clearInterval(monitorTimer);
-      // 앱이 백그라운드로 가더라도 타이머는 계속 구동
       monitorTimer = setInterval(checkGuardianVehicleState, interval);
     }
 
@@ -753,7 +740,6 @@
           const vehicleState = data.response.vehicle_state;
           const sentryActive = vehicleState?.sentry_mode;
 
-          // 백그라운드 구동 중 감시 모드가 꺼지면 백그라운드 가디언도 종료
           if (!sentryActive) {
             addLog('⚠️ 감시 모드 OFF 전환 감지. 가디언 백그라운드 자동 종료.');
             const toggle = document.getElementById('appMainToggle');
@@ -800,9 +786,6 @@
     function testFlashLights() { if(accessToken) flashLights(); else alert('테슬라 로그인을 진행해 주세요.'); }
     function testNtfy() { sendNtfyNotification('Tesla Guardian Test', 'This is a test notification.'); }
 
-    // ==========================================
-    // 5. 포그라운드 시각화 (기존 동일)
-    // ==========================================
     async function triggerGitHubSync() {
       if (!configObj.ghToken) { alert("⚙️ 설정에서 GitHub Token을 입력해 주세요."); openConfigModal(); return; }
       try {
@@ -1151,9 +1134,6 @@
       });
     }
 
-    // ==========================================
-    // 6. 기타 시각화 함수 (동일)
-    // ==========================================
     function setFilterMode(mode) {
       currentFilterMode = mode;
       ['single', 'daily', 'weekly', 'monthly', 'quarterly', 'half', 'yearly'].forEach(m => {
