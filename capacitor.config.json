@@ -1,0 +1,8 @@
+{
+  "appId": "com.tesladash.app",
+  "appName": "Tesla Dashboard",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}
