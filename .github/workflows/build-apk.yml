@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -13,50 +13,28 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
           java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
 
-      - name: Prepare Assets & Web Files
+      - name: Build Debug APK
         run: |
-          mkdir -p www
-          cp index.html www/
-          # capacitor assets 생성을 위해 assets 디렉토리에 icon.png 준비
-          mkdir -p assets
-          if [ -f "www/icon.png" ]; then
-            cp www/icon.png assets/icon.png
+          if [ -f "./gradlew" ]; then
+            chmod +x gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
           fi
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Initialize Capacitor & Generate Icons
-        run: |
-          npx cap add android || true
-          # assets/icon.png 기반으로 안드로이드 아이콘 자동 리사이징 및 적용
-          if [ -f "assets/icon.png" ]; then
-            npx @capacitor/assets generate --android
-          fi
-          npx cap sync android
-
-      - name: Build APK with Gradle
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TeslaDashboard-debug.apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: TeslaDash-Debug-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
