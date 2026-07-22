@@ -140,6 +140,12 @@
         </div>
       </div>
 
+      <!-- 주간~연간 뷰일 때 표시될 최장 운행 TOP 5 영역 -->
+      <div id="top5-container" class="card-dark rounded-2xl p-4 hidden space-y-3">
+        <h3 id="top5-title" class="text-xs font-bold text-amber-400">🔥 해당 기간 최장 운행 거리 TOP 5</h3>
+        <div id="top5-list" class="space-y-2 text-xs"></div>
+      </div>
+
       <div class="card-dark rounded-2xl overflow-hidden w-full aspect-[4/3] relative border border-gray-800 shadow-lg">
         <div id="map" class="w-full h-full"></div>
       </div>
@@ -196,6 +202,18 @@
           <span class="text-[10px] text-gray-500">운행 1회당 평균 <span id="m-stat-avg-trip-km" class="text-gray-300 font-bold">-km</span></span>
         </div>
         <span id="m-stat-avg-eff" class="text-2xl font-black text-indigo-400">- km/kWh</span>
+      </div>
+
+      <!-- 월간 리포트 하단: 최장 시간 TOP 5 및 최장 거리 TOP 5 -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="card-dark p-4 rounded-2xl space-y-2">
+          <h4 class="text-xs font-bold text-blue-400">⏱️ 이달의 최장 운행 시간 TOP 5</h4>
+          <div id="m-top5-time-list" class="space-y-1.5 text-xs"></div>
+        </div>
+        <div class="card-dark p-4 rounded-2xl space-y-2">
+          <h4 class="text-xs font-bold text-green-400">📍 이달의 최장 운행 거리 TOP 5</h4>
+          <div id="m-top5-dist-list" class="space-y-1.5 text-xs"></div>
+        </div>
       </div>
     </div>
 
@@ -262,12 +280,14 @@
     const SECRET_SALT = "Tesla_Supabase_Dashboard_2026";
     let configObj = { kakaoKey: '159c5d7588efc5939d431f005912f9f3', url: '', key: '', ghToken: '' };
     let map = null;
+    let geocoder = null;
     let allTrips = [];
     let vehicleRows = [];
     let currentPolylines = [];
     let currentInfoWindow = null;
     let currentFilterMode = 'daily';
 
+    let addressCache = {}; // 좌표 변환 캐싱용
     let chartDegRec = null, chartRangeRec = null, chartDegAll = null, chartRangeAll = null;
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -338,11 +358,23 @@
       });
     }
 
+    // libraries=services 추가 완료
     function loadKakaoSdk(appKey, callback) {
-      if (window.kakao && window.kakao.maps) { kakao.maps.load(callback); return; }
+      if (window.kakao && window.kakao.maps) { 
+        kakao.maps.load(() => {
+          geocoder = new kakao.maps.services.Geocoder();
+          callback();
+        }); 
+        return; 
+      }
       const script = document.createElement('script');
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false`;
-      script.onload = () => kakao.maps.load(callback);
+      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false&libraries=services`;
+      script.onload = () => {
+        kakao.maps.load(() => {
+          geocoder = new kakao.maps.services.Geocoder();
+          callback();
+        });
+      };
       document.head.appendChild(script);
     }
 
@@ -358,7 +390,7 @@
       });
 
       if (tabName === 'driving' && map) setTimeout(() => map.relayout(), 100);
-      if (tabName === 'monthly') initMonthlyDropdowns();
+      if (tabName === 'monthly') { initMonthlyDropdowns(); renderMonthlyTop5(); }
       if (tabName === 'battery') renderBatteryCharts();
     }
 
@@ -375,41 +407,53 @@
       } catch (err) { return []; }
     }
 
-    // driving_time 텍스트("12분", "1시간2분" 등)를 파싱하여 총 분(minutes) 숫자로 변환하는 함수
+    // 좌표 -> 행정동 변환 비동기 함수 (캐시 적용)
+    function getNeighborhood(lat, lng) {
+      return new Promise((resolve) => {
+        if (!lat || !lng || !geocoder) { resolve("위치 미상"); return; }
+        const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+        if (addressCache[key]) { resolve(addressCache[key]); return; }
+
+        geocoder.coord2RegionCode(lng, lat, (result, status) => {
+          if (status === kakao.maps.services.Status.OK) {
+            // 행정동(H) 또는 법정동(B) 중 동(region_type === 'H' 혹은 'B') 찾기
+            for (let i = 0; i < result.length; i++) {
+              if (result[i].region_type === 'H' || result[i].region_type === 'B') {
+                const addr = result[i].address_name; // 예: "서울특별시 강남구 역삼1동"
+                const tokens = addr.split(' ');
+                const dong = tokens[tokens.length - 1]; // 마지막 단어(동) 추출
+                addressCache[key] = dong;
+                resolve(dong);
+                return;
+              }
+            }
+          }
+          resolve("확인불가");
+        });
+      });
+    }
+
     function parseDrivingTimeToMinutes(val) {
       if (!val) return 0;
       if (typeof val === 'number') return Math.round(val);
       let str = String(val).trim();
       let totalMins = 0;
-
-      // 시간 추출 (예: "1시간 2분" 또는 "1시간2분")
       const hourMatch = str.match(/(\d+)\s*시간/);
-      if (hourMatch) {
-        totalMins += parseInt(hourMatch[1], 10) * 60;
-      }
+      if (hourMatch) totalMins += parseInt(hourMatch[1], 10) * 60;
 
-      // 분 추출 (예: "31분", 또는 시간 뒤에 오는 "2분")
       const minMatch = str.match(/(\d+)\s*분/);
       if (minMatch) {
-        // 만약 시간과 분이 같이 있을 때 뒤쪽 분 숫자를 정확히 잡기 위함
         const matches = str.matchAll(/(\d+)\s*(시간|분)/g);
         let foundMin = false;
         for (const match of matches) {
-          if (match[2] === '분') {
-            totalMins += parseInt(match[1], 10);
-            foundMin = true;
-          }
+          if (match[2] === '분') { totalMins += parseInt(match[1], 10); foundMin = true; }
         }
-        if (!foundMin) {
-          totalMins += parseInt(minMatch[1], 10);
-        }
+        if (!foundMin) totalMins += parseInt(minMatch[1], 10);
       } else if (!hourMatch) {
-        // "분"이나 "시간" 글자가 없고 숫자만 있는 경우
         const numOnly = parseFloat(str);
         if (!isNaN(numOnly)) totalMins = Math.round(numOnly);
       }
-
-      return totalMins > 0 ? totalMins : 15; // 기본값 Fallback
+      return totalMins > 0 ? totalMins : 15;
     }
 
     async function loadAllData() {
@@ -424,7 +468,6 @@
           try { pathData = JSON.parse(pathData); } catch(e) { pathData = []; }
         }
         
-        // driving_time 컬럼을 직접 읽어서 분 단위 숫자로 변환
         const rawTimeStr = r.driving_time ?? r.duration_min ?? r.duration ?? r.drive_time ?? r.time;
         const dMin = parseDrivingTimeToMinutes(rawTimeStr);
 
@@ -434,12 +477,29 @@
           moveKM: Number(r.move_km || 0),
           useBattery: Number(r.use_battery || 0),
           durationMin: dMin,
-          path: pathData
+          path: pathData,
+          startDong: "조회중",
+          endDong: "조회중"
         };
       });
 
       vehicleRows = vehicleRes || [];
       
+      // 모든 주행 건의 출발지/도착지 동 비동기 프리로드
+      for (let t of allTrips) {
+        if (t.path && t.path.length > 0) {
+          const firstPt = t.path[0];
+          const lastPt = t.path[t.path.length - 1];
+          const fLat = firstPt.lat || firstPt.latitude || firstPt[0];
+          const fLng = firstPt.lng || firstPt.longitude || firstPt[1];
+          const lLat = lastPt.lat || lastPt.latitude || lastPt[0];
+          const lLng = lastPt.lng || lastPt.longitude || lastPt[1];
+
+          t.startDong = await getNeighborhood(fLat, fLng);
+          t.endDong = await getNeighborhood(lLat, lLng);
+        }
+      }
+
       switchTab('vehicle');
       setFilterMode('daily');
       loadVehicleData();
@@ -652,6 +712,30 @@
         matched = allTrips.filter(t => new Date(t.timestamp).getFullYear() === selY);
       }
 
+      // 요구사항 4: 주간, 월간, 분기, 반년, 연간 뷰일 경우 최장 운행 거리 TOP 5 표시
+      const top5Container = document.getElementById('top5-container');
+      const top5List = document.getElementById('top5-list');
+      if (currentFilterMode !== 'single' && currentFilterMode !== 'daily') {
+        top5Container.classList.remove('hidden');
+        const sortedTop5 = [...matched].sort((a,b) => b.moveKM - a.moveKM).slice(0, 5);
+        if (sortedTop5.length === 0) {
+          top5List.innerHTML = `<span class="text-gray-500">해당 기간 데이터가 없습니다.</span>`;
+        } else {
+          top5List.innerHTML = sortedTop5.map((t, idx) => {
+            const dt = new Date(t.timestamp).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+            return `
+              <div class="flex justify-between items-center bg-[#0d0e12] p-2 rounded-xl border border-gray-800">
+                <span class="text-gray-300 font-bold">${idx+1}. ${dt}</span>
+                <span class="text-amber-400 font-extrabold">${t.moveKM.toFixed(1)} km</span>
+                <span class="text-gray-400">📍 ${t.startDong} ➔ ${t.endDong}</span>
+              </div>
+            `;
+          }).join('');
+        }
+      } else {
+        top5Container.classList.add('hidden');
+      }
+
       const totalDist = matched.reduce((a,c)=>a+c.moveKM, 0);
       const totalBat = matched.reduce((a,c)=>a+c.useBattery, 0);
       const estKwh = (totalBat / 100) * 60;
@@ -682,6 +766,7 @@
         polyline.setMap(map);
         currentPolylines.push(polyline);
 
+        // 요구사항 3: 지도 선 클릭 시 인포윈도우에 동 정보(출발지 ➔ 도착지) 표시
         kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
           if (currentInfoWindow) currentInfoWindow.close();
 
@@ -692,7 +777,8 @@
           const content = `
             <div style="padding:10px; background:#161820; border:1px solid #3B82F6; border-radius:12px; color:#ffffff; font-size:12px; line-height:1.5; font-family:sans-serif; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
               <div style="font-weight:bold; color:#60A5FA; margin-bottom:4px;">🕒 ${tripDate}</div>
-              <div>📍 이동 거리: <b>${trip.moveKM.toFixed(1)} km</b></div>
+              <div>📍 이동 경로: <b>${trip.startDong} ➔ ${trip.endDong}</b></div>
+              <div>📏 이동 거리: <b>${trip.moveKM.toFixed(1)} km</b></div>
               <div>🔋 소모 배터리: <b>-${trip.useBattery.toFixed(1)}%</b></div>
               <div>⏱️ 주행 시간: <b>${trip.durationMin}분</b></div>
             </div>
@@ -757,13 +843,14 @@
         document.getElementById('v-day-time').innerText = `${totalTime} 분`;
         document.getElementById('v-day-kwh').innerText = `-${totalKwh.toFixed(1)} kWh`;
 
+        // 요구사항 1: 차량정보 - 최근 운행일 전체 기록 각 주행마다 [동 ➔ 동] 표시
         const listContainer = document.getElementById('v-day-trips-list');
         listContainer.innerHTML = '';
         sameDayTrips.forEach(t => {
           const tTime = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
           listContainer.insertAdjacentHTML('beforeend', `
             <div class="flex justify-between items-center bg-[#0d0e12] p-2 rounded-lg text-[11px]">
-              <span class="text-gray-300 font-semibold">${tTime} 주행</span>
+              <span class="text-gray-300 font-semibold">${tTime} (${t.startDong} ➔ ${t.endDong})</span>
               <div class="space-x-2 text-gray-400">
                 <span>📍 ${t.moveKM.toFixed(1)}km</span>
                 <span>🔋 -${t.useBattery.toFixed(1)}%</span>
@@ -782,6 +869,7 @@
       document.getElementById('v-state-duration-title').innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
       document.getElementById('v-state-start-time').innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
 
+      // 요구사항 2: 차량정보 - 최근 상태 히스토리에서 주행 관련 동 및 시간 표시
       const timelineBox = document.getElementById('timeline-container');
       timelineBox.innerHTML = '';
 
@@ -801,10 +889,17 @@
           if (!eventsGrouped[dateKey]) eventsGrouped[dateKey] = [];
 
           const isDrive = odoDiff >= 2;
+          let routeStr = "";
+          if (isDrive) {
+            // 해당 시간대 근처의 주행 데이터 매칭해서 동 이름 가져오기
+            const matchedTrip = allTrips.find(t => Math.abs(t.timestamp - curDate.getTime()) < 3600000);
+            routeStr = matchedTrip ? ` [${matchedTrip.startDong} ➔ ${matchedTrip.endDong}]` : "";
+          }
+
           eventsGrouped[dateKey].push({
             isDrive: isDrive,
             timeStr: curDate.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' }),
-            desc: isDrive ? `주행 ${odoDiff}km (-${Math.abs(batDiff)}%)` : `충전 +${batDiff}% (+${((batDiff/100)*60).toFixed(1)}kWh)`,
+            desc: isDrive ? `주행 ${odoDiff}km (-${Math.abs(batDiff)}%)${routeStr}` : `충전 +${batDiff}% (+${((batDiff/100)*60).toFixed(1)}kWh)`,
             bat: cur.battery_level,
             odo: Math.round(cur.odometer || 0)
           });
@@ -928,6 +1023,56 @@
       document.getElementById('m-stat-cost').innerText = `약 ${estCost.toLocaleString()} 원`;
       document.getElementById('m-stat-co2').innerText = `${co2Saved} kg`;
       document.getElementById('m-stat-avg-trip-km').innerText = `${avgTripKm}km`;
+
+      renderMonthlyTop5(filteredTrips);
+    }
+
+    // 요구사항 5: 월간 리포트 탭 내 최장 운행 시간 TOP 5 및 최장 운행 거리 TOP 5 (이동 동 정보 포함)
+    function renderMonthlyTop5(filteredTrips) {
+      if (!filteredTrips) {
+        const selY = Number(document.getElementById('m-select-year').value);
+        const selM = Number(document.getElementById('m-select-month').value);
+        const startT = new Date(selY, selM - 1, 1).getTime();
+        const endT = new Date(selY, selM, 1).getTime();
+        filteredTrips = allTrips.filter(t => t.timestamp >= startT && t.timestamp < endT);
+      }
+
+      // 최장 운행 시간 TOP 5
+      const topTimeList = [...filteredTrips].sort((a,b) => b.durationMin - a.durationMin).slice(0, 5);
+      const timeContainer = document.getElementById('m-top5-time-list');
+      if (topTimeList.length === 0) {
+        timeContainer.innerHTML = `<span class="text-gray-500">기록이 없습니다.</span>`;
+      } else {
+        timeContainer.innerHTML = topTimeList.map((t, idx) => {
+          const dt = new Date(t.timestamp).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+          return `
+            <div class="flex justify-between items-center bg-[#0d0e12] p-1.5 rounded-lg border border-gray-800">
+              <span class="text-gray-300 font-bold">${idx+1}. ${dt}</span>
+              <span class="text-blue-400 font-extrabold">${t.durationMin}분</span>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // 최장 운행 거리 TOP 5 (각 이동 경로 동 정보 제공)
+      const topDistList = [...filteredTrips].sort((a,b) => b.moveKM - a.moveKM).slice(0, 5);
+      const distContainer = document.getElementById('m-top5-dist-list');
+      if (topDistList.length === 0) {
+        distContainer.innerHTML = `<span class="text-gray-500">기록이 없습니다.</span>`;
+      } else {
+        distContainer.innerHTML = topDistList.map((t, idx) => {
+          const dt = new Date(t.timestamp).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+          return `
+            <div class="bg-[#0d0e12] p-2 rounded-lg border border-gray-800 space-y-1">
+              <div class="flex justify-between">
+                <span class="text-gray-300 font-bold">${idx+1}. ${dt}</span>
+                <span class="text-green-400 font-extrabold">${t.moveKM.toFixed(1)} km</span>
+              </div>
+              <div class="text-[10px] text-gray-400">📍 ${t.startDong} ➔ ${t.endDong}</div>
+            </div>
+          `;
+        }).join('');
+      }
     }
 
     function renderBatteryCharts() {
