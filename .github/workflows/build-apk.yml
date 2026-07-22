@@ -27,17 +27,26 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Prepare Web Assets
+      - name: Prepare Assets & Web Files
         run: |
           mkdir -p www
           cp index.html www/
+          # capacitor assets 생성을 위해 assets 디렉토리에 icon.png 준비
+          mkdir -p assets
+          if [ -f "www/icon.png" ]; then
+            cp www/icon.png assets/icon.png
+          fi
 
       - name: Install Dependencies
         run: npm install
 
-      - name: Initialize & Sync Capacitor
+      - name: Initialize Capacitor & Generate Icons
         run: |
           npx cap add android || true
+          # assets/icon.png 기반으로 안드로이드 아이콘 자동 리사이징 및 적용
+          if [ -f "assets/icon.png" ]; then
+            npx @capacitor/assets generate --android
+          fi
           npx cap sync android
 
       - name: Build APK with Gradle
