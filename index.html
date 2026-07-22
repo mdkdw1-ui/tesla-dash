@@ -13,8 +13,8 @@
     .card-border-amber { border: 1px solid #d97706; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-thumb { background: #262936; border-radius: 4px; }
-    /* 긴 주소가 줄바꿈되지 않고 말줄임표 처리되거나 한 줄로 예쁘게 정렬되도록 설정 */
-    .single-line-address { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    /* 주소가 잘리지 않고 여러 줄로 자연스럽게 표시되거나 전체가 노출되도록 허용 */
+    .full-address-wrap { word-break: keep-all; overflow-wrap: break-word; white-space: normal; }
   </style>
 </head>
 <body class="min-h-screen flex flex-col pb-10">
@@ -78,7 +78,7 @@
           <div><span class="text-gray-500 block text-[10px]">총 운전시간</span><span id="v-day-time" class="font-bold text-gray-200">- 분</span></div>
           <div><span class="text-gray-500 block text-[10px]">총 사용에너지</span><span id="v-day-kwh" class="font-bold text-gray-200">- kWh</span></div>
         </div>
-        <div id="v-day-trips-list" class="space-y-1.5 pt-2 border-t border-gray-800/60 text-xs"></div>
+        <div id="v-day-trips-list" class="space-y-2 pt-2 border-t border-gray-800/60 text-xs"></div>
       </div>
 
       <!-- 주차 시간 카드 -->
@@ -147,7 +147,7 @@
         <div id="map" class="w-full h-full"></div>
       </div>
 
-      <!-- 주행 정보 탭 아래쪽에 위치한 최장 운행 TOP 5 영역 -->
+      <!-- 주행 정보 탭 하단 최장 운행 TOP 5 영역 -->
       <div id="top5-container" class="card-dark rounded-2xl p-4 hidden space-y-3">
         <h3 id="top5-title" class="text-xs font-bold text-amber-400">🔥 해당 기간 일자별 최장 운행 거리 TOP 5</h3>
         <div id="top5-list" class="space-y-2 text-xs"></div>
@@ -650,7 +650,6 @@
         if (hSel) hSel.value = h;
         renderDrivingData();
       } else if (currentFilterMode === 'yearly') {
-        // [오타 수정] ysel -> ySel로 정상 수정
         const ySel = document.getElementById('ctrl-year');
         if (ySel && ySel.selectedIndex !== -1) {
           const nextIdx = ySel.selectedIndex - offset;
@@ -669,6 +668,28 @@
       currentPolylines.forEach(p => p.setMap(null));
       currentPolylines = [];
       if (currentInfoWindow) currentInfoWindow.close();
+    }
+
+    // [핵심 수정] 시간순으로 정렬된 운행 목록을 바탕으로 중복없이 전체 경로 흐름([출발] ➔ [경유] ➔ [도착])을 올바르게 조합하는 헬퍼 함수
+    function buildSequentialRouteString(tripsArray) {
+      if (!tripsArray || tripsArray.length === 0) return "";
+      // 시간순(오래된 순) 정렬
+      const sorted = [...tripsArray].sort((a, b) => a.timestamp - b.timestamp);
+      let routePoints = [];
+      sorted.forEach((trip, idx) => {
+        if (idx === 0) {
+          routePoints.push(trip.startDong);
+        }
+        routePoints.push(trip.endDong);
+      });
+      // 연속으로 동일한 동이 중복되는 경우 제거하되 왕복 흐름(예: 은평 -> 파주 -> 은평)은 보존
+      let uniqueRoute = [];
+      routePoints.forEach((pt, i) => {
+        if (i === 0 || pt !== routePoints[i - 1]) {
+          uniqueRoute.push(pt);
+        }
+      });
+      return uniqueRoute.join(' ➔ ');
     }
 
     function renderDrivingData() {
@@ -745,21 +766,14 @@
           top5List.innerHTML = `<span class="text-gray-500">해당 기간 데이터가 없습니다.</span>`;
         } else {
           top5List.innerHTML = dailyArray.map((item, idx) => {
-            let routePoints = [];
-            item.trips.forEach((trip, tIdx) => {
-              if (tIdx === 0) routePoints.push(trip.startDong);
-              routePoints.push(trip.endDong);
-            });
-            let uniqueRoute = routePoints.filter((val, i, arr) => i === 0 || val !== arr[i-1]);
-            let fullRouteStr = uniqueRoute.join(' ➔ ');
-
+            const fullRouteStr = buildSequentialRouteString(item.trips);
             return `
               <div class="flex flex-col gap-1 bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800">
                 <div class="flex justify-between items-center">
                   <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
                   <span class="text-amber-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
                 </div>
-                <div class="text-gray-400 text-[11px] single-line-address">📍 경로: ${fullRouteStr}</div>
+                <div class="text-gray-300 text-[11px] full-address-wrap">📍 경로: ${fullRouteStr}</div>
               </div>
             `;
           }).join('');
@@ -858,7 +872,9 @@
 
       if (allTrips.length > 0) {
         const lastTripDateStr = new Date(allTrips[0].timestamp).toDateString();
-        const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr);
+        // 당일 운행 기록들을 시간순(오래된 순)으로 정렬하여 전체 경로 흐름 파악
+        const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr)
+                                       .sort((a, b) => a.timestamp - b.timestamp);
         const dayDate = new Date(allTrips[0].timestamp);
 
         const totalDist = sameDayTrips.reduce((a,c)=>a+c.moveKM, 0);
@@ -876,16 +892,31 @@
 
         const listContainer = document.getElementById('v-day-trips-list');
         listContainer.innerHTML = '';
+        
+        // 상단 요약에 전체 일자 경로 흐름 추가 ([출발] ➔ [경유] ➔ [도착] 형태 유지가 잘 보이도록 표시)
+        const fullDayRoute = buildSequentialRouteString(sameDayTrips);
+        if (fullDayRoute) {
+          listContainer.insertAdjacentHTML('beforeend', `
+            <div class="bg-[#0f1015] p-2.5 rounded-xl border border-gray-800 text-[11px] mb-2">
+              <span class="text-indigo-400 font-bold block mb-0.5">🌐 당일 전체 이동 경로 흐름</span>
+              <span class="text-gray-200 full-address-wrap">${fullDayRoute}</span>
+            </div>
+          `);
+        }
+
         sameDayTrips.forEach(t => {
           const tTime = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
           listContainer.insertAdjacentHTML('beforeend', `
-            <div class="flex justify-between items-center bg-[#0d0e12] p-2 rounded-lg text-[11px]">
-              <span class="text-gray-300 font-semibold single-line-address max-w-[150px]">${tTime} (${t.startDong} ➔ ${t.endDong})</span>
-              <div class="space-x-1 text-gray-400 whitespace-nowrap">
-                <span>📍 ${t.moveKM.toFixed(1)}km</span>
-                <span>🔋 -${t.useBattery.toFixed(1)}%</span>
-                <span>⏱️ ${t.durationMin}분</span>
+            <div class="flex flex-col gap-1 bg-[#0d0e12] p-2 rounded-xl text-[11px] border border-gray-800/80">
+              <div class="flex justify-between items-center">
+                <span class="text-gray-400 font-mono">${tTime} 출발</span>
+                <div class="space-x-1.5 text-gray-300 font-semibold whitespace-nowrap">
+                  <span>📍 ${t.moveKM.toFixed(1)}km</span>
+                  <span>🔋 -${t.useBattery.toFixed(1)}%</span>
+                  <span>⏱️ ${t.durationMin}분</span>
+                </div>
               </div>
+              <div class="text-gray-200 full-address-wrap">➔ 구간: <b>${t.startDong}</b> ➔ <b>${t.endDong}</b></div>
             </div>
           `);
         });
@@ -1105,21 +1136,14 @@
         distContainer.innerHTML = `<span class="text-gray-500">기록이 없습니다.</span>`;
       } else {
         distContainer.innerHTML = topDistList.map((item, idx) => {
-          let routePoints = [];
-          item.trips.forEach((trip, tIdx) => {
-            if (tIdx === 0) routePoints.push(trip.startDong);
-            routePoints.push(trip.endDong);
-          });
-          let uniqueRoute = routePoints.filter((val, i, arr) => i === 0 || val !== arr[i-1]);
-          let fullRouteStr = uniqueRoute.join(' ➔ ');
-
+          const fullRouteStr = buildSequentialRouteString(item.trips);
           return `
             <div class="bg-[#0d0e12] p-2 rounded-lg border border-gray-800 space-y-1">
               <div class="flex justify-between">
                 <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
                 <span class="text-green-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
               </div>
-              <div class="text-[10px] text-gray-400 single-line-address">📍 ${fullRouteStr}</div>
+              <div class="text-[11px] text-gray-300 full-address-wrap">📍 ${fullRouteStr}</div>
             </div>
           `;
         }).join('');
