@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla Monitor</title>
+  <title>Tesla Monitor & Guardian</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -13,8 +13,15 @@
     .card-border-amber { border: 1px solid #d97706; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-thumb { background: #262936; border-radius: 4px; }
-    /* 주소가 잘리지 않고 여러 줄로 자연스럽게 표시되거나 전체가 노출되도록 허용 */
     .full-address-wrap { word-break: keep-all; overflow-wrap: break-word; white-space: normal; }
+
+    /* CSS 토글 스위치 */
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: .3s; border-radius: 24px; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+    input:checked + .slider { background-color: #10b981; }
+    input:checked + .slider:before { transform: translateX(20px); }
   </style>
 </head>
 <body class="min-h-screen flex flex-col pb-10">
@@ -33,9 +40,10 @@
     </div>
   </header>
 
-  <!-- Navigation Tabs -->
+  <!-- Navigation Tabs (감시가디언 탭 추가됨) -->
   <div class="bg-[#12141c] border-b border-gray-800 px-2 py-2 flex justify-around text-xs font-semibold overflow-x-auto">
     <button onclick="switchTab('vehicle')" id="btn-tab-vehicle" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition whitespace-nowrap">🚗 차량정보</button>
+    <button onclick="switchTab('guardian')" id="btn-tab-guardian" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap">🛡️ 감시가디언</button>
     <button onclick="switchTab('driving')" id="btn-tab-driving" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap">🗺️ 주행지도</button>
     <button onclick="switchTab('monthly')" id="btn-tab-monthly" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap">📊 월간리포트</button>
     <button onclick="switchTab('battery')" id="btn-tab-battery" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap">🔋 배터리</button>
@@ -113,7 +121,83 @@
       </div>
     </div>
 
-    <!-- 2. 주행 지도 탭 -->
+    <!-- 2. 감시 가디언 탭 (새로 통합된 파트) -->
+    <div id="panel-guardian" class="hidden space-y-4">
+      <div class="card-dark p-4 rounded-2xl border border-red-500/30 space-y-4">
+        
+        <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">🛡️</span>
+            <h2 class="text-base font-bold text-red-500">감시 모드 가디언</h2>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-gray-400" id="toggleLabelText">기능 OFF</span>
+            <label class="switch">
+              <input type="checkbox" id="appMainToggle" onchange="handleToggleChange(this)">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 실시간 가디언 상태 표시 -->
+        <div class="bg-[#0f1015] p-3 rounded-xl border border-gray-800 flex justify-between items-center">
+          <div class="flex flex-col gap-1">
+            <span class="text-[11px] text-gray-400">가디언 감시 상태</span>
+            <span class="text-[10px] text-gray-500" id="guardianLastCheck">마지막 확인: -</span>
+          </div>
+          <div id="vehicleStatusBadge" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-800 text-gray-400 border border-gray-700">
+            ❓ 로그인 필요
+          </div>
+        </div>
+
+        <!-- 계정 인증 섹션 -->
+        <div id="loginSection" class="space-y-2">
+          <label class="block text-xs text-gray-400">Tesla OAuth 계정 연동</label>
+          <button onclick="requestTeslaLogin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5">
+            🔐 테슬라 계정 로그인
+          </button>
+        </div>
+
+        <div id="tokenInfoSection" class="hidden">
+          <div class="p-2.5 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-emerald-400 text-xs font-bold flex items-center gap-2">
+            <span>✅</span> 테슬라 OAuth 로그인 완료 (자동 제어 준비)
+          </div>
+        </div>
+
+        <!-- 가디언 설정 입력창 -->
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block text-gray-400 mb-1">Vehicle ID (또는 VIN)</label>
+            <input type="text" id="guardianVehicleId" placeholder="차량 ID 입력" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white font-mono">
+          </div>
+          <div>
+            <label class="block text-gray-400 mb-1">ntfy 알림 토픽</label>
+            <input type="text" id="guardianNtfyTopic" value="MJYAz6ZyjXiujaTDpJ" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white font-mono">
+          </div>
+          <div>
+            <label class="block text-gray-400 mb-1">모니터링 주기 (초)</label>
+            <input type="number" id="guardianPollInterval" value="5" min="2" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white font-mono">
+          </div>
+        </div>
+
+        <!-- 테스트 버튼 -->
+        <div class="flex gap-2 text-xs pt-1">
+          <button onclick="testFlashLights()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2 rounded-xl transition">⚡ 전조등 테스트</button>
+          <button onclick="testNtfy()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2 rounded-xl transition">📱 ntfy 테스트</button>
+        </div>
+
+        <!-- 시스템 로그 박스 -->
+        <div class="space-y-1">
+          <span class="text-[10px] font-bold text-gray-500">실시간 시스템 작업 로그</span>
+          <div id="tmLogBox" class="bg-[#0b0c10] border border-gray-800/80 rounded-xl p-2.5 h-32 overflow-y-auto font-mono text-[11px] text-emerald-400">
+            <div class="tm-log-entry">[시스템] 테슬라 로그인을 진행해 주세요.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 3. 주행 지도 탭 -->
     <div id="panel-driving" class="hidden flex-1 flex flex-col gap-3">
       <div class="card-dark rounded-2xl p-4 flex flex-col gap-3">
         <span class="text-xs font-bold text-gray-400">📅 조회 기간 및 상세 조건</span>
@@ -147,14 +231,14 @@
         <div id="map" class="w-full h-full"></div>
       </div>
 
-      <!-- 주행 정보 탭 하단 최장 운행 TOP 5 영역 -->
+      <!-- 최장 운행 TOP 5 영역 -->
       <div id="top5-container" class="card-dark rounded-2xl p-4 hidden space-y-3">
         <h3 id="top5-title" class="text-xs font-bold text-amber-400">🔥 해당 기간 일자별 최장 운행 거리 TOP 5</h3>
         <div id="top5-list" class="space-y-2 text-xs"></div>
       </div>
     </div>
 
-    <!-- 3. 월간 리포트 탭 -->
+    <!-- 4. 월간 리포트 탭 -->
     <div id="panel-monthly" class="hidden space-y-4">
       <div class="card-dark p-4 rounded-2xl space-y-3">
         <div class="flex justify-between items-center">
@@ -207,7 +291,6 @@
         <span id="m-stat-avg-eff" class="text-2xl font-black text-indigo-400">- km/kWh</span>
       </div>
 
-      <!-- 월간 리포트 하단: 일자별 최장 시간 TOP 5 및 일자별 최장 거리 TOP 5 -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div class="card-dark p-4 rounded-2xl space-y-2">
           <h4 class="text-xs font-bold text-blue-400">⏱️ 이달의 일자별 최장 운행 시간 TOP 5</h4>
@@ -220,7 +303,7 @@
       </div>
     </div>
 
-    <!-- 4. 배터리 탭 -->
+    <!-- 5. 배터리 탭 -->
     <div id="panel-battery" class="hidden space-y-4">
       <div class="grid grid-cols-2 gap-3">
         <div class="card-dark p-4 rounded-2xl">
@@ -280,20 +363,43 @@
   </div>
 
   <script>
+    // ==========================================
+    // 1. 공통 환경 설정 및 변수
+    // ==========================================
     const SECRET_SALT = "Tesla_Supabase_Dashboard_2026";
     let configObj = { kakaoKey: '159c5d7588efc5939d431f005912f9f3', url: '', key: '', ghToken: '' };
-    let map = null;
-    let geocoder = null;
-    let allTrips = [];
-    let vehicleRows = [];
-    let currentPolylines = [];
-    let currentInfoWindow = null;
-    let currentFilterMode = 'daily';
+    
+    // 테슬라 가디언 & OAuth 설정
+    const VERCEL_BACKEND_URL = "https://my-tesla-app-six.vercel.app/api/exchange"; 
+    const CLIENT_ID = "272ac00a-248e-4fa7-8027-1fc06e8e9a24";
+    const REDIRECT_URI = "https://mdkdw1-ui.github.io/tesla-dash";
 
+    let accessToken = "";
+    let monitorTimer = null;
+    let lastSentryState = false;
+
+    // 대시보드 상태 데이터 변수
+    let map = null, geocoder = null;
+    let allTrips = [], vehicleRows = [];
+    let currentPolylines = [], currentInfoWindow = null;
+    let currentFilterMode = 'daily';
     let addressCache = {}; 
     let chartDegRec = null, chartRangeRec = null, chartDegAll = null, chartRangeAll = null;
 
+    // ==========================================
+    // 2. 초기화 및 이벤트 리스너
+    // ==========================================
     window.addEventListener('DOMContentLoaded', () => {
+      // 1. OAuth 인증 코드 감지 및 토큰 발급
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      if (code) {
+        switchTab('guardian');
+        addLog('🔄 OAuth 인증 코드 감지! Vercel 서버로 토큰 교환 중...');
+        exchangeCodeWithBackend(code);
+      }
+
+      // 2. 설정 로드 및 대시보드 초기화
       if (!loadConfig()) openConfigModal();
       else initDashboard();
     });
@@ -328,6 +434,191 @@
       document.getElementById('modal-config').classList.remove('hidden');
     }
 
+    function switchTab(tabName) {
+      ['vehicle', 'guardian', 'driving', 'monthly', 'battery'].forEach(t => {
+        const panel = document.getElementById(`panel-${t}`);
+        if (panel) panel.classList.toggle('hidden', t !== tabName);
+        const btn = document.getElementById(`btn-tab-${t}`);
+        if (btn) {
+          btn.className = t === tabName 
+            ? "px-3 py-1.5 rounded-lg bg-blue-600 text-white transition whitespace-nowrap font-bold" 
+            : "px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap";
+        }
+      });
+
+      if (tabName === 'driving' && map) setTimeout(() => map.relayout(), 100);
+      if (tabName === 'monthly') { initMonthlyDropdowns(); renderMonthlyTop5(); }
+      if (tabName === 'battery') renderBatteryCharts();
+    }
+
+    // ==========================================
+    // 3. 🛡️ 테슬라 감시 가디언 전용 로직
+    // ==========================================
+    function addLog(msg) {
+      const logBox = document.getElementById('tmLogBox');
+      if (!logBox) return;
+      const time = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = 'tm-log-entry';
+      entry.innerText = `[${time}] ${msg}`;
+      logBox.appendChild(entry);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function updateGuardianStatusUI(statusType, text) {
+      const badge = document.getElementById('vehicleStatusBadge');
+      const timeText = document.getElementById('guardianLastCheck');
+      if (!badge) return;
+
+      let badgeClasses = "px-3 py-1 text-xs font-bold rounded-full border ";
+      if (statusType === 'driving') badgeClasses += "bg-blue-900/40 text-blue-300 border-blue-500/50";
+      else if (statusType === 'sentry') badgeClasses += "bg-red-900/40 text-red-300 border-red-500/50";
+      else if (statusType === 'sleep') badgeClasses += "bg-gray-800 text-gray-300 border-gray-700";
+      else badgeClasses += "bg-amber-900/40 text-amber-300 border-amber-500/50";
+
+      badge.className = badgeClasses;
+      badge.innerText = text;
+      if (timeText) timeText.innerText = `마지막 확인: ${new Date().toLocaleTimeString()}`;
+    }
+
+    function requestTeslaLogin() {
+      const scope = "openid offline_access vehicle_device_data vehicle_cmds";
+      const authUrl = `https://auth.tesla.com/oauth2/v3/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scope)}&state=sentry_app`;
+      window.location.href = authUrl;
+    }
+
+    async function exchangeCodeWithBackend(code) {
+      try {
+        const res = await fetch(VERCEL_BACKEND_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code })
+        });
+
+        const data = await res.json();
+        if (data.access_token) {
+          accessToken = data.access_token;
+          addLog('✅ 테슬라 Access Token 발급 성공!');
+          document.getElementById('loginSection').classList.add('hidden');
+          document.getElementById('tokenInfoSection').classList.remove('hidden');
+          updateGuardianStatusUI('sleep', '🌙 대기 모드 (토글을 켜세요)');
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else {
+          addLog(`❌ 토큰 교환 실패: ${JSON.stringify(data)}`);
+        }
+      } catch (err) {
+        addLog(`❌ 백엔드 통신 오류: ${err.message}`);
+      }
+    }
+
+    function handleToggleChange(checkbox) {
+      const labelText = document.getElementById('toggleLabelText');
+      if (!accessToken) {
+        alert('먼저 테슬라 로그인을 완료해주세요!');
+        checkbox.checked = false;
+        return;
+      }
+
+      if (checkbox.checked) {
+        labelText.innerText = '기능 ON';
+        labelText.style.color = '#10b981';
+        startMonitoring();
+      } else {
+        labelText.innerText = '기능 OFF';
+        labelText.style.color = '#aaa';
+        stopMonitoring();
+      }
+    }
+
+    function startMonitoring() {
+      const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) * 1000;
+      addLog('▶️ 감시 모니터링 시작 (자동 제어 활성화)');
+      checkGuardianVehicleState();
+      monitorTimer = setInterval(checkGuardianVehicleState, interval);
+    }
+
+    function stopMonitoring() {
+      if (monitorTimer) clearInterval(monitorTimer);
+      addLog('⏹️ 감시 모니터링 중지됨');
+    }
+
+    async function checkGuardianVehicleState() {
+      const vehicleId = document.getElementById('guardianVehicleId').value.trim();
+      if (!vehicleId || !accessToken) return;
+
+      try {
+        const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${vehicleId}/vehicle_data`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+
+        if (!res.ok) {
+          updateGuardianStatusUI('sleep', '🌙 절전/오프라인');
+          return;
+        }
+
+        const data = await res.json();
+        if (data.response) {
+          const driveState = data.response.drive_state;
+          const vehicleState = data.response.vehicle_state;
+          const sentryActive = vehicleState.sentry_mode;
+
+          if (driveState.shift_state && driveState.shift_state !== 'P' || driveState.speed > 0) {
+            updateGuardianStatusUI('driving', '🚘 주행 중');
+          } else if (sentryActive) {
+            updateGuardianStatusUI('sentry', '🛡️ 감시 모드 작동 중');
+            
+            // 🚨 감시 모드 중 새 이벤트 감지 시 자동 액션
+            if (!lastSentryState) {
+              addLog('🚨 감시 모드 위협 감지! 자동 전조등 점멸 및 알림 전송');
+              await flashLights();
+              await sendNtfyNotification('테슬라 보안 경고', '감시 모드 이벤트가 감지되어 전조등을 자동으로 깜빡였습니다!');
+            }
+          } else {
+            updateGuardianStatusUI('sleep', '🌙 대기/주차 모드');
+          }
+
+          lastSentryState = sentryActive;
+        }
+      } catch (err) {
+        addLog(`❌ 상태 체크 에러: ${err.message}`);
+      }
+    }
+
+    async function flashLights() {
+      const vehicleId = document.getElementById('guardianVehicleId').value.trim();
+      try {
+        const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${vehicleId}/command/flash_lights`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if(data.response && data.response.result) addLog('⚡ [자동] 전조등 점멸 명령 성공');
+      } catch (err) {
+        addLog(`❌ 전조등 명령 오류: ${err.message}`);
+      }
+    }
+
+    async function sendNtfyNotification(title, message) {
+      const topic = document.getElementById('guardianNtfyTopic').value.trim();
+      if (!topic) return;
+      try {
+        const res = await fetch(`https://ntfy.sh/${topic}`, {
+          method: 'POST',
+          headers: { 'Title': title, 'Priority': 'high', 'Tags': 'car,warning' },
+          body: message
+        });
+        if(res.ok) addLog('📱 [자동] ntfy 푸시 알림 전송 완료!');
+      } catch (err) {
+        addLog(`❌ ntfy 전송 실패: ${err.message}`);
+      }
+    }
+
+    function testFlashLights() { if(accessToken) flashLights(); else alert('로그인을 먼저 진행해주세요.'); }
+    function testNtfy() { sendNtfyNotification('테슬라 가디언 테스트', 'ntfy 연동 테스트 메시지입니다.'); }
+
+    // ==========================================
+    // 4. 기존 대시보드 데이터 연동 로직
+    // ==========================================
     async function triggerGitHubSync() {
       if (!configObj.ghToken) {
         alert("설정(⚙️) 메뉴에서 GitHub Personal Access Token을 먼저 입력해 주세요.");
@@ -344,14 +635,9 @@
           },
           body: JSON.stringify({ ref: 'main' })
         });
-        if (res.ok || res.status === 204) {
-          alert("⚡ GitHub Sync Pipeline이 성공적으로 호출되었습니다! 데이터 동기화가 시작됩니다.");
-        } else {
-          alert(`동기화 요청 실패: ${res.status}`);
-        }
-      } catch (err) {
-        alert("GitHub 연동 중 오류 발생: " + err.message);
-      }
+        if (res.ok || res.status === 204) alert("⚡ GitHub Sync Pipeline이 성공적으로 호출되었습니다!");
+        else alert(`동기화 요청 실패: ${res.status}`);
+      } catch (err) { alert("GitHub 연동 중 오류 발생: " + err.message); }
     }
 
     function initDashboard() {
@@ -363,37 +649,13 @@
 
     function loadKakaoSdk(appKey, callback) {
       if (window.kakao && window.kakao.maps) { 
-        kakao.maps.load(() => {
-          geocoder = new kakao.maps.services.Geocoder();
-          callback();
-        }); 
+        kakao.maps.load(() => { geocoder = new kakao.maps.services.Geocoder(); callback(); }); 
         return; 
       }
       const script = document.createElement('script');
       script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false&libraries=services`;
-      script.onload = () => {
-        kakao.maps.load(() => {
-          geocoder = new kakao.maps.services.Geocoder();
-          callback();
-        });
-      };
+      script.onload = () => { kakao.maps.load(() => { geocoder = new kakao.maps.services.Geocoder(); callback(); }); };
       document.head.appendChild(script);
-    }
-
-    function switchTab(tabName) {
-      ['vehicle', 'driving', 'monthly', 'battery'].forEach(t => {
-        document.getElementById(`panel-${t}`).classList.toggle('hidden', t !== tabName);
-        const btn = document.getElementById(`btn-tab-${t}`);
-        if (btn) {
-          btn.className = t === tabName 
-            ? "px-3 py-1.5 rounded-lg bg-blue-600 text-white transition whitespace-nowrap" 
-            : "px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition whitespace-nowrap";
-        }
-      });
-
-      if (tabName === 'driving' && map) setTimeout(() => map.relayout(), 100);
-      if (tabName === 'monthly') { initMonthlyDropdowns(); renderMonthlyTop5(); }
-      if (tabName === 'battery') renderBatteryCharts();
     }
 
     function initMap() {
@@ -410,15 +672,8 @@
     }
 
     function formatAddressString(region1, region2, region3) {
-      const r1 = (region1 || "").trim();
-      const r2 = (region2 || "").trim();
-      const r3 = (region3 || "").trim();
-
-      if (r1.includes("서울")) {
-        return `${r2} ${r3}`.trim();
-      } else {
-        return `${r2} ${r3}`.trim();
-      }
+      const r1 = (region1 || "").trim(), r2 = (region2 || "").trim(), r3 = (region3 || "").trim();
+      return `${r2} ${r3}`.trim();
     }
 
     function getNeighborhood(lat, lng) {
@@ -478,7 +733,6 @@
         if (typeof pathData === 'string') {
           try { pathData = JSON.parse(pathData); } catch(e) { pathData = []; }
         }
-        
         const rawTimeStr = r.driving_time ?? r.duration_min ?? r.duration ?? r.drive_time ?? r.time;
         const dMin = parseDrivingTimeToMinutes(rawTimeStr);
 
@@ -592,71 +846,39 @@
           if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
         }
       } else if (currentFilterMode === 'weekly') {
-        const ySel = document.getElementById('ctrl-year');
-        const mSel = document.getElementById('ctrl-month');
-        const wSel = document.getElementById('ctrl-week');
-
-        let y = Number(ySel.value);
-        let m = Number(mSel.value);
-        let w = Number(wSel.value) + offset;
+        const ySel = document.getElementById('ctrl-year'), mSel = document.getElementById('ctrl-month'), wSel = document.getElementById('ctrl-week');
+        let y = Number(ySel.value), m = Number(mSel.value), w = Number(wSel.value) + offset;
 
         if (w < 1) { m -= 1; if (m < 1) { m = 12; y -= 1; } w = 5; }
         else if (w > 5) { m += 1; if (m > 12) { m = 1; y += 1; } w = 1; }
 
-        if (ySel) ySel.value = y;
-        if (mSel) mSel.value = m;
-        if (wSel) wSel.value = w;
+        if (ySel) ySel.value = y; if (mSel) mSel.value = m; if (wSel) wSel.value = w;
         renderDrivingData();
       } else if (currentFilterMode === 'monthly') {
-        const ySel = document.getElementById('ctrl-year');
-        const mSel = document.getElementById('ctrl-month');
+        const ySel = document.getElementById('ctrl-year'), mSel = document.getElementById('ctrl-month');
+        let y = Number(ySel.value), m = Number(mSel.value) + offset;
 
-        let y = Number(ySel.value);
-        let m = Number(mSel.value) + offset;
-
-        if (m < 1) { m = 12; y -= 1; }
-        else if (m > 12) { m = 1; y += 1; }
-
-        if (ySel) ySel.value = y;
-        if (mSel) mSel.value = m;
+        if (m < 1) { m = 12; y -= 1; } else if (m > 12) { m = 1; y += 1; }
+        if (ySel) ySel.value = y; if (mSel) mSel.value = m;
         renderDrivingData();
       } else if (currentFilterMode === 'quarterly') {
-        const ySel = document.getElementById('ctrl-year');
-        const qSel = document.getElementById('ctrl-quarter');
+        const ySel = document.getElementById('ctrl-year'), qSel = document.getElementById('ctrl-quarter');
+        let y = Number(ySel.value), q = Number(qSel.value) + offset;
 
-        let y = Number(ySel.value);
-        let q = Number(qSel.value) + offset;
-
-        if (q < 1) { q = 4; y -= 1; }
-        else if (q > 4) { q = 1; y += 1; }
-
-        if (ySel) ySel.value = y;
-        if (qSel) qSel.value = q;
+        if (q < 1) { q = 4; y -= 1; } else if (q > 4) { q = 1; y += 1; }
+        if (ySel) ySel.value = y; if (qSel) qSel.value = q;
         renderDrivingData();
       } else if (currentFilterMode === 'half') {
-        const ySel = document.getElementById('ctrl-year');
-        const hSel = document.getElementById('ctrl-half');
+        const ySel = document.getElementById('ctrl-year'), hSel = document.getElementById('ctrl-half');
+        let y = Number(ySel.value), h = Number(hSel.value);
 
-        let y = Number(ySel.value);
-        let h = Number(hSel.value);
+        if (offset === -1) { if (h === 1) { h = 2; y -= 1; } else { h = 1; } } 
+        else { if (h === 2) { h = 1; y += 1; } else { h = 2; } }
 
-        if (offset === -1) {
-          if (h === 1) { h = 2; y -= 1; } else { h = 1; }
-        } else {
-          if (h === 2) { h = 1; y += 1; } else { h = 2; }
-        }
-
-        if (ySel) ySel.value = y;
-        if (hSel) hSel.value = h;
+        if (ySel) ySel.value = y; if (hSel) hSel.value = h;
         renderDrivingData();
-      } else if (currentFilterMode === 'yearly') {
-        const ySel = document.getElementById('ctrl-year');
-        if (ySel && ySel.selectedIndex !== -1) {
-          const nextIdx = ySel.selectedIndex - offset;
-          if (nextIdx >= 0 && nextIdx < ySel.options.length) { ySel.selectedIndex = nextIdx; renderDrivingData(); }
-        }
-      } else if (currentFilterMode === 'single') {
-        const sel = document.getElementById('ctrl-select');
+      } else if (currentFilterMode === 'yearly' || currentFilterMode === 'single') {
+        const sel = document.getElementById(currentFilterMode === 'yearly' ? 'ctrl-year' : 'ctrl-select');
         if (sel && sel.selectedIndex !== -1) {
           const nextIdx = sel.selectedIndex - offset;
           if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
@@ -670,24 +892,17 @@
       if (currentInfoWindow) currentInfoWindow.close();
     }
 
-    // [핵심 수정] 시간순으로 정렬된 운행 목록을 바탕으로 중복없이 전체 경로 흐름([출발] ➔ [경유] ➔ [도착])을 올바르게 조합하는 헬퍼 함수
     function buildSequentialRouteString(tripsArray) {
       if (!tripsArray || tripsArray.length === 0) return "";
-      // 시간순(오래된 순) 정렬
       const sorted = [...tripsArray].sort((a, b) => a.timestamp - b.timestamp);
       let routePoints = [];
       sorted.forEach((trip, idx) => {
-        if (idx === 0) {
-          routePoints.push(trip.startDong);
-        }
+        if (idx === 0) routePoints.push(trip.startDong);
         routePoints.push(trip.endDong);
       });
-      // 연속으로 동일한 동이 중복되는 경우 제거하되 왕복 흐름(예: 은평 -> 파주 -> 은평)은 보존
       let uniqueRoute = [];
       routePoints.forEach((pt, i) => {
-        if (i === 0 || pt !== routePoints[i - 1]) {
-          uniqueRoute.push(pt);
-        }
+        if (i === 0 || pt !== routePoints[i - 1]) uniqueRoute.push(pt);
       });
       return uniqueRoute.join(' ➔ ');
     }
@@ -706,38 +921,29 @@
           return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` === selectedDay;
         });
       } else if (currentFilterMode === 'weekly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value);
-        const selM = Number(document.getElementById('ctrl-month')?.value);
-        const selW = Number(document.getElementById('ctrl-week')?.value);
+        const selY = Number(document.getElementById('ctrl-year')?.value), selM = Number(document.getElementById('ctrl-month')?.value), selW = Number(document.getElementById('ctrl-week')?.value);
         matched = allTrips.filter(t => {
           const d = new Date(t.timestamp);
-          const weekNum = Math.ceil(d.getDate() / 7);
-          return d.getFullYear() === selY && (d.getMonth() + 1) === selM && weekNum === selW;
+          return d.getFullYear() === selY && (d.getMonth() + 1) === selM && Math.ceil(d.getDate() / 7) === selW;
         });
       } else if (currentFilterMode === 'monthly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value);
-        const selM = Number(document.getElementById('ctrl-month')?.value);
+        const selY = Number(document.getElementById('ctrl-year')?.value), selM = Number(document.getElementById('ctrl-month')?.value);
         matched = allTrips.filter(t => {
           const d = new Date(t.timestamp);
           return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
         });
       } else if (currentFilterMode === 'quarterly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value);
-        const selQ = Number(document.getElementById('ctrl-quarter')?.value);
-        const startM = (selQ - 1) * 3 + 1;
-        const endM = selQ * 3;
+        const selY = Number(document.getElementById('ctrl-year')?.value), selQ = Number(document.getElementById('ctrl-quarter')?.value);
+        const startM = (selQ - 1) * 3 + 1, endM = selQ * 3;
         matched = allTrips.filter(t => {
-          const d = new Date(t.timestamp);
-          const m = d.getMonth() + 1;
-          return d.getFullYear() === selY && (m >= startM && m <= endM);
+          const m = new Date(t.timestamp).getMonth() + 1;
+          return new Date(t.timestamp).getFullYear() === selY && (m >= startM && m <= endM);
         });
       } else if (currentFilterMode === 'half') {
-        const selY = Number(document.getElementById('ctrl-year')?.value);
-        const selH = Number(document.getElementById('ctrl-half')?.value);
+        const selY = Number(document.getElementById('ctrl-year')?.value), selH = Number(document.getElementById('ctrl-half')?.value);
         matched = allTrips.filter(t => {
-          const d = new Date(t.timestamp);
-          const m = d.getMonth() + 1;
-          return d.getFullYear() === selY && (selH === 1 ? m <= 6 : m >= 7);
+          const m = new Date(t.timestamp).getMonth() + 1;
+          return new Date(t.timestamp).getFullYear() === selY && (selH === 1 ? m <= 6 : m >= 7);
         });
       } else if (currentFilterMode === 'yearly') {
         const selY = Number(document.getElementById('ctrl-year')?.value);
@@ -753,9 +959,7 @@
         matched.forEach(t => {
           const d = new Date(t.timestamp);
           const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-          if (!dailyGroup[dayKey]) {
-            dailyGroup[dayKey] = { dateStr: dayKey, totalDist: 0, trips: [] };
-          }
+          if (!dailyGroup[dayKey]) dailyGroup[dayKey] = { dateStr: dayKey, totalDist: 0, trips: [] };
           dailyGroup[dayKey].totalDist += t.moveKM;
           dailyGroup[dayKey].trips.push(t);
         });
@@ -829,11 +1033,7 @@
             </div>
           `;
 
-          currentInfoWindow = new kakao.maps.InfoWindow({
-            position: mouseEvent.latLng,
-            content: content,
-            removable: true
-          });
+          currentInfoWindow = new kakao.maps.InfoWindow({ position: mouseEvent.latLng, content: content, removable: true });
           currentInfoWindow.open(map);
         });
       });
@@ -872,7 +1072,6 @@
 
       if (allTrips.length > 0) {
         const lastTripDateStr = new Date(allTrips[0].timestamp).toDateString();
-        // 당일 운행 기록들을 시간순(오래된 순)으로 정렬하여 전체 경로 흐름 파악
         const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr)
                                        .sort((a, b) => a.timestamp - b.timestamp);
         const dayDate = new Date(allTrips[0].timestamp);
@@ -893,7 +1092,6 @@
         const listContainer = document.getElementById('v-day-trips-list');
         listContainer.innerHTML = '';
         
-        // 상단 요약에 전체 일자 경로 흐름 추가 ([출발] ➔ [경유] ➔ [도착] 형태 유지가 잘 보이도록 표시)
         const fullDayRoute = buildSequentialRouteString(sameDayTrips);
         if (fullDayRoute) {
           listContainer.insertAdjacentHTML('beforeend', `
@@ -1016,9 +1214,7 @@
       onMonthlyDropdownChange();
     }
 
-    function selectPrevMonth() {
-      shiftMonthlyDropdown(-1);
-    }
+    function selectPrevMonth() { shiftMonthlyDropdown(-1); }
 
     function shiftMonthlyDropdown(offset) {
       const ySelect = document.getElementById('m-select-year');
@@ -1045,8 +1241,7 @@
       const totalDist = filteredTrips.reduce((a,c)=>a+c.moveKM, 0);
       const uniqueDays = new Set(filteredTrips.map(t => new Date(t.timestamp).toDateString())).size;
 
-      let chargeCount = 0;
-      let totalChargePct = 0;
+      let chargeCount = 0, totalChargePct = 0;
       
       const vFiltered = vehicleRows.filter(r => {
         const t = new Date(r.updated_at).getTime();
@@ -1054,14 +1249,9 @@
       }).sort((a,b) => new Date(a.updated_at) - new Date(b.updated_at));
 
       for (let i = 1; i < vFiltered.length; i++) {
-        const prev = vFiltered[i-1];
-        const cur = vFiltered[i];
+        const prev = vFiltered[i-1], cur = vFiltered[i];
         const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
-
-        if (batDiff >= 1) {
-          chargeCount++;
-          totalChargePct += batDiff;
-        }
+        if (batDiff >= 1) { chargeCount++; totalChargePct += batDiff; }
       }
 
       const chargeKwh = ((totalChargePct / 100) * 60);
