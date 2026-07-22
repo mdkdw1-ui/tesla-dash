@@ -17,7 +17,7 @@
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-thumb { background: #262936; border-radius: 4px; }
     
-    /* 행정구역/주소 단어가 중간에서 끊기지 않도록 방지 */
+    /* 행정구역/주소 단어가 중간에서 줄바꿈되지 않도록 방지 */
     .address-tag { display: inline-block; white-space: nowrap; word-break: keep-all; }
     .status-badge-1line { white-space: nowrap; flex-shrink: 0; }
 
@@ -402,6 +402,7 @@
     
     const VERCEL_BACKEND_URL = "https://my-tesla-app-six.vercel.app/api/exchange"; 
     const CLIENT_ID = "272ac00a-248e-4fa7-8027-1fc06e8e9a24";
+    // 🔥 GitHub Pages 정확한 배포 주소로 설정
     const REDIRECT_URI = "https://mdkdw1-ui.github.io/tesla-dash";
 
     let accessToken = localStorage.getItem('tesla_access_token') || "";
@@ -425,6 +426,7 @@
         document.getElementById('tokenInfoSection')?.classList.remove('hidden');
       }
 
+      // OAuth 인증 코드 수신 처리
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
       if (code) {
@@ -656,9 +658,7 @@
       }
     }
 
-    /* 🛡️ 4번 감시 모드(Sentry) 정밀 진단 및 에러 코드 포착 함수 */
     async function checkIsVehicleSentryActiveWithDebug() {
-      // 1. Vercel 백엔드 호출
       try {
         addLog('📡 1단계: Vercel 백엔드 Sentry API 확인 중...');
         const res = await fetch('https://my-tesla-app-six.vercel.app/api/sentry', {
@@ -682,16 +682,15 @@
         addLog(`⚠️ Vercel 통신 예외 발생: ${e.message}`);
       }
 
-      // 2. Tesla Fleet API 직접 호출
       if (accessToken && configObj.vehicleId) {
         try {
           addLog('📡 2단계: Tesla Fleet API 직접 확인 중...');
-          const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${configObj.vehicleId}/vehicle_data`, {
+          const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${configObj.vehicleId}/vehicle_data?endpoints=vehicle_state`, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
           });
           
           if (res.status === 401 || res.status === 403) {
-            return { isActive: false, errorCode: 'ERR-AUTH-401', errorMessage: 'Tesla OAuth 토큰이 만료되었거나 권한(Scope)이 부족합니다. 재로그인이 필요합니다.' };
+            return { isActive: false, errorCode: 'ERR-AUTH-401', errorMessage: 'Tesla OAuth 토큰이 만료되었거나 권한이 부족합니다. 재로그인이 필요합니다.' };
           } else if (res.status === 408) {
             return { isActive: false, errorCode: 'ERR-SLEEP-408', errorMessage: '차량이 절전(Sleep) 상태입니다. Fleet API 응답이 대기시간을 초과했습니다.' };
           } else if (res.ok) {
@@ -711,8 +710,7 @@
         return { isActive: false, errorCode: 'ERR-NO-TOKEN', errorMessage: '테슬라 OAuth 로그인 토큰이 없습니다. 로그인 버튼을 눌러주세요.' };
       }
 
-      // 3. Supabase 최근 수집 레코드 확인
-      addLog('📡 3단계: Supabase 최신 차량 동기화 DB 레코드 확인 중...');
+      addLog('📡 3단계: Supabase 최신 차량 DB 레코드 확인 중...');
       if (vehicleRows && vehicleRows.length > 0) {
         const latest = vehicleRows[0];
         if (latest.sentry_mode === true || latest.is_sentry === true) {
@@ -750,7 +748,7 @@
       if (!vehicleId || !accessToken) return;
 
       try {
-        const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${vehicleId}/vehicle_data`, {
+        const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${vehicleId}/vehicle_data?endpoints=vehicle_state`, {
           headers: { 'Authorization': `Bearer ${accessToken}` }
         });
 
@@ -843,7 +841,6 @@
       map = new kakao.maps.Map(document.getElementById('map'), { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 5 });
     }
 
-    /* Supabase 연동 데이터 로드 */
     async function fetchSupabaseTable(queryPath) {
       if (!configObj.url || !configObj.key) return [];
       try {
@@ -860,7 +857,7 @@
       } catch (err) { return []; }
     }
 
-    /* 2번 요구사항: 주소 정제 함수 ('고양시', '서울특별시', '경기도' 등 표기 제거) */
+    // 주소 정제 함수 ('고양시', '서울특별시', '경기도' 제거)
     function cleanAddress(addr) {
       if (!addr || typeof addr !== 'string') return '';
       return addr
@@ -872,8 +869,7 @@
     }
 
     function formatAddressString(region1, region2, region3) {
-      const cleaned = cleanAddress(`${(region2 || "").trim()} ${(region3 || "").trim()}`);
-      return cleaned;
+      return cleanAddress(`${(region2 || "").trim()} ${(region3 || "").trim()}`);
     }
 
     function getNeighborhood(lat, lng) {
@@ -899,7 +895,7 @@
       });
     }
 
-    /* 1번 요구사항: Supabase driving_time 문자열 파싱 + 2차 출발/도착 시각 검증 */
+    // 운행시간 파싱 및 2차 검증 함수 (57분 -> 57, 1시간2분 -> 62)
     function parseDrivingTimeToMinutes(r) {
       if (!r) return 1;
 
@@ -927,7 +923,7 @@
         if (total > 0) minsFromDrivingTime = total;
       }
 
-      // 2차 검증: start_time과 end_time (또는 created_at) 차이로 분 계산
+      // 2차 검증: start_time과 end_time 차이 계산
       let minsFromTimeDiff = null;
       const sTime = r.start_time || r.started_at;
       const eTime = r.end_time || r.ended_at || r.created_at;
@@ -1043,7 +1039,7 @@
       }
     }
 
-    /* 3번 요구사항: 행정구역(덕양구 향동동)이 단어 중간에서 잘리지 않도록 태그화 */
+    // 행정구역 명칭 단위 줄바꿈 보정 HTML 생성
     function buildSequentialRouteHtml(tripsArray) {
       if (!tripsArray || tripsArray.length === 0) return "";
       const sorted = [...tripsArray].sort((a, b) => a.timestamp - b.timestamp);
@@ -1143,7 +1139,7 @@
           `);
         }
 
-        /* 2번 요구사항: 최근 운행일 카드 2줄 레이아웃 적용 */
+        // 주행 기록 카드 2줄 레이아웃 적용
         sameDayTrips.forEach(t => {
           const startLoc = cleanAddress(t.startDong);
           const endLoc = cleanAddress(t.endDong);
@@ -1173,7 +1169,7 @@
         });
       }
 
-      /* 2번 요구사항: 최근 상태 히스토리 타임라인 2줄 레이아웃 적용 */
+      // 최근 상태 히스토리 타임라인 2줄 레이아웃 적용
       const timelineBox = document.getElementById('timeline-container');
       timelineBox.innerHTML = '';
 
