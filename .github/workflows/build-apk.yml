@@ -1,8 +1,8 @@
-name: Build Android APK
+name: Build Android APK with Auto Icon
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
@@ -13,6 +13,49 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # 1. Python & Pillow 설치 (icon.png 변환용)
+      - name: Set up Python & Pillow
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Pillow
+        run: pip install Pillow
+
+      # 2. www/icon.png 파일로 안드로이드 mipmap 해상도별 아이콘 자동 생성
+      - name: Generate Android App Icons
+        run: |
+          python -c "
+          import os
+          from PIL import Image
+
+          icon_path = 'app/src/main/assets/www/icon.png'
+          if not os.path.exists(icon_path):
+              icon_path = 'www/icon.png'
+
+          sizes = {
+              'mipmap-mdpi': 48,
+              'mipmap-hdpi': 72,
+              'mipmap-xhdpi': 96,
+              'mipmap-xxhdpi': 144,
+              'mipmap-xxxhdpi': 192
+          }
+
+          res_dir = 'app/src/main/res'
+          img = Image.open(icon_path)
+
+          for folder, size in sizes.items():
+              target_dir = os.path.join(res_dir, folder)
+              os.makedirs(target_dir, exist_ok=True)
+              
+              # ic_launcher.png 및 ic_launcher_round.png 생성
+              resized = img.resize((size, size), Image.Resampling.LANCZOS)
+              resized.save(os.path.join(target_dir, 'ic_launcher.png'))
+              resized.save(os.path.join(target_dir, 'ic_launcher_round.png'))
+          print('✅ App icons successfully generated!')
+          "
+
+      # 3. Java 17 및 Gradle 설정
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -24,9 +67,11 @@ jobs:
         with:
           gradle-version: '8.5'
 
+      # 4. Debug APK 빌드
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace --info
 
+      # 5. APK 결과물 업로드
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
