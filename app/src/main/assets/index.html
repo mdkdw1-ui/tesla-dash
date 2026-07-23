@@ -1542,14 +1542,15 @@
           top5List.innerHTML = `<span class="text-gray-500">해당 기간 데이터가 없습니다.</span>`;
         } else {
           top5List.innerHTML = dailyArray.map((item, idx) => {
-            const fullRouteStr = buildSequentialRouteHtml(item.trips);
+            const formattedDist = item.totalDist.toFixed(1);
             return `
-              <div onclick="jumpToDrivingDate('${item.dateStr}')" class="flex flex-col gap-1 bg-[#0d0e12] hover:bg-gray-800/80 p-2.5 rounded-xl border border-gray-800 cursor-pointer transition active:scale-98">
-                <div class="flex justify-between items-center">
-                  <span class="text-gray-200 font-bold">${idx+1}. ${item.dateStr} ➔</span>
-                  <span class="text-amber-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
+              <div onclick="jumpToDrivingDate('${item.dateStr}')" class="bg-[#0f1015] p-2.5 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-amber-500/50 transition">
+                <div class="flex items-center space-x-2">
+                  <span class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-extrabold text-[10px] flex items-center justify-center border border-amber-500/30">${idx + 1}</span>
+                  <span class="font-bold text-gray-200">${item.dateStr}</span>
+                  <span class="text-[10px] text-gray-400">(${item.trips.length}회 운행)</span>
                 </div>
-                <div class="text-gray-300 text-[11px] leading-normal">📍 경로: ${fullRouteStr}</div>
+                <span class="font-extrabold text-amber-400">${formattedDist} km</span>
               </div>
             `;
           }).join('');
@@ -1558,229 +1559,252 @@
         top5Container.classList.add('hidden');
       }
 
-      const totalDist = matched.reduce((a,c)=>a+c.moveKM, 0);
-      const totalBat = matched.reduce((a,c)=>a+c.useBattery, 0);
-      const estKwh = (totalBat / 100) * 60;
-      const avgEff = estKwh > 0 ? (totalDist / estKwh).toFixed(2) : "0.00";
+      // 수치 요약 연산
+      const totalCount = matched.length;
+      const totalDist = matched.reduce((sum, t) => sum + t.moveKM, 0);
+      const totalBat = matched.reduce((sum, t) => sum + t.useBattery, 0);
+      const totalKwh = (totalBat / 100) * 60;
+      const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
 
-      document.getElementById('stat-count').innerText = `${matched.length}건`;
+      document.getElementById('stat-count').innerText = `${totalCount} 건`;
       document.getElementById('stat-distance').innerText = `${totalDist.toFixed(1)} km`;
-      document.getElementById('stat-energy').innerText = `-${totalBat.toFixed(1)}% (-${estKwh.toFixed(1)}kWh)`;
+      document.getElementById('stat-energy').innerText = `-${totalBat.toFixed(1)}% (${totalKwh.toFixed(1)}kWh)`;
       document.getElementById('stat-efficiency').innerText = `${avgEff} km/kWh`;
 
-      const bounds = new kakao.maps.LatLngBounds();
-      let hasPoints = false;
+      // 지도 경로 그리기
+      if (matched.length > 0 && map && window.kakao && kakao.maps) {
+        const bounds = new kakao.maps.LatLngBounds();
+        let pointCount = 0;
 
-      matched.forEach(trip => {
-        if (!trip.path || trip.path.length === 0) return;
-        const linePath = trip.path.map(pt => {
-          const lat = pt.lat || pt.latitude || pt[0], lng = pt.lng || pt.longitude || pt[1];
-          const loc = new kakao.maps.LatLng(lat, lng);
-          bounds.extend(loc);
-          hasPoints = true;
-          return loc;
+        matched.forEach(t => {
+          if (t.path && t.path.length > 0) {
+            const pathPoints = t.path.map(pt => {
+              const lat = pt.lat || pt.latitude || pt[0];
+              const lng = pt.lng || pt.longitude || pt[1];
+              const loc = new kakao.maps.LatLng(lat, lng);
+              bounds.extend(loc);
+              pointCount++;
+              return loc;
+            });
+
+            const polyline = new kakao.maps.Polyline({
+              path: pathPoints,
+              strokeWeight: 5,
+              strokeColor: '#3b82f6',
+              strokeOpacity: 0.8,
+              strokeStyle: 'solid'
+            });
+
+            polyline.setMap(map);
+            currentPolylines.push(polyline);
+          }
         });
 
-        const polyline = new kakao.maps.Polyline({
-          path: linePath, strokeWeight: 6, strokeColor: '#3B82F6', strokeOpacity: 0.85, strokeStyle: 'solid'
-        });
-        polyline.setMap(map);
-        currentPolylines.push(polyline);
-
-        kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
-          if (currentInfoWindow) currentInfoWindow.close();
-
-          const tripDate = new Date(trip.timestamp).toLocaleString('ko-KR', {
-            month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-          });
-
-          const content = `
-            <div style="padding:10px; background:#161820; border:1px solid #3B82F6; border-radius:12px; color:#ffffff; font-size:12px; line-height:1.5; font-family:sans-serif; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
-              <div style="font-weight:bold; color:#60A5FA; margin-bottom:4px;">🕒 ${tripDate}</div>
-              <div>📍 이동 경로: <b class="address-tag">${trip.startDong}</b> ➔ <b class="address-tag">${trip.endDong}</b></div>
-              <div>📏 이동 거리: <b>${trip.moveKM.toFixed(1)} km</b></div>
-              <div>🔋 소모 배터리: <b>-${trip.useBattery.toFixed(1)}%</b></div>
-              <div>⏱️ 주행 시간: <b>${trip.durationMin}분</b></div>
-            </div>
-          `;
-
-          currentInfoWindow = new kakao.maps.InfoWindow({ position: mouseEvent.latLng, content: content, removable: true });
-          currentInfoWindow.open(map);
-        });
-      });
-
-      if (hasPoints && map) map.setBounds(bounds);
+        if (pointCount > 0) {
+          map.setBounds(bounds);
+        }
+      }
     }
 
+    // 1-3. 월간 리포트 함수군
     function initMonthlyDropdowns() {
-      const yearSelect = document.getElementById('m-select-year');
-      const monthSelect = document.getElementById('m-select-month');
+      const yearSel = document.getElementById('m-select-year');
+      const monthSel = document.getElementById('m-select-month');
+      if (!yearSel || !monthSel) return;
 
       const years = [...new Set(allTrips.map(t => new Date(t.timestamp).getFullYear()))].sort().reverse();
-      if (!years.includes(2025)) years.push(2025);
-      if (!years.includes(2026)) years.push(2026);
+      if (years.length === 0) years.push(2026, 2025);
 
-      yearSelect.innerHTML = years.map(y => `<option value="${y}">${y}년</option>`).join('');
-      monthSelect.innerHTML = Array.from({length: 12}, (_, i) => `<option value="${i+1}">${i+1}월</option>`).join('');
+      yearSel.innerHTML = years.map(y => `<option value="${y}">${y}년</option>`).join('');
+      monthSel.innerHTML = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
 
-      const latestDate = allTrips.length > 0 ? new Date(allTrips[0].timestamp) : new Date();
-      yearSelect.value = latestDate.getFullYear();
-      monthSelect.value = latestDate.getMonth() + 1;
-
-      onMonthlyDropdownChange();
-    }
-
-    function selectPrevMonth() { shiftMonthlyDropdown(-1); }
-
-    function shiftMonthlyDropdown(offset) {
-      const ySelect = document.getElementById('m-select-year');
-      const mSelect = document.getElementById('m-select-month');
-      let curY = Number(ySelect.value);
-      let curM = Number(mSelect.value) + offset;
-
-      if (curM > 12) { curY += 1; curM = 1; }
-      if (curM < 1) { curY -= 1; curM = 12; }
-
-      ySelect.value = curY;
-      mSelect.value = curM;
-      onMonthlyDropdownChange();
+      if (allTrips.length > 0) {
+        const latestDate = new Date(allTrips[0].timestamp);
+        yearSel.value = latestDate.getFullYear();
+        monthSel.value = latestDate.getMonth() + 1;
+      }
     }
 
     function onMonthlyDropdownChange() {
-      const selY = Number(document.getElementById('m-select-year').value);
-      const selM = Number(document.getElementById('m-select-month').value);
+      renderMonthlyTop5();
+    }
 
-      const startT = new Date(selY, selM - 1, 1).getTime();
-      const endT = new Date(selY, selM, 1).getTime();
+    function shiftMonthlyDropdown(offset) {
+      const ySel = document.getElementById('m-select-year');
+      const mSel = document.getElementById('m-select-month');
+      if (!ySel || !mSel) return;
 
-      const filteredTrips = allTrips.filter(t => t.timestamp >= startT && t.timestamp < endT);
-      const totalDist = filteredTrips.reduce((a,c)=>a+c.moveKM, 0);
-      const uniqueDays = new Set(filteredTrips.map(t => new Date(t.timestamp).toDateString())).size;
+      let y = Number(ySel.value), m = Number(mSel.value) + offset;
+      if (m < 1) { m = 12; y -= 1; }
+      else if (m > 12) { m = 1; y += 1; }
 
-      let chargeCount = 0, totalChargePct = 0;
-      
-      const vFiltered = vehicleRows.filter(r => {
-        const t = new Date(r.updated_at).getTime();
-        return t >= startT && t < endT;
-      }).sort((a,b) => new Date(a.updated_at) - new Date(b.updated_at));
+      ySel.value = y;
+      mSel.value = m;
+      renderMonthlyTop5();
+    }
 
-      for (let i = 1; i < vFiltered.length; i++) {
-        const prev = vFiltered[i-1], cur = vFiltered[i];
-        const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
-        if (batDiff >= 1) { chargeCount++; totalChargePct += batDiff; }
-      }
+    function selectPrevMonth() {
+      shiftMonthlyDropdown(-1);
+    }
 
-      const chargeKwh = ((totalChargePct / 100) * 60);
-      const totalBatUse = filteredTrips.reduce((a,c)=>a+c.useBattery, 0);
-      const estKwh = (totalBatUse / 100) * 60;
-      const avgEff = estKwh > 0 ? (totalDist / estKwh).toFixed(2) : "0.00";
+    function renderMonthlyTop5() {
+      const ySel = document.getElementById('m-select-year');
+      const mSel = document.getElementById('m-select-month');
+      if (!ySel || !mSel) return;
 
-      const avgTripKm = filteredTrips.length > 0 ? (totalDist / filteredTrips.length).toFixed(1) : "0.0";
-      const estCost = Math.round(chargeKwh * 320);
+      const selY = Number(ySel.value);
+      const selM = Number(mSel.value);
+
+      const matchedTrips = allTrips.filter(t => {
+        const d = new Date(t.timestamp);
+        return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
+      });
+
+      const totalDist = matchedTrips.reduce((s, t) => s + t.moveKM, 0);
+      const activeDays = new Set(matchedTrips.map(t => new Date(t.timestamp).toDateString())).size;
+      const totalBat = matchedTrips.reduce((s, t) => s + t.useBattery, 0);
+      const totalKwh = (totalBat / 100) * 60;
+      const estCost = Math.round(totalKwh * 340);
       const co2Saved = (totalDist * 0.12).toFixed(1);
+      const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
+      const avgTripKm = matchedTrips.length > 0 ? (totalDist / matchedTrips.length).toFixed(1) : "0.0";
+
+      const monthCharges = vehicleRows.filter(v => {
+        const d = new Date(v.updated_at);
+        return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
+      });
 
       document.getElementById('m-stat-distance').innerText = `${totalDist.toFixed(1)} km`;
-      document.getElementById('m-stat-days').innerText = `${uniqueDays} 일`;
-      document.getElementById('m-stat-charge-count').innerText = `${chargeCount} 회`;
-      document.getElementById('m-stat-charge-kwh').innerText = `${chargeKwh.toFixed(1)} kWh`;
+      document.getElementById('m-stat-days').innerText = `${activeDays} 일`;
+      document.getElementById('m-stat-charge-count').innerText = `${monthCharges.length} 회`;
+      document.getElementById('m-stat-charge-kwh').innerText = `${totalKwh.toFixed(1)} kWh`;
+      document.getElementById('m-stat-cost').innerText = `${estCost.toLocaleString()} 원`;
+      document.getElementById('m-stat-co2').innerText = `${co2Saved} kg CO₂`;
       document.getElementById('m-stat-avg-eff').innerText = `${avgEff} km/kWh`;
+      document.getElementById('m-stat-avg-trip-km').innerText = `${avgTripKm} km`;
 
-      document.getElementById('m-stat-cost').innerText = `약 ${estCost.toLocaleString()} 원`;
-      document.getElementById('m-stat-co2').innerText = `${co2Saved} kg`;
-      document.getElementById('m-stat-avg-trip-km').innerText = `${avgTripKm}km`;
-
-      renderMonthlyTop5(filteredTrips);
-    }
-
-    function renderMonthlyTop5(filteredTrips) {
-      if (!filteredTrips) {
-        const selY = Number(document.getElementById('m-select-year').value);
-        const selM = Number(document.getElementById('m-select-month').value);
-        const startT = new Date(selY, selM - 1, 1).getTime();
-        const endT = new Date(selY, selM, 1).getTime();
-        filteredTrips = allTrips.filter(t => t.timestamp >= startT && t.timestamp < endT);
-      }
-
-      let dailyTimeGroup = {};
-      filteredTrips.forEach(t => {
-        const d = new Date(t.timestamp);
-        const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        if (!dailyTimeGroup[dayKey]) dailyTimeGroup[dayKey] = { dateStr: dayKey, totalMin: 0 };
-        dailyTimeGroup[dayKey].totalMin += t.durationMin;
-      });
-      const topTimeList = Object.values(dailyTimeGroup).sort((a,b) => b.totalMin - a.totalMin).slice(0, 5);
-
+      // 이달의 최장 운행 시간 TOP 5
+      const topTimeList = [...matchedTrips].sort((a,b) => b.durationMin - a.durationMin).slice(0, 5);
       const timeContainer = document.getElementById('m-top5-time-list');
-      if (topTimeList.length === 0) {
-        timeContainer.innerHTML = `<span class="text-gray-500">기록이 없습니다.</span>`;
-      } else {
-        timeContainer.innerHTML = topTimeList.map((item, idx) => {
-          const hours = Math.floor(item.totalMin / 60), mins = item.totalMin % 60;
-          const timeStr = hours > 0 ? `${hours}시간 ${mins}분` : `${mins}분`;
+      if (timeContainer) {
+        timeContainer.innerHTML = topTimeList.length === 0 ? '<span class="text-gray-500 text-xs">기록 없음</span>' : topTimeList.map((t, i) => {
+          const dStr = new Date(t.timestamp).toLocaleDateString('ko-KR');
+          const dateParam = `${new Date(t.timestamp).getFullYear()}-${String(new Date(t.timestamp).getMonth()+1).padStart(2,'0')}-${String(new Date(t.timestamp).getDate()).padStart(2,'0')}`;
           return `
-            <div onclick="jumpToDrivingDate('${item.dateStr}')" class="flex justify-between items-center bg-[#0d0e12] hover:bg-gray-800/80 p-2 rounded-lg border border-gray-800 cursor-pointer transition active:scale-98">
-              <span class="text-gray-200 font-bold">${idx+1}. ${item.dateStr} ➔</span>
-              <span class="text-blue-400 font-extrabold">${timeStr}</span>
+            <div onclick="jumpToDrivingDate('${dateParam}')" class="bg-[#0f1015] p-2 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-blue-500/50 transition text-xs">
+              <span class="font-bold text-gray-300 truncate mr-2">${i+1}. ${dStr} (${t.startDong}→${t.endDong})</span>
+              <span class="font-bold text-blue-400 whitespace-nowrap">${t.durationMin}분 (${t.moveKM.toFixed(1)}km)</span>
             </div>
           `;
         }).join('');
       }
 
-      let dailyDistGroup = {};
-      filteredTrips.forEach(t => {
-        const d = new Date(t.timestamp);
-        const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        if (!dailyDistGroup[dayKey]) dailyDistGroup[dayKey] = { dateStr: dayKey, totalDist: 0, trips: [] };
-        dailyDistGroup[dayKey].totalDist += t.moveKM;
-        dailyDistGroup[dayKey].trips.push(t);
-      });
-      const topDistList = Object.values(dailyDistGroup).sort((a,b) => b.totalDist - a.totalDist).slice(0, 5);
-
+      // 이달의 최장 운행 거리 TOP 5
+      const topDistList = [...matchedTrips].sort((a,b) => b.moveKM - a.moveKM).slice(0, 5);
       const distContainer = document.getElementById('m-top5-dist-list');
-      if (topDistList.length === 0) {
-        distContainer.innerHTML = `<span class="text-gray-500">기록이 없습니다.</span>`;
-      } else {
-        distContainer.innerHTML = topDistList.map((item, idx) => {
-          const fullRouteStr = buildSequentialRouteHtml(item.trips);
+      if (distContainer) {
+        distContainer.innerHTML = topDistList.length === 0 ? '<span class="text-gray-500 text-xs">기록 없음</span>' : topDistList.map((t, i) => {
+          const dStr = new Date(t.timestamp).toLocaleDateString('ko-KR');
+          const dateParam = `${new Date(t.timestamp).getFullYear()}-${String(new Date(t.timestamp).getMonth()+1).padStart(2,'0')}-${String(new Date(t.timestamp).getDate()).padStart(2,'0')}`;
           return `
-            <div onclick="jumpToDrivingDate('${item.dateStr}')" class="bg-[#0d0e12] hover:bg-gray-800/80 p-2 rounded-lg border border-gray-800 space-y-1 cursor-pointer transition active:scale-98">
-              <div class="flex justify-between">
-                <span class="text-gray-200 font-bold">${idx+1}. ${item.dateStr} ➔</span>
-                <span class="text-green-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
-              </div>
-              <div class="text-[11px] text-gray-300 leading-normal">📍 ${fullRouteStr}</div>
+            <div onclick="jumpToDrivingDate('${dateParam}')" class="bg-[#0f1015] p-2 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-green-500/50 transition text-xs">
+              <span class="font-bold text-gray-300 truncate mr-2">${i+1}. ${dStr} (${t.startDong}→${t.endDong})</span>
+              <span class="font-bold text-green-400 whitespace-nowrap">${t.moveKM.toFixed(1)} km (${t.durationMin}분)</span>
             </div>
           `;
         }).join('');
       }
     }
 
+    // 1-4. 배터리 차트 생성
     function renderBatteryCharts() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
-      const allRows = [...vehicleRows].reverse();
-      const recentRows = allRows.slice(-50);
+      const recentData = vehicleRows.slice(0, 50).reverse();
+      const labels = recentData.map(v => {
+        const d = new Date(v.updated_at);
+        return `${d.getMonth()+1}/${d.getDate()}`;
+      });
 
-      document.getElementById('b-est-range-val').innerText = `429 km`;
+      const degData = recentData.map(v => {
+        let rawObj = v.raw_data;
+        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
+        const estRange = rawObj?.charge_state?.battery_range || 430;
+        const batPct = v.battery_level || 100;
+        const fullEst = (estRange / (batPct / 100));
+        const deg = Math.min(100, (fullEst / 455) * 100);
+        return parseFloat(deg.toFixed(1));
+      });
 
-      const recLabels = recentRows.map(r => `${new Date(r.updated_at).getMonth()+1}/${new Date(r.updated_at).getDate()}`);
-      const recDeg = recentRows.map(() => 99.8 + (Math.random() * 0.2));
-      const recRange = recentRows.map(() => 425 + Math.floor(Math.random() * 10));
+      const rangeData = recentData.map(v => {
+        let rawObj = v.raw_data;
+        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
+        const estRange = rawObj?.charge_state?.battery_range || 430;
+        const batPct = v.battery_level || 100;
+        return Math.round(estRange / (batPct / 100));
+      });
+
+      const latestDeg = degData[degData.length - 1] || 100;
+      const latestRange = rangeData[rangeData.length - 1] || 430;
+
+      document.getElementById('b-degradation-val').innerText = `${latestDeg}%`;
+      document.getElementById('b-est-range-val').innerText = `${latestRange} km`;
 
       if (chartDegRec) chartDegRec.destroy();
+      const ctx1 = document.getElementById('chartDegradationRecent')?.getContext('2d');
+      if (ctx1) {
+        chartDegRec = new Chart(ctx1, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: '열화율 (%)',
+              data: degData,
+              borderColor: '#818cf8',
+              backgroundColor: 'rgba(129, 140, 248, 0.1)',
+              fill: true,
+              tension: 0.3
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: '#6b7280', font: { size: 9 } } },
+              y: { grid: { color: '#1f2937' }, ticks: { color: '#6b7280', font: { size: 9 } } }
+            }
+          }
+        });
+      }
+
       if (chartRangeRec) chartRangeRec.destroy();
-
-      chartDegRec = new Chart(document.getElementById('chartDegradationRecent'), {
-        type: 'line',
-        data: { labels: recLabels, datasets: [{ data: recDeg, borderColor: '#818cf8', tension: 0.3, pointRadius: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins:{legend:{display:false}}, scales:{y:{suggestedMin:98, suggestedMax:100, grid:{color:'#262936'}}, x:{grid:{display:false}}} }
-      });
-
-      chartRangeRec = new Chart(document.getElementById('chartRangeRecent'), {
-        type: 'line',
-        data: { labels: recLabels, datasets: [{ data: recRange, borderColor: '#4ade80', tension: 0.3, pointRadius: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins:{legend:{display:false}}, scales:{y:{suggestedMin:410, suggestedMax:440, grid:{color:'#262936'}}, x:{grid:{display:false}}} }
-      });
+      const ctx2 = document.getElementById('chartRangeRecent')?.getContext('2d');
+      if (ctx2) {
+        chartRangeRec = new Chart(ctx2, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: '100% 환산 거리 (km)',
+              data: rangeData,
+              borderColor: '#34d399',
+              backgroundColor: 'rgba(52, 211, 153, 0.1)',
+              fill: true,
+              tension: 0.3
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: '#6b7280', font: { size: 9 } } },
+              y: { grid: { color: '#1f2937' }, ticks: { color: '#6b7280', font: { size: 9 } } }
+            }
+          }
+        });
+      }
     }
   </script>
 </body>
