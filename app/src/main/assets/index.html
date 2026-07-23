@@ -3,12 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Tesla Dashboard</title>
+  <title>Tesla Command Hub</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body { background-color: #0d0e12; color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    body { background-color: #0d0e12; color: #f3f4f6; font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     .card-dark { background-color: #161820; border: 1px solid #262936; }
     .card-border-amber { border: 1px solid #d97706; }
     .card-border-blue { border: 1px solid #3b82f6; }
@@ -37,7 +40,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-sm font-extrabold tracking-tight text-white leading-tight">Tesla Dashboard</h1>
+        <h1 class="text-sm font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub</h1>
         <p class="text-[9px] text-gray-400 font-medium">Monitor & Guardian</p>
       </div>
     </div>
@@ -46,13 +49,13 @@
       <span id="sync-status-indicator" class="hidden sm:inline-block text-[10px] text-gray-400 font-mono bg-gray-800/80 px-2 py-1 rounded-lg border border-gray-700/60">🅿️ 대기</span>
       
       <button onclick="handleRefresh(false)" title="수동 갱신" class="p-1.5 sm:px-2.5 sm:py-1 text-xs font-semibold rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/40 transition active:scale-95 flex items-center gap-1">
-        <span>🔄</span> <span class="hidden sm:inline">갱신</span>
+        <i class="fa-solid fa-arrows-rotate"></i> <span class="hidden sm:inline">갱신</span>
       </button>
       <button onclick="triggerGitHubSync()" title="GitHub Sync 실행" class="p-1.5 sm:px-2.5 sm:py-1 text-xs font-semibold rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/40 transition active:scale-95 flex items-center gap-1">
-        <span>🚀</span> <span class="hidden sm:inline">Sync</span>
+        <i class="fa-solid fa-bolt"></i> <span class="hidden sm:inline">Sync</span>
       </button>
       <button onclick="openConfigModal()" title="설정" class="p-1.5 sm:px-2.5 sm:py-1 text-xs font-semibold rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition active:scale-95 flex items-center gap-1">
-        <span>⚙️</span> <span class="hidden sm:inline">설정</span>
+        <i class="fa-solid fa-gear"></i> <span class="hidden sm:inline">설정</span>
       </button>
     </div>
   </header>
@@ -61,10 +64,10 @@
   <div class="bg-[#12141c] border-b border-gray-800/80 p-2">
     <div class="grid grid-cols-2 gap-2 max-w-2xl mx-auto">
       <button onclick="switchMainTab('monitor')" id="btn-main-monitor" class="py-2.5 rounded-xl font-bold text-sm bg-blue-600 text-white transition flex items-center justify-center gap-1.5 shadow-lg">
-        <span>🚗</span> 테슬라 모니터
+        <i class="fa-solid fa-car"></i> 테슬라 모니터
       </button>
       <button onclick="switchMainTab('guardian')" id="btn-main-guardian" class="py-2.5 rounded-xl font-bold text-sm bg-gray-800 text-gray-400 hover:text-white transition flex items-center justify-center gap-1.5">
-        <span>🛡️</span> 감시 가디언
+        <i class="fa-solid fa-shield-halved"></i> 감시 가디언
       </button>
     </div>
   </div>
@@ -369,7 +372,7 @@
           <input type="url" id="input-supabase-url" required placeholder="https://xxx.supabase.co" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
         <div>
-          <label class="block text-gray-400 mb-1">Supabase Key</label>
+          <label class="block text-gray-400 mb-1">Supabase Key (Anon 또는 Service Key)</label>
           <input type="password" id="input-supabase-key" required class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
         <div>
@@ -389,7 +392,10 @@
           <label class="block text-gray-400 mb-1">ntfy 알림 토픽</label>
           <input type="text" id="input-ntfy-topic" placeholder="MJYAz6ZyjXiujaTDpJ" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
-        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl transition">저장 및 적용</button>
+        <div class="flex space-x-2 pt-2">
+          <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl transition">저장 및 적용</button>
+          <button type="button" onclick="closeConfigModal()" class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold py-2.5 rounded-xl transition">취소</button>
+        </div>
       </form>
     </div>
   </div>
@@ -401,10 +407,11 @@
       url: '', 
       key: '', 
       ghToken: '', 
-      vehicleId: '', 
+      vehicleId: '3744141651867089', 
       ntfyTopic: 'MJYAz6ZyjXiujaTDpJ' 
     };
 
+    let supabaseClient = null;
     let currentMainTab = localStorage.getItem('tesla_main_tab') || 'monitor';
     let currentSubTab = localStorage.getItem('tesla_sub_tab') || 'vehicle';
     
@@ -423,7 +430,7 @@
     let currentPolylines = [], currentInfoWindow = null;
     let currentFilterMode = 'daily';
     
-    // 💡 [속도 개선] 주소 변환 영구 캐시 로드
+    // 주소 변환 영구 캐시
     let addressCache = {};
     try {
       const savedCache = localStorage.getItem('tesla_address_cache');
@@ -452,10 +459,17 @@
       if (!loadConfig()) {
         openConfigModal();
       } else {
+        initSupabaseClient();
         loadCachedDataFirst();
         initDashboard();
       }
     });
+
+    function initSupabaseClient() {
+      if (configObj.url && configObj.key && window.supabase) {
+        supabaseClient = supabase.createClient(configObj.url, configObj.key);
+      }
+    }
 
     function handleAppVisibilityChange() {
       const indicator = document.getElementById('sync-status-indicator');
@@ -499,6 +513,7 @@
         ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
       };
       localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
+      closeConfigModal();
       location.reload();
     }
 
@@ -510,6 +525,10 @@
       if (configObj.vehicleId) document.getElementById('input-vehicle-id').value = configObj.vehicleId;
       if (configObj.ntfyTopic) document.getElementById('input-ntfy-topic').value = configObj.ntfyTopic;
       document.getElementById('modal-config').classList.remove('hidden');
+    }
+
+    function closeConfigModal() {
+      document.getElementById('modal-config').classList.add('hidden');
     }
 
     function switchMainTab(mainTab) {
@@ -553,7 +572,6 @@
       if (subTab === 'battery') renderBatteryCharts();
     }
 
-    // 💡 [이동 기능] 특정 날짜 클릭 시 주행지도의 일간 모드로 즉시 점프
     function jumpToDrivingDate(dateStr) {
       switchMainTab('monitor');
       switchSubTab('driving');
@@ -655,9 +673,9 @@
           updateGuardianStatusUI('sleep', '🌙 대기 모드 (스위치를 켜세요)');
           window.history.replaceState({}, document.title, window.location.pathname);
         } else {
-          addLog(`❌ [ERR-TOKEN-01] 토큰 교환 실패: ${JSON.stringify(data)}`);
+          addLog(`❌ 토큰 교환 실패: ${JSON.stringify(data)}`);
         }
-      } catch (err) { addLog(`❌ [ERR-TOKEN-02] 백엔드 통신 오류: ${err.message}`); }
+      } catch (err) { addLog(`❌ 백엔드 통신 오류: ${err.message}`); }
     }
 
     async function fetchTeslaVehicles(token) {
@@ -709,46 +727,52 @@
         document.getElementById('input-vehicle-id').value = res.vId;
         alert(`차량 ID 로드 성공: ${res.vId}`);
       } else { 
-        alert('차량 정보를 불러오지 못했습니다. DB 데이터를 먼저 갱신해 보세요.'); 
+        alert('차량 정보를 불러오지 못했습니다.'); 
       }
     }
 
+    // 안드로이드 네이티브 브릿지 및 백그라운드 가디언 연동
     async function handleToggleChange(checkbox) {
       const labelText = document.getElementById('toggleLabelText');
 
       if (checkbox.checked) {
-        addLog('🔍 차량 감시 모드(Sentry Mode) 상태 정밀 진단 중...');
+        addLog('🔍 차량 감시 모드(Sentry Mode) 상태 진단 중...');
         const sentryResult = await checkIsVehicleSentryActiveWithDebug();
 
         if (sentryResult.isActive) {
-          labelText.innerText = '기능 ON';
-          labelText.style.color = '#10b981';
-          addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언을 구동합니다.');
+          if (labelText) {
+            labelText.innerText = '기능 ON';
+            labelText.style.color = '#10b981';
+          }
+          addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언 서비스를 시작합니다.');
 
           if (window.AndroidBridge) {
             const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
             const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
-            window.AndroidBridge.startGuardianService(accessToken, configObj.vehicleId, interval, topic);
+            window.AndroidBridge.startGuardianService(accessToken || 'dummy_token', configObj.vehicleId || '3744141651867089', interval, topic);
           }
 
           startMonitoring();
         } else {
           checkbox.checked = false;
-          labelText.innerText = '기능 OFF';
-          labelText.style.color = '#aaa';
+          if (labelText) {
+            labelText.innerText = '기능 OFF';
+            labelText.style.color = '#aaa';
+          }
           stopMonitoring();
 
           if (window.AndroidBridge) {
             window.AndroidBridge.stopGuardianService();
           }
 
-          addLog(`🛑 [감시모드 중단] 사유 코드: ${sentryResult.errorCode}`);
-          addLog(`💡 진단 상세: ${sentryResult.errorMessage}`);
-          alert(`차량 감시 모드를 활성화할 수 없습니다.\n오류 코드: ${sentryResult.errorCode}\n${sentryResult.errorMessage}`);
+          addLog(`🛑 [감시모드 중단] 사유: ${sentryResult.errorMessage}`);
+          alert(`차량 감시 모드를 활성화할 수 없습니다.\n${sentryResult.errorMessage}`);
         }
       } else {
-        labelText.innerText = '기능 OFF';
-        labelText.style.color = '#aaa';
+        if (labelText) {
+          labelText.innerText = '기능 OFF';
+          labelText.style.color = '#aaa';
+        }
 
         if (window.AndroidBridge) {
           window.AndroidBridge.stopGuardianService();
@@ -771,19 +795,16 @@
           const data = await res.json();
           if (data.sentry_mode === true) {
             addLog('✅ Vercel API: Sentry Mode [ON] 확인됨');
-            return { isActive: true, errorCode: 'NONE', errorMessage: '성공', detail: data };
+            return { isActive: true, errorMessage: '성공' };
           } else if (data.sentry_mode === false) {
-            addLog('ℹ️ Vercel API: Sentry Mode [OFF] 감지됨');
-            return { isActive: false, errorCode: 'ERR-SENTRY-OFF', errorMessage: '차량의 실제 감시 모드(Sentry Mode)가 꺼져 있습니다.' };
+            return { isActive: false, errorMessage: '차량의 실제 감시 모드가 꺼져 있습니다.' };
           }
-        } else {
-          addLog(`⚠️ Vercel HTTP 오류 코드: ${res.status}`);
         }
       } catch(e) {
         addLog(`⚠️ Vercel 통신 예외 발생: ${e.message}`);
       }
 
-      addLog('📡 2단계: Supabase 최신 차량 DB 레코드 확인 중...');
+      addLog('📡 2단계: DB 최신 차량 상태 확인 중...');
       if (vehicleRows && vehicleRows.length > 0) {
         const latest = vehicleRows[0];
         let rawObj = latest.raw_data;
@@ -791,11 +812,11 @@
 
         if (latest.sentry_mode === true || latest.is_sentry === true || rawObj?.vehicle_state?.sentry_mode === true) {
           addLog('✅ Supabase DB: Sentry Mode [ON]');
-          return { isActive: true, errorCode: 'NONE', errorMessage: '성공' };
+          return { isActive: true, errorMessage: '성공' };
         }
       }
 
-      return { isActive: false, errorCode: 'ERR-ALL-FAILED', errorMessage: '감시 모드가 OFF이거나 차량 상태를 불러올 수 없습니다.' };
+      return { isActive: false, errorMessage: '감시 모드가 OFF이거나 상태를 불러올 수 없습니다.' };
     }
 
     function startMonitoring() {
@@ -814,7 +835,7 @@
 
     async function checkGuardianVehicleState() {
       const vehicleId = configObj.vehicleId;
-      if (!vehicleId || !accessToken) return;
+      if (!vehicleId) return;
 
       try {
         const res = await fetch('https://my-tesla-app-six.vercel.app/api/sentry', {
@@ -891,6 +912,7 @@
     function testFlashLights() { if(accessToken) flashLights(); else alert('테슬라 로그인을 진행해 주세요.'); }
     function testNtfy() { sendNtfyNotification('Tesla Guardian Test', 'This is a test notification.'); }
 
+    // GitHub Actions 워크플로우 연동
     async function triggerGitHubSync() {
       if (!configObj.ghToken) { alert("⚙️ 설정에서 GitHub Token을 입력해 주세요."); openConfigModal(); return; }
       try {
@@ -904,7 +926,7 @@
           body: JSON.stringify({ ref: 'main' })
         });
         if (res.ok || res.status === 204) alert("⚡ GitHub Sync Pipeline이 호출되었습니다!");
-        else alert(`실패: ${res.status}`);
+        else alert(`실패 코드: ${res.status}`);
       } catch (err) { alert("오류: " + err.message); }
     }
 
@@ -957,7 +979,6 @@
       return cleanAddress(`${(region2 || "").trim()} ${(region3 || "").trim()}`);
     }
 
-    // 💡 [속도 개선] 주소 역지오코딩 영구 캐시 사용
     function getNeighborhood(lat, lng) {
       return new Promise((resolve) => {
         if (!lat || !lng || !geocoder) { resolve("위치 미상"); return; }
@@ -982,7 +1003,6 @@
       });
     }
 
-    // 💡 [시간 파싱 보강] duration_min, driving_time 파싱 호환
     function parseDrivingTimeToMinutes(r) {
       if (!r) return 1;
 
@@ -1058,12 +1078,10 @@
         localStorage.setItem('tesla_cached_trips', JSON.stringify(allTrips.slice(0, 50)));
       }
 
-      // 화면을 먼저 렌더링하고 비동기로 주소 채우기 (로딩 지연 해소)
       switchMainTab(currentMainTab);
       if (!isSilent) setFilterMode('daily');
       loadVehicleData();
 
-      // 주소 보정 (비동기 처리)
       for (let t of allTrips) {
         if ((t.startDong === "조회중" || t.endDong === "조회중") && t.path && t.path.length > 0) {
           const firstPt = t.path[0], lastPt = t.path[t.path.length - 1];
@@ -1523,7 +1541,6 @@
         if (dailyArray.length === 0) {
           top5List.innerHTML = `<span class="text-gray-500">해당 기간 데이터가 없습니다.</span>`;
         } else {
-          // 💡 터치 시 해당 날짜로 바로 이동되도록 onclick 적용
           top5List.innerHTML = dailyArray.map((item, idx) => {
             const fullRouteStr = buildSequentialRouteHtml(item.trips);
             return `
@@ -1675,7 +1692,6 @@
       renderMonthlyTop5(filteredTrips);
     }
 
-    // 💡 [이동 기능] 월간 Top 5 항목 클릭 시 클릭한 해당 일자로 점프
     function renderMonthlyTop5(filteredTrips) {
       if (!filteredTrips) {
         const selY = Number(document.getElementById('m-select-year').value);
