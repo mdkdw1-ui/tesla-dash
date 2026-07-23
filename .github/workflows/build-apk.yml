@@ -10,29 +10,71 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. 소스코드 체크아웃 (Git LFS 포함)
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
-      # 1. Python & Pillow 설치 (icon.png 변환용)
+      # 2. Python 3.12 환경 구축
       - name: Set up Python & Pillow
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.12'
 
       - name: Install Pillow
         run: pip install Pillow
 
-      # 2. www/icon.png 파일로 안드로이드 mipmap 해상도별 아이콘 자동 생성
+      # 3. 모든 이미지 호환 & 자동 크기/비율 변환 변환 스크립트
       - name: Generate Android App Icons
         run: |
           python -c "
           import os
-          from PIL import Image
+          from PIL import Image, ImageDraw
 
-          icon_path = 'app/src/main/assets/www/icon.png'
-          if not os.path.exists(icon_path):
-              icon_path = 'www/icon.png'
+          # 1) 탐색할 후보 경로 및 확장자 목록
+          candidates = [
+              'app/src/main/assets/www/icon.png',
+              'www/icon.png',
+              'www/icon.jpg',
+              'www/icon.jpeg',
+              'www/icon.webp',
+              'public/icon.png'
+          ]
 
+          icon_path = None
+          for path in candidates:
+              if os.path.exists(path):
+                  icon_path = path
+                  break
+
+          img = None
+
+          # 2) 이미지 로드 및 정사각형(1:1) 비율 강제 패딩 변환
+          if icon_path:
+              try:
+                  print(f'🔍 아이콘 이미지 발견: {icon_path}')
+                  raw_img = Image.open(icon_path).convert('RGBA')
+
+                  # 직사각형 이미지라도 찌그러지지 않게 투명 정사각형 캔버스 중앙에 배치
+                  w, h = raw_img.size
+                  max_size = max(w, h)
+                  square_img = Image.new('RGBA', (max_size, max_size), (0, 0, 0, 0))
+                  offset = ((max_size - w) // 2, (max_size - h) // 2)
+                  square_img.paste(raw_img, offset)
+                  img = square_img
+                  print(f'📐 원본({w}x{h}) -> 정사각형({max_size}x{max_size}) 캔버스 변환 완료')
+              except Exception as e:
+                  print(f'⚠️ 이미지 파일 처리 실패 ({e})')
+
+          # 3) 이미지가 없거나 손상된 경우 비상용 테슬라 레드 아이콘 생성
+          if img is None:
+              print('🎨 기본 앱 아이콘을 자동으로 생성합니다.')
+              img = Image.new('RGBA', (512, 512), (0, 0, 0, 0))
+              draw = ImageDraw.Draw(img)
+              draw.ellipse([32, 32, 480, 480], fill=(225, 6, 0, 255))
+
+          # 4) 안드로이드 mipmap 해상도별 리사이징 및 저장
           sizes = {
               'mipmap-mdpi': 48,
               'mipmap-hdpi': 72,
@@ -42,20 +84,20 @@ jobs:
           }
 
           res_dir = 'app/src/main/res'
-          img = Image.open(icon_path)
 
           for folder, size in sizes.items():
               target_dir = os.path.join(res_dir, folder)
               os.makedirs(target_dir, exist_ok=True)
               
-              # ic_launcher.png 및 ic_launcher_round.png 생성
+              # 고품질 리사이징 (LANCZOS)
               resized = img.resize((size, size), Image.Resampling.LANCZOS)
               resized.save(os.path.join(target_dir, 'ic_launcher.png'))
               resized.save(os.path.join(target_dir, 'ic_launcher_round.png'))
-          print('✅ App icons successfully generated!')
+
+          print('✅ 모든 해상도별 안드로이드 아이콘 변환 및 배치가 완료되었습니다!')
           "
 
-      # 3. Java 17 및 Gradle 설정
+      # 4. Java 17 및 Gradle 설정
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -67,11 +109,11 @@ jobs:
         with:
           gradle-version: '8.5'
 
-      # 4. Debug APK 빌드
+      # 5. Debug APK 빌드
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace --info
 
-      # 5. APK 결과물 업로드
+      # 6. 결과물 APK 업로드
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
