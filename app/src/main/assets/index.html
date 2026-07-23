@@ -321,9 +321,16 @@
           </button>
         </div>
 
-        <div id="tokenInfoSection" class="hidden">
-          <div class="p-2.5 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-emerald-400 text-xs font-bold flex items-center gap-2">
-            <span>✅</span> 테슬라 OAuth 로그인 완료
+        <!-- [개선] 토큰 정보 및 차량 ID 조회 섹션 -->
+        <div id="tokenInfoSection" class="hidden space-y-2">
+          <div class="p-2.5 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-emerald-400 text-xs font-bold flex items-center justify-between">
+            <span class="flex items-center gap-1.5">✅ 테슬라 OAuth 로그인 완료</span>
+            <button onclick="fetchTeslaVehicles(accessToken)" class="text-[10px] underline text-emerald-300 hover:text-emerald-200">VIN/ID 조회</button>
+          </div>
+          <div id="vehicleInfoDisplay" class="p-2.5 bg-gray-800/60 border border-gray-700/60 rounded-xl text-xs space-y-1">
+            <div class="text-gray-400 text-[10px]">연동된 차량 정보</div>
+            <div class="font-mono text-gray-200" id="displayVin">VIN: -</div>
+            <div class="font-mono text-blue-400 font-bold" id="displayVehicleId">Vehicle ID: -</div>
           </div>
         </div>
 
@@ -373,10 +380,16 @@
           <label class="block text-gray-400 mb-1">GitHub Personal Access Token</label>
           <input type="password" id="input-gh-token" placeholder="ghp_xxxx..." class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
+        
+        <!-- [개선] 차량 ID 입력 및 자동조회 버튼 -->
         <div>
-          <label class="block text-gray-400 mb-1">Tesla Vehicle ID (숫자 ID)</label>
-          <input type="text" id="input-vehicle-id" placeholder="차량 숫자 ID 입력 (VIN 아님)" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
+          <label class="block text-gray-400 mb-1">Tesla Vehicle ID / VIN</label>
+          <div class="flex gap-2">
+            <input type="text" id="input-vehicle-id" placeholder="차량 ID 입력" class="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
+            <button type="button" onclick="autoFetchVehicleId()" class="px-3 py-2 bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 rounded-xl text-xs font-bold hover:bg-emerald-600/50 transition">⚡ 자동조회</button>
+          </div>
         </div>
+
         <div>
           <label class="block text-gray-400 mb-1">ntfy 알림 토픽</label>
           <input type="text" id="input-ntfy-topic" placeholder="MJYAz6ZyjXiujaTDpJ" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
@@ -423,6 +436,7 @@
       if (accessToken) {
         document.getElementById('loginSection')?.classList.add('hidden');
         document.getElementById('tokenInfoSection')?.classList.remove('hidden');
+        fetchTeslaVehicles(accessToken);
       }
 
       // OAuth 인증 코드 수신 처리
@@ -621,6 +635,7 @@
           addLog('✅ 테슬라 Access Token 발급 성공!');
           document.getElementById('loginSection').classList.add('hidden');
           document.getElementById('tokenInfoSection').classList.remove('hidden');
+          fetchTeslaVehicles(accessToken);
           updateGuardianStatusUI('sleep', '🌙 대기 모드 (스위치를 켜세요)');
           window.history.replaceState({}, document.title, window.location.pathname);
         } else {
@@ -629,7 +644,59 @@
       } catch (err) { addLog(`❌ [ERR-TOKEN-02] 백엔드 통신 오류: ${err.message}`); }
     }
 
-    // 🔥 안드로이드 코틀린 앱과의 브릿지 연동
+    async function fetchTeslaVehicles(token) {
+      addLog('📡 차량 목록 및 VIN/ID 조회 중...');
+      
+      if (vehicleRows && vehicleRows.length > 0) {
+        const latest = vehicleRows[0];
+        let rawObj = latest.raw_data;
+        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
+
+        const vId = latest.vehicle_id || latest.id || rawObj?.id || rawObj?.vehicle_id;
+        const vin = latest.vin || rawObj?.vin || "정보 없음";
+
+        if (vId) {
+          addLog(`✅ DB에서 차량 정보 감지! (VIN: ${vin}, ID: ${vId})`);
+          updateVehicleInfoUI(vin, vId);
+          if (!configObj.vehicleId) { 
+            configObj.vehicleId = String(vId); 
+            localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
+          }
+          return { vin, vId };
+        }
+      }
+
+      if (configObj.vehicleId) {
+        addLog(`ℹ️ 기존 저장된 Vehicle ID (${configObj.vehicleId})를 사용합니다.`);
+        updateVehicleInfoUI("설정됨", configObj.vehicleId);
+        return { vin: "설정됨", vId: configObj.vehicleId };
+      }
+
+      addLog(`⚠️ 차량 정보를 찾을 수 없습니다. 설정에서 자동조회 버튼을 눌러주세요.`);
+      return null;
+    }
+
+    function updateVehicleInfoUI(vin, vId) {
+      const vinEl = document.getElementById('displayVin');
+      const idEl = document.getElementById('displayVehicleId');
+      if (vinEl) vinEl.innerText = `VIN: ${vin || '-'}`;
+      if (idEl) idEl.innerText = `Vehicle ID: ${vId || configObj.vehicleId || '-'}`;
+    }
+
+    async function autoFetchVehicleId() {
+      if (!accessToken) { 
+        alert('테슬라 로그인이 먼저 필요합니다.'); 
+        return; 
+      }
+      const res = await fetchTeslaVehicles(accessToken);
+      if (res && res.vId) {
+        document.getElementById('input-vehicle-id').value = res.vId;
+        alert(`차량 ID 로드 성공: ${res.vId}`);
+      } else { 
+        alert('차량 정보를 불러오지 못했습니다. DB 데이터를 먼저 갱신해 보세요.'); 
+      }
+    }
+
     async function handleToggleChange(checkbox) {
       const labelText = document.getElementById('toggleLabelText');
 
@@ -642,7 +709,6 @@
           labelText.style.color = '#10b981';
           addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언을 구동합니다.');
 
-          // 코틀린 안드로이드 네이티브 서비스 호출
           if (window.AndroidBridge) {
             const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
             const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
@@ -676,6 +742,7 @@
       }
     }
 
+    // [개선] 1. 감시 모드 켜짐 여부 정밀 진단 함수
     async function checkIsVehicleSentryActiveWithDebug() {
       try {
         addLog('📡 1단계: Vercel 백엔드 Sentry API 확인 중...');
@@ -688,10 +755,11 @@
         if (res.ok) {
           const data = await res.json();
           if (data.sentry_mode === true) {
-            addLog('✅ Vercel API: Sentry Mode [ON]');
-            return { isActive: true, errorCode: 'NONE', errorMessage: '성공' };
+            addLog('✅ Vercel API: Sentry Mode [ON] 확인됨');
+            return { isActive: true, errorCode: 'NONE', errorMessage: '성공', detail: data };
           } else if (data.sentry_mode === false) {
-            addLog('ℹ️ Vercel API: Sentry Mode [OFF]');
+            addLog('ℹ️ Vercel API: Sentry Mode [OFF] 감지됨');
+            return { isActive: false, errorCode: 'ERR-SENTRY-OFF', errorMessage: '차량의 실제 감시 모드(Sentry Mode)가 꺼져 있습니다.' };
           }
         } else {
           addLog(`⚠️ Vercel HTTP 오류 코드: ${res.status}`);
@@ -700,51 +768,19 @@
         addLog(`⚠️ Vercel 통신 예외 발생: ${e.message}`);
       }
 
-      if (accessToken && configObj.vehicleId) {
-        try {
-          addLog('📡 2단계: Tesla Fleet API 직접 확인 중...');
-          const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${configObj.vehicleId}/vehicle_data?endpoints=vehicle_state`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
-          });
-          
-          if (res.status === 401 || res.status === 403) {
-            return { isActive: false, errorCode: 'ERR-AUTH-401', errorMessage: 'Tesla OAuth 토큰이 만료되었거나 권한이 부족합니다. 재로그인이 필요합니다.' };
-          } else if (res.status === 408) {
-            return { isActive: false, errorCode: 'ERR-SLEEP-408', errorMessage: '차량이 절전(Sleep) 상태입니다. Fleet API 응답이 대기시간을 초과했습니다.' };
-          } else if (res.ok) {
-            const data = await res.json();
-            const sentryState = data.response?.vehicle_state?.sentry_mode;
-            if (sentryState === true) {
-              addLog('✅ Fleet API: Sentry Mode [ON]');
-              return { isActive: true, errorCode: 'NONE', errorMessage: '성공' };
-            } else {
-              return { isActive: false, errorCode: 'ERR-SENTRY-OFF', errorMessage: '차량의 실제 감시 모드(Sentry Mode)가 꺼져(OFF) 있습니다.' };
-            }
-          }
-        } catch(e) {
-          addLog(`⚠️ Fleet API 예외: ${e.message}`);
-        }
-      } else if (!accessToken) {
-        return { isActive: false, errorCode: 'ERR-NO-TOKEN', errorMessage: '테슬라 OAuth 로그인 토큰이 없습니다. 로그인 버튼을 눌러주세요.' };
-      }
-
-      addLog('📡 3단계: Supabase 최신 차량 DB 레코드 확인 중...');
+      addLog('📡 2단계: Supabase 최신 차량 DB 레코드 확인 중...');
       if (vehicleRows && vehicleRows.length > 0) {
         const latest = vehicleRows[0];
-        if (latest.sentry_mode === true || latest.is_sentry === true) {
+        let rawObj = latest.raw_data;
+        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
+
+        if (latest.sentry_mode === true || latest.is_sentry === true || rawObj?.vehicle_state?.sentry_mode === true) {
           addLog('✅ Supabase DB: Sentry Mode [ON]');
           return { isActive: true, errorCode: 'NONE', errorMessage: '성공' };
         }
-
-        let rawObj = latest.raw_data;
-        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
-        if (rawObj?.vehicle_state?.sentry_mode === true) {
-          addLog('✅ Supabase DB (raw_data): Sentry Mode [ON]');
-          return { isActive: true, errorCode: 'NONE', errorMessage: '성공' };
-        }
       }
 
-      return { isActive: false, errorCode: 'ERR-ALL-FAILED', errorMessage: '모든 데이터 소스에서 감시 모드가 OFF이거나 상태를 불러올 수 없습니다.' };
+      return { isActive: false, errorCode: 'ERR-ALL-FAILED', errorMessage: '감시 모드가 OFF이거나 차량 상태를 불러올 수 없습니다.' };
     }
 
     function startMonitoring() {
@@ -761,24 +797,30 @@
       addLog('⏹️ 감시 가디언 정지됨');
     }
 
+    // [개선] 2. 가디언 주기적 감시 루프 함수 (오알람 방지 조건 적용)
     async function checkGuardianVehicleState() {
       const vehicleId = configObj.vehicleId;
       if (!vehicleId || !accessToken) return;
 
       try {
-        const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${vehicleId}/vehicle_data?endpoints=vehicle_state`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
+        const res = await fetch('https://my-tesla-app-six.vercel.app/api/sentry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: accessToken, vehicleId: vehicleId })
         });
 
-        if (!res.ok) { updateGuardianStatusUI('sleep', '🌙 오프라인'); return; }
+        if (!res.ok) { 
+          updateGuardianStatusUI('sleep', '🌙 응답 대기/오프라인'); 
+          return; 
+        }
 
         const data = await res.json();
-        if (data.response) {
-          const vehicleState = data.response.vehicle_state;
-          const sentryActive = vehicleState?.sentry_mode;
+        if (data.success) {
+          const sentryActive = data.sentry_mode;
+          const isLocked = data.locked ?? true; // 차량 잠금 상태
 
           if (!sentryActive) {
-            addLog('⚠️ 감시 모드 OFF 전환 감지. 가디언 자동 종료.');
+            addLog('⚠️ 감시 모드 OFF 전환 감지. 가디언을 정지합니다.');
             const toggle = document.getElementById('appMainToggle');
             if (toggle) { toggle.checked = false; handleToggleChange(toggle); }
             return;
@@ -786,14 +828,29 @@
 
           updateGuardianStatusUI('sentry', '🛡️ 가디언 가동 중');
 
-          if (!lastSentryState) {
-            addLog('🚨 위협 감지! 전조등 점멸 및 알림 발송');
-            await flashLights();
-            await sendNtfyNotification('Tesla Guardian Security', 'Sentry mode threat detected!');
+          // 문 및 트렁크 열림 체크
+          const isDoorOpen = data.doors_open && (data.doors_open.df || data.doors_open.dr || data.doors_open.pf || data.doors_open.pr);
+          const isTrunkOpen = data.trunks_open && (data.trunks_open.ft || data.trunks_open.rt);
+
+          // [오알람 방지] 차량이 잠겨있는 상태(Locked)에서 문/트렁크가 열린 경우만 무단 침입 알림
+          if (isLocked && (isDoorOpen || isTrunkOpen)) {
+            const targetName = isDoorOpen && isTrunkOpen ? '문/트렁크' : isDoorOpen ? '도어' : '트렁크';
+            addLog(`🚨 [경고] 잠금 상태에서 ${targetName} 무단 열림 감지!`);
+            await sendNtfyNotification(`🚨 테슬라 ${targetName} 무단 열림`, `차량이 잠긴 상태에서 ${targetName}가 열렸습니다!`, 'high');
           }
+
+          // [충격/위협 감지] Sentry Alarm 또는 Panic 발생 시
+          if (data.sentry_mode_type === 'Panic' || data.sentry_mode_type === 'Alarm') {
+            addLog(`🚨🚨 [비상] 차량 충격/위협 경보 발생! (${data.sentry_mode_type})`);
+            await flashLights();
+            await sendNtfyNotification('‼️ 테슬라 긴급 충격 경보', '차량 충격 또는 경보 이벤트가 감지되었습니다!', 'urgent');
+          }
+
           lastSentryState = sentryActive;
         }
-      } catch (err) { addLog(`❌ 가디언 에러: ${err.message}`); }
+      } catch (err) { 
+        addLog(`❌ 가디언 에러: ${err.message}`); 
+      }
     }
 
     async function flashLights() {
@@ -808,12 +865,12 @@
       } catch (err) { addLog(`❌ 전조등 실행 실패: ${err.message}`); }
     }
 
-    async function sendNtfyNotification(title, message) {
+    async function sendNtfyNotification(title, message, priority = 'high') {
       const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
       try {
         const res = await fetch(`https://ntfy.sh/${topic}`, {
           method: 'POST',
-          headers: { 'Title': title, 'Priority': 'high', 'Tags': 'car,warning' },
+          headers: { 'Title': title, 'Priority': priority, 'Tags': 'car,warning' },
           body: message
         });
         if (res.ok) addLog('📱 [자동] ntfy 푸시 알림 발송 완료');
