@@ -17,11 +17,9 @@
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-thumb { background: #262936; border-radius: 4px; }
     
-    /* 행정구역/주소 단어가 중간에서 줄바꿈되지 않도록 방지 */
     .address-tag { display: inline-block; white-space: nowrap; word-break: keep-all; }
     .status-badge-1line { white-space: nowrap; flex-shrink: 0; }
 
-    /* CSS 토글 스위치 */
     .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: .3s; border-radius: 24px; }
@@ -321,9 +319,15 @@
           </button>
         </div>
 
-        <div id="tokenInfoSection" class="hidden">
-          <div class="p-2.5 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-emerald-400 text-xs font-bold flex items-center gap-2">
-            <span>✅</span> 테슬라 OAuth 로그인 완료
+        <div id="tokenInfoSection" class="hidden space-y-2">
+          <div class="p-2.5 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-emerald-400 text-xs font-bold flex items-center justify-between">
+            <span class="flex items-center gap-1.5">✅ 테슬라 OAuth 로그인 완료</span>
+            <button onclick="fetchTeslaVehicles(accessToken)" class="text-[10px] underline text-emerald-300">VIN/ID 조회</button>
+          </div>
+          <div id="vehicleInfoDisplay" class="p-2.5 bg-gray-800/60 border border-gray-700/60 rounded-xl text-xs space-y-1">
+            <div class="text-gray-400 text-[10px]">연동된 차량 정보</div>
+            <div class="font-mono text-gray-200" id="displayVin">VIN: -</div>
+            <div class="font-mono text-blue-400 font-bold" id="displayVehicleId">Vehicle ID: -</div>
           </div>
         </div>
 
@@ -375,7 +379,10 @@
         </div>
         <div>
           <label class="block text-gray-400 mb-1">Tesla Vehicle ID / VIN</label>
-          <input type="text" id="input-vehicle-id" placeholder="차량 ID 입력" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
+          <div class="flex gap-2">
+            <input type="text" id="input-vehicle-id" placeholder="차량 ID 입력" class="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
+            <button type="button" onclick="autoFetchVehicleId()" class="px-3 py-2 bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 rounded-xl text-xs font-bold hover:bg-emerald-600/50 transition">⚡ 자동조회</button>
+          </div>
         </div>
         <div>
           <label class="block text-gray-400 mb-1">ntfy 알림 토픽</label>
@@ -402,7 +409,6 @@
     
     const VERCEL_BACKEND_URL = "https://my-tesla-app-six.vercel.app/api/exchange"; 
     const CLIENT_ID = "272ac00a-248e-4fa7-8027-1fc06e8e9a24";
-    // 🔥 GitHub Pages 정확한 배포 주소로 설정
     const REDIRECT_URI = "https://mdkdw1-ui.github.io/tesla-dash";
 
     let accessToken = localStorage.getItem('tesla_access_token') || "";
@@ -424,9 +430,9 @@
       if (accessToken) {
         document.getElementById('loginSection')?.classList.add('hidden');
         document.getElementById('tokenInfoSection')?.classList.remove('hidden');
+        fetchTeslaVehicles(accessToken);
       }
 
-      // OAuth 인증 코드 수신 처리
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
       if (code) {
@@ -474,6 +480,10 @@
       } catch (e) { return false; }
     }
 
+    function saveConfigDirect() {
+      localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
+    }
+
     function saveConfig(e) {
       e.preventDefault();
       configObj = {
@@ -484,7 +494,7 @@
         vehicleId: document.getElementById('input-vehicle-id').value.trim(),
         ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
       };
-      localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
+      saveConfigDirect();
       location.reload();
     }
 
@@ -623,11 +633,70 @@
           document.getElementById('loginSection').classList.add('hidden');
           document.getElementById('tokenInfoSection').classList.remove('hidden');
           updateGuardianStatusUI('sleep', '🌙 대기 모드 (스위치를 켜세요)');
+          
+          await fetchTeslaVehicles(accessToken);
+
           window.history.replaceState({}, document.title, window.location.pathname);
         } else {
           addLog(`❌ [ERR-TOKEN-01] 토큰 교환 실패: ${JSON.stringify(data)}`);
         }
       } catch (err) { addLog(`❌ [ERR-TOKEN-02] 백엔드 통신 오류: ${err.message}`); }
+    }
+
+    // ⚡ 테슬라 계정 차량 목록 및 VIN/Vehicle ID 자동 조회 함수
+    async function fetchTeslaVehicles(token) {
+      if (!token) return null;
+      addLog('📡 테슬라 계정의 차량 목록 및 VIN/ID 조회 중...');
+      try {
+        const res = await fetch('https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.response && data.response.length > 0) {
+            const car = data.response[0];
+            const vId = car.id || car.vehicle_id;
+            const vin = car.vin;
+            const name = car.display_name || 'Tesla';
+            
+            addLog(`✅ 차량 감지: ${name} (VIN: ${vin}, ID: ${vId})`);
+            updateVehicleInfoUI(vin, vId);
+
+            if (!configObj.vehicleId) {
+              configObj.vehicleId = String(vId);
+              saveConfigDirect();
+              addLog(`💾 Vehicle ID (${vId})가 설정에 자동 저장되었습니다.`);
+            }
+            return { vin, vId };
+          }
+        } else {
+          addLog(`⚠️ 차량 목록 조회 실패 (HTTP ${res.status})`);
+        }
+      } catch (err) {
+        addLog(`⚠️ 차량 목록 직접 조회 실패: ${err.message}`);
+      }
+      return null;
+    }
+
+    function updateVehicleInfoUI(vin, vId) {
+      const vinEl = document.getElementById('displayVin');
+      const idEl = document.getElementById('displayVehicleId');
+      if (vinEl) vinEl.innerText = `VIN: ${vin || '-'}`;
+      if (idEl) idEl.innerText = `Vehicle ID: ${vId || configObj.vehicleId || '-'}`;
+    }
+
+    async function autoFetchVehicleId() {
+      if (!accessToken) {
+        alert('테슬라 계정 로그인이 먼저 필요합니다. 감시 가디언 탭에서 로그인해 주세요.');
+        return;
+      }
+      const res = await fetchTeslaVehicles(accessToken);
+      if (res && res.vId) {
+        document.getElementById('input-vehicle-id').value = res.vId;
+        alert(`차량 ID를 성공적으로 불러왔습니다!\nID: ${res.vId}\nVIN: ${res.vin}`);
+      } else {
+        alert('차량 정보를 불러오지 못했습니다. 감시 가디언 탭의 로그를 확인해 주세요.');
+      }
     }
 
     async function handleToggleChange(checkbox) {
@@ -857,7 +926,6 @@
       } catch (err) { return []; }
     }
 
-    // 주소 정제 함수 ('고양시', '서울특별시', '경기도' 제거)
     function cleanAddress(addr) {
       if (!addr || typeof addr !== 'string') return '';
       return addr
@@ -895,7 +963,6 @@
       });
     }
 
-    // 운행시간 파싱 및 2차 검증 함수 (57분 -> 57, 1시간2분 -> 62)
     function parseDrivingTimeToMinutes(r) {
       if (!r) return 1;
 
@@ -923,7 +990,6 @@
         if (total > 0) minsFromDrivingTime = total;
       }
 
-      // 2차 검증: start_time과 end_time 차이 계산
       let minsFromTimeDiff = null;
       const sTime = r.start_time || r.started_at;
       const eTime = r.end_time || r.ended_at || r.created_at;
@@ -1039,7 +1105,6 @@
       }
     }
 
-    // 행정구역 명칭 단위 줄바꿈 보정 HTML 생성
     function buildSequentialRouteHtml(tripsArray) {
       if (!tripsArray || tripsArray.length === 0) return "";
       const sorted = [...tripsArray].sort((a, b) => a.timestamp - b.timestamp);
@@ -1139,7 +1204,6 @@
           `);
         }
 
-        // 주행 기록 카드 2줄 레이아웃 적용
         sameDayTrips.forEach(t => {
           const startLoc = cleanAddress(t.startDong);
           const endLoc = cleanAddress(t.endDong);
@@ -1154,13 +1218,11 @@
 
           listContainer.insertAdjacentHTML('beforeend', `
             <div class="bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800/80 space-y-1 text-xs">
-              <!-- 1행: 출발지 → 도착지 -->
               <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap">
                 <span class="address-tag text-blue-300">${startLoc}</span>
                 <span class="text-indigo-400">→</span>
                 <span class="address-tag text-emerald-300">${endLoc}</span>
               </div>
-              <!-- 2행: 주행 상세 정보 -->
               <div class="text-gray-400 text-[11px] leading-relaxed">
                 주행 ${moveKmStr}km, 시간 ${t.durationMin}분, 배터리 ${batDetail}, 총 주행거리 ${odoStr}km
               </div>
@@ -1169,7 +1231,6 @@
         });
       }
 
-      // 최근 상태 히스토리 타임라인 2줄 레이아웃 적용
       const timelineBox = document.getElementById('timeline-container');
       timelineBox.innerHTML = '';
 
@@ -1226,7 +1287,6 @@
 
             groupHtml += `
               <div class="bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800/80 space-y-1 text-xs">
-                <!-- 1행: [주행] 시각 출발지 → 도착지 -->
                 <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap">
                   <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 주행</span>
                   <span class="text-gray-400 text-[11px] font-mono mr-1">${evt.timeStr}</span>
@@ -1234,7 +1294,6 @@
                   <span class="text-indigo-400">→</span>
                   <span class="address-tag text-emerald-300">${evt.endDong}</span>
                 </div>
-                <!-- 2행: 주행 상세 -->
                 <div class="text-gray-400 text-[11px] leading-relaxed">
                   주행 ${evt.odoDiff}km, 시간 ${evt.durationMin ? evt.durationMin + '분' : '-'}, 배터리 ${batDetail}, 총 주행거리 ${evt.odo.toLocaleString()}km
                 </div>
