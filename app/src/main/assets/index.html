@@ -17,11 +17,9 @@
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-thumb { background: #262936; border-radius: 4px; }
     
-    /* 행정구역/주소 단어가 중간에서 줄바꿈되지 않도록 방지 */
     .address-tag { display: inline-block; white-space: nowrap; word-break: keep-all; }
     .status-badge-1line { white-space: nowrap; flex-shrink: 0; }
 
-    /* CSS 토글 스위치 */
     .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: .3s; border-radius: 24px; }
@@ -102,7 +100,6 @@
           </div>
         </div>
 
-        <!-- 동적 차량 상태 카드 -->
         <div id="card-state-duration" class="card-dark card-border-amber p-4 rounded-2xl flex items-center justify-between transition-all">
           <div class="flex items-center space-x-3">
             <span id="v-state-icon" class="text-2xl">🅿️</span>
@@ -188,7 +185,7 @@
         </div>
 
         <div id="top5-container" class="card-dark rounded-2xl p-4 hidden space-y-3">
-          <h3 id="top5-title" class="text-xs font-bold text-amber-400">🔥 해당 기간 일자별 최장 운행 거리 TOP 5</h3>
+          <h3 id="top5-title" class="text-xs font-bold text-amber-400">🔥 해당 기간 일자별 최장 운행 거리 TOP 5 (터치 시 해당일 이동)</h3>
           <div id="top5-list" class="space-y-2 text-xs"></div>
         </div>
       </div>
@@ -248,11 +245,11 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div class="card-dark p-4 rounded-2xl space-y-2">
-            <h4 class="text-xs font-bold text-blue-400">⏱️ 이달의 최장 운행 시간 TOP 5</h4>
+            <h4 class="text-xs font-bold text-blue-400">⏱️ 이달의 최장 운행 시간 TOP 5 (터치 시 주행 지도 이동)</h4>
             <div id="m-top5-time-list" class="space-y-1.5 text-xs"></div>
           </div>
           <div class="card-dark p-4 rounded-2xl space-y-2">
-            <h4 class="text-xs font-bold text-green-400">📍 이달의 최장 운행 거리 TOP 5</h4>
+            <h4 class="text-xs font-bold text-green-400">📍 이달의 최장 운행 거리 TOP 5 (터치 시 주행 지도 이동)</h4>
             <div id="m-top5-dist-list" class="space-y-1.5 text-xs"></div>
           </div>
         </div>
@@ -321,7 +318,6 @@
           </button>
         </div>
 
-        <!-- [개선] 토큰 정보 및 차량 ID 조회 섹션 -->
         <div id="tokenInfoSection" class="hidden space-y-2">
           <div class="p-2.5 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-emerald-400 text-xs font-bold flex items-center justify-between">
             <span class="flex items-center gap-1.5">✅ 테슬라 OAuth 로그인 완료</span>
@@ -381,7 +377,6 @@
           <input type="password" id="input-gh-token" placeholder="ghp_xxxx..." class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
         
-        <!-- [개선] 차량 ID 입력 및 자동조회 버튼 -->
         <div>
           <label class="block text-gray-400 mb-1">Tesla Vehicle ID / VIN</label>
           <div class="flex gap-2">
@@ -427,7 +422,14 @@
     let allTrips = [], vehicleRows = [];
     let currentPolylines = [], currentInfoWindow = null;
     let currentFilterMode = 'daily';
-    let addressCache = {}; 
+    
+    // 💡 [속도 개선] 주소 변환 영구 캐시 로드
+    let addressCache = {};
+    try {
+      const savedCache = localStorage.getItem('tesla_address_cache');
+      if (savedCache) addressCache = JSON.parse(savedCache);
+    } catch(e) {}
+
     let chartDegRec = null, chartRangeRec = null;
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -439,7 +441,6 @@
         fetchTeslaVehicles(accessToken);
       }
 
-      // OAuth 인증 코드 수신 처리
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
       if (code) {
@@ -550,6 +551,21 @@
       if (subTab === 'driving' && map) setTimeout(() => map.relayout(), 100);
       if (subTab === 'monthly') { initMonthlyDropdowns(); renderMonthlyTop5(); }
       if (subTab === 'battery') renderBatteryCharts();
+    }
+
+    // 💡 [이동 기능] 특정 날짜 클릭 시 주행지도의 일간 모드로 즉시 점프
+    function jumpToDrivingDate(dateStr) {
+      switchMainTab('monitor');
+      switchSubTab('driving');
+      setFilterMode('daily');
+
+      setTimeout(() => {
+        const subSelect = document.getElementById('ctrl-sub-select');
+        if (subSelect) {
+          subSelect.value = dateStr;
+          renderDrivingData();
+        }
+      }, 50);
     }
 
     function loadCachedDataFirst() {
@@ -742,7 +758,6 @@
       }
     }
 
-    // [개선] 1. 감시 모드 켜짐 여부 정밀 진단 함수
     async function checkIsVehicleSentryActiveWithDebug() {
       try {
         addLog('📡 1단계: Vercel 백엔드 Sentry API 확인 중...');
@@ -797,7 +812,6 @@
       addLog('⏹️ 감시 가디언 정지됨');
     }
 
-    // [개선] 2. 가디언 주기적 감시 루프 함수 (오알람 방지 조건 적용)
     async function checkGuardianVehicleState() {
       const vehicleId = configObj.vehicleId;
       if (!vehicleId || !accessToken) return;
@@ -817,7 +831,7 @@
         const data = await res.json();
         if (data.success) {
           const sentryActive = data.sentry_mode;
-          const isLocked = data.locked ?? true; // 차량 잠금 상태
+          const isLocked = data.locked ?? true;
 
           if (!sentryActive) {
             addLog('⚠️ 감시 모드 OFF 전환 감지. 가디언을 정지합니다.');
@@ -828,18 +842,15 @@
 
           updateGuardianStatusUI('sentry', '🛡️ 가디언 가동 중');
 
-          // 문 및 트렁크 열림 체크
           const isDoorOpen = data.doors_open && (data.doors_open.df || data.doors_open.dr || data.doors_open.pf || data.doors_open.pr);
           const isTrunkOpen = data.trunks_open && (data.trunks_open.ft || data.trunks_open.rt);
 
-          // [오알람 방지] 차량이 잠겨있는 상태(Locked)에서 문/트렁크가 열린 경우만 무단 침입 알림
           if (isLocked && (isDoorOpen || isTrunkOpen)) {
             const targetName = isDoorOpen && isTrunkOpen ? '문/트렁크' : isDoorOpen ? '도어' : '트렁크';
             addLog(`🚨 [경고] 잠금 상태에서 ${targetName} 무단 열림 감지!`);
             await sendNtfyNotification(`🚨 테슬라 ${targetName} 무단 열림`, `차량이 잠긴 상태에서 ${targetName}가 열렸습니다!`, 'high');
           }
 
-          // [충격/위협 감지] Sentry Alarm 또는 Panic 발생 시
           if (data.sentry_mode_type === 'Panic' || data.sentry_mode_type === 'Alarm') {
             addLog(`🚨🚨 [비상] 차량 충격/위협 경보 발생! (${data.sentry_mode_type})`);
             await flashLights();
@@ -946,6 +957,7 @@
       return cleanAddress(`${(region2 || "").trim()} ${(region3 || "").trim()}`);
     }
 
+    // 💡 [속도 개선] 주소 역지오코딩 영구 캐시 사용
     function getNeighborhood(lat, lng) {
       return new Promise((resolve) => {
         if (!lat || !lng || !geocoder) { resolve("위치 미상"); return; }
@@ -959,6 +971,7 @@
                 const item = result[i];
                 const formatted = formatAddressString(item.region_1depth_name, item.region_2depth_name, item.region_3depth_name);
                 addressCache[key] = formatted;
+                try { localStorage.setItem('tesla_address_cache', JSON.stringify(addressCache)); } catch(e){}
                 resolve(formatted);
                 return;
               }
@@ -969,15 +982,17 @@
       });
     }
 
+    // 💡 [시간 파싱 보강] duration_min, driving_time 파싱 호환
     function parseDrivingTimeToMinutes(r) {
       if (!r) return 1;
 
-      let minsFromDrivingTime = null;
-      let val = r.driving_time ?? r.duration_min ?? r.duration ?? r.drive_time ?? r.time;
+      let val = r.duration_min ?? r.driving_time ?? r.drivingTime ?? r.duration;
 
-      if (typeof val === 'number' && !isNaN(val)) {
-        minsFromDrivingTime = val > 500 ? Math.round(val / 60) : Math.round(val);
-      } else if (typeof val === 'string' && val.trim() !== '' && val.trim().toUpperCase() !== 'NULL') {
+      if (typeof val === 'number' && !isNaN(val) && val > 0) {
+        return Math.round(val);
+      }
+      
+      if (typeof val === 'string' && val.trim() !== '' && val.trim().toUpperCase() !== 'NULL') {
         let str = val.trim();
         let hours = 0, mins = 0;
         
@@ -987,28 +1002,23 @@
         const minMatch = str.match(/(\d+)\s*분/);
         if (minMatch) mins = parseInt(minMatch[1], 10);
         
-        if (!hourMatch && !minMatch) {
-          const numOnly = parseFloat(str);
-          if (!isNaN(numOnly)) mins = Math.round(numOnly);
+        if (hourMatch || minMatch) {
+          return hours * 60 + mins;
         }
-        
-        const total = hours * 60 + mins;
-        if (total > 0) minsFromDrivingTime = total;
+
+        const numOnly = parseFloat(str);
+        if (!isNaN(numOnly) && numOnly > 0) return Math.round(numOnly);
       }
 
-      let minsFromTimeDiff = null;
       const sTime = r.start_time || r.started_at;
       const eTime = r.end_time || r.ended_at || r.created_at;
-      
       if (sTime && eTime) {
         const diffMs = new Date(eTime).getTime() - new Date(sTime).getTime();
         if (!isNaN(diffMs) && diffMs > 0) {
-          minsFromTimeDiff = Math.round(diffMs / 60000);
+          return Math.round(diffMs / 60000);
         }
       }
 
-      if (minsFromDrivingTime && minsFromDrivingTime > 0) return minsFromDrivingTime;
-      if (minsFromTimeDiff && minsFromTimeDiff > 0) return minsFromTimeDiff;
       return 1;
     }
 
@@ -1048,6 +1058,12 @@
         localStorage.setItem('tesla_cached_trips', JSON.stringify(allTrips.slice(0, 50)));
       }
 
+      // 화면을 먼저 렌더링하고 비동기로 주소 채우기 (로딩 지연 해소)
+      switchMainTab(currentMainTab);
+      if (!isSilent) setFilterMode('daily');
+      loadVehicleData();
+
+      // 주소 보정 (비동기 처리)
       for (let t of allTrips) {
         if ((t.startDong === "조회중" || t.endDong === "조회중") && t.path && t.path.length > 0) {
           const firstPt = t.path[0], lastPt = t.path[t.path.length - 1];
@@ -1058,10 +1074,6 @@
           if (t.endDong === "조회중") t.endDong = await getNeighborhood(lLat, lLng);
         }
       }
-
-      switchMainTab(currentMainTab);
-      if (!isSilent) setFilterMode('daily');
-      loadVehicleData();
     }
 
     function updateDynamicVehicleCard(stateObj) {
@@ -1511,12 +1523,13 @@
         if (dailyArray.length === 0) {
           top5List.innerHTML = `<span class="text-gray-500">해당 기간 데이터가 없습니다.</span>`;
         } else {
+          // 💡 터치 시 해당 날짜로 바로 이동되도록 onclick 적용
           top5List.innerHTML = dailyArray.map((item, idx) => {
             const fullRouteStr = buildSequentialRouteHtml(item.trips);
             return `
-              <div class="flex flex-col gap-1 bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800">
+              <div onclick="jumpToDrivingDate('${item.dateStr}')" class="flex flex-col gap-1 bg-[#0d0e12] hover:bg-gray-800/80 p-2.5 rounded-xl border border-gray-800 cursor-pointer transition active:scale-98">
                 <div class="flex justify-between items-center">
-                  <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
+                  <span class="text-gray-200 font-bold">${idx+1}. ${item.dateStr} ➔</span>
                   <span class="text-amber-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
                 </div>
                 <div class="text-gray-300 text-[11px] leading-normal">📍 경로: ${fullRouteStr}</div>
@@ -1662,6 +1675,7 @@
       renderMonthlyTop5(filteredTrips);
     }
 
+    // 💡 [이동 기능] 월간 Top 5 항목 클릭 시 클릭한 해당 일자로 점프
     function renderMonthlyTop5(filteredTrips) {
       if (!filteredTrips) {
         const selY = Number(document.getElementById('m-select-year').value);
@@ -1688,8 +1702,8 @@
           const hours = Math.floor(item.totalMin / 60), mins = item.totalMin % 60;
           const timeStr = hours > 0 ? `${hours}시간 ${mins}분` : `${mins}분`;
           return `
-            <div class="flex justify-between items-center bg-[#0d0e12] p-1.5 rounded-lg border border-gray-800">
-              <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
+            <div onclick="jumpToDrivingDate('${item.dateStr}')" class="flex justify-between items-center bg-[#0d0e12] hover:bg-gray-800/80 p-2 rounded-lg border border-gray-800 cursor-pointer transition active:scale-98">
+              <span class="text-gray-200 font-bold">${idx+1}. ${item.dateStr} ➔</span>
               <span class="text-blue-400 font-extrabold">${timeStr}</span>
             </div>
           `;
@@ -1713,9 +1727,9 @@
         distContainer.innerHTML = topDistList.map((item, idx) => {
           const fullRouteStr = buildSequentialRouteHtml(item.trips);
           return `
-            <div class="bg-[#0d0e12] p-2 rounded-lg border border-gray-800 space-y-1">
+            <div onclick="jumpToDrivingDate('${item.dateStr}')" class="bg-[#0d0e12] hover:bg-gray-800/80 p-2 rounded-lg border border-gray-800 space-y-1 cursor-pointer transition active:scale-98">
               <div class="flex justify-between">
-                <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
+                <span class="text-gray-200 font-bold">${idx+1}. ${item.dateStr} ➔</span>
                 <span class="text-green-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
               </div>
               <div class="text-[11px] text-gray-300 leading-normal">📍 ${fullRouteStr}</div>
