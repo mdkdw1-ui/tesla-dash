@@ -942,16 +942,28 @@
       }
     }
 
+    // my-tesla-app repo의 api/headlights.js 백엔드 엔드포인트 연동
     async function flashLights() {
-      if (!configObj.vehicleId || !accessToken) return;
+      if (!configObj.vehicleId || !accessToken) {
+        addLog('⚠️ 차량 ID 또는 Access Token이 설정되어 있지 않습니다.');
+        return;
+      }
       try {
-        const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${configObj.vehicleId}/command/flash_lights`, {
+        addLog('⚡ Vercel API (headlights) 전조등 점멸 요청 중...');
+        const res = await fetch('https://my-tesla-app-six.vercel.app/api/headlights', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: accessToken, vehicleId: configObj.vehicleId })
         });
         const data = await res.json();
-        if (data.response?.result) addLog('⚡ [자동] 전조등 점멸 실행 완료');
-      } catch (err) { addLog(`❌ 전조등 실행 실패: ${err.message}`); }
+        if (res.ok && (data.success || data.response?.result)) {
+          addLog('⚡ [자동] 전조등 점멸 실행 완료');
+        } else {
+          addLog(`❌ 전조등 실행 실패: ${data.error || data.reason || JSON.stringify(data)}`);
+        }
+      } catch (err) { 
+        addLog(`❌ 전조등 실행 실패: ${err.message}`); 
+      }
     }
 
     async function sendNtfyNotification(title, message, priority = 'high') {
@@ -1872,18 +1884,20 @@
       const timeContainer = document.getElementById('m-top5-time-list');
       if (timeContainer) {
         timeContainer.innerHTML = topTimeList.length === 0 ? '<span class="text-gray-500 text-xs">기록 없음</span>' : topTimeList.map((t, i) => {
-          const dStr = new Date(t.timestamp).toLocaleDateString('ko-KR');
-          const dateParam = `${new Date(t.timestamp).getFullYear()}-${String(new Date(t.timestamp).getMonth()+1).padStart(2,'0')}-${String(new Date(t.timestamp).getDate()).padStart(2,'0')}`;
+          const dateStr = new Date(t.timestamp).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
+          const dateParam = new Date(t.timestamp).toISOString().split('T')[0];
           return `
             <div onclick="jumpToDrivingDate('${dateParam}')" class="bg-[#0f1015] p-2.5 rounded-xl border border-gray-800 space-y-1 cursor-pointer hover:border-blue-500/50 transition text-xs">
               <div class="flex justify-between items-center">
-                <span class="font-extrabold text-blue-400">${i+1}. ${dStr}</span>
-                <span class="font-bold text-gray-200">${t.durationMin}분 (${t.moveKM.toFixed(1)}km)</span>
+                <div class="flex items-center space-x-1.5">
+                  <span class="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 font-bold text-[10px] flex items-center justify-center">${i + 1}</span>
+                  <span class="font-bold text-gray-200">${dateStr}</span>
+                </div>
+                <span class="font-extrabold text-blue-400">${t.durationMin}분</span>
               </div>
-              <div class="text-gray-300 font-medium break-keep leading-relaxed flex items-center gap-1 flex-wrap">
-                <span class="bg-gray-800/80 px-1.5 py-0.5 rounded text-blue-300 font-semibold">${t.startDong}</span>
-                <span class="text-indigo-400 font-bold">→</span>
-                <span class="bg-gray-800/80 px-1.5 py-0.5 rounded text-emerald-300 font-semibold">${t.endDong}</span>
+              <div class="text-[11px] text-gray-400 flex justify-between items-center">
+                <span>${t.startDong} → ${t.endDong}</span>
+                <span>${t.moveKM.toFixed(1)} km</span>
               </div>
             </div>
           `;
@@ -1895,18 +1909,20 @@
       const distContainer = document.getElementById('m-top5-dist-list');
       if (distContainer) {
         distContainer.innerHTML = topDistList.length === 0 ? '<span class="text-gray-500 text-xs">기록 없음</span>' : topDistList.map((t, i) => {
-          const dStr = new Date(t.timestamp).toLocaleDateString('ko-KR');
-          const dateParam = `${new Date(t.timestamp).getFullYear()}-${String(new Date(t.timestamp).getMonth()+1).padStart(2,'0')}-${String(new Date(t.timestamp).getDate()).padStart(2,'0')}`;
+          const dateStr = new Date(t.timestamp).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
+          const dateParam = new Date(t.timestamp).toISOString().split('T')[0];
           return `
             <div onclick="jumpToDrivingDate('${dateParam}')" class="bg-[#0f1015] p-2.5 rounded-xl border border-gray-800 space-y-1 cursor-pointer hover:border-green-500/50 transition text-xs">
               <div class="flex justify-between items-center">
-                <span class="font-extrabold text-green-400">${i+1}. ${dStr}</span>
-                <span class="font-bold text-gray-200">${t.moveKM.toFixed(1)} km (${t.durationMin}분)</span>
+                <div class="flex items-center space-x-1.5">
+                  <span class="w-4 h-4 rounded-full bg-green-500/20 text-green-400 font-bold text-[10px] flex items-center justify-center">${i + 1}</span>
+                  <span class="font-bold text-gray-200">${dateStr}</span>
+                </div>
+                <span class="font-extrabold text-green-400">${t.moveKM.toFixed(1)} km</span>
               </div>
-              <div class="text-gray-300 font-medium break-keep leading-relaxed flex items-center gap-1 flex-wrap">
-                <span class="bg-gray-800/80 px-1.5 py-0.5 rounded text-blue-300 font-semibold">${t.startDong}</span>
-                <span class="text-indigo-400 font-bold">→</span>
-                <span class="bg-gray-800/80 px-1.5 py-0.5 rounded text-emerald-300 font-semibold">${t.endDong}</span>
+              <div class="text-[11px] text-gray-400 flex justify-between items-center">
+                <span>${t.startDong} → ${t.endDong}</span>
+                <span>${t.durationMin}분</span>
               </div>
             </div>
           `;
@@ -1914,52 +1930,45 @@
       }
     }
 
-    // 1-4. 배터리 차트 생성 (마일 -> km 단위 자동 보정 포함)
+    // 1-4. 배터리 차트 렌더링
     function renderBatteryCharts() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
-      const recentData = vehicleRows.slice(0, 50).reverse();
-      const labels = recentData.map(v => {
-        const d = new Date(v.updated_at);
-        return `${d.getMonth()+1}/${d.getDate()}`;
+      const validRows = vehicleRows.filter(r => r.battery_level && r.odometer).slice(0, 50).reverse();
+      if (validRows.length === 0) return;
+
+      const latest = vehicleRows[0];
+      const bat = latest.battery_level || 100;
+      const odo = latest.odometer || 0;
+      
+      const est100Range = bat > 0 ? Math.round((odo / bat) * 100) : 400;
+      const estRangeValEl = document.getElementById('b-est-range-val');
+      if (estRangeValEl) estRangeValEl.innerText = `${est100Range} km`;
+
+      const labels = validRows.map(r => {
+        const d = new Date(r.updated_at);
+        return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
       });
 
-      const degData = recentData.map(v => {
-        let rawObj = v.raw_data;
-        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
-        let estRange = rawObj?.charge_state?.battery_range || rawObj?.charge_state?.est_battery_range || 270;
-        if (estRange < 320) estRange = estRange * 1.60934;
-        const batPct = v.battery_level || 100;
-        const fullEst = (estRange / (batPct / 100));
-        const deg = Math.min(100, (fullEst / 455) * 100);
-        return parseFloat(deg.toFixed(1));
+      const degradationData = validRows.map(r => {
+        return (100 - ((r.odometer || 0) / 100000) * 1.5).toFixed(1);
       });
 
-      const rangeData = recentData.map(v => {
-        let rawObj = v.raw_data;
-        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
-        let estRange = rawObj?.charge_state?.battery_range || rawObj?.charge_state?.est_battery_range || 270;
-        if (estRange < 320) estRange = estRange * 1.60934;
-        const batPct = v.battery_level || 100;
-        return Math.round(estRange / (batPct / 100));
+      const rangeData = validRows.map(r => {
+        const b = r.battery_level || 100;
+        return b > 0 ? Math.round(((r.odometer || 0) / b) * 100) : 0;
       });
-
-      const latestDeg = degData[degData.length - 1] || 100;
-      const latestRange = rangeData[rangeData.length - 1] || 430;
-
-      document.getElementById('b-degradation-val').innerText = `${latestDeg}%`;
-      document.getElementById('b-est-range-val').innerText = `${latestRange} km`;
 
       if (chartDegRec) chartDegRec.destroy();
-      const ctx1 = document.getElementById('chartDegradationRecent')?.getContext('2d');
-      if (ctx1) {
-        chartDegRec = new Chart(ctx1, {
+      const ctxDeg = document.getElementById('chartDegradationRecent')?.getContext('2d');
+      if (ctxDeg) {
+        chartDegRec = new Chart(ctxDeg, {
           type: 'line',
           data: {
             labels: labels,
             datasets: [{
               label: '열화율 (%)',
-              data: degData,
+              data: degradationData,
               borderColor: '#818cf8',
               backgroundColor: 'rgba(129, 140, 248, 0.1)',
               fill: true,
@@ -1971,22 +1980,22 @@
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-              x: { grid: { display: false }, ticks: { color: '#6b7280', font: { size: 9 } } },
-              y: { grid: { color: '#1f2937' }, ticks: { color: '#6b7280', font: { size: 9 } } }
+              x: { display: false },
+              y: { grid: { color: '#262936' }, ticks: { color: '#9ca3af' } }
             }
           }
         });
       }
 
       if (chartRangeRec) chartRangeRec.destroy();
-      const ctx2 = document.getElementById('chartRangeRecent')?.getContext('2d');
-      if (ctx2) {
-        chartRangeRec = new Chart(ctx2, {
+      const ctxRange = document.getElementById('chartRangeRecent')?.getContext('2d');
+      if (ctxRange) {
+        chartRangeRec = new Chart(ctxRange, {
           type: 'line',
           data: {
             labels: labels,
             datasets: [{
-              label: '100% 환산 거리 (km)',
+              label: '100% 환산 주행거리 (km)',
               data: rangeData,
               borderColor: '#34d399',
               backgroundColor: 'rgba(52, 211, 153, 0.1)',
@@ -1999,8 +2008,8 @@
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-              x: { grid: { display: false }, ticks: { color: '#6b7280', font: { size: 9 } } },
-              y: { grid: { color: '#1f2937' }, ticks: { color: '#6b7280', font: { size: 9 } } }
+              x: { display: false },
+              y: { grid: { color: '#262936' }, ticks: { color: '#9ca3af' } }
             }
           }
         });
