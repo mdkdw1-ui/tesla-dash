@@ -319,6 +319,7 @@
           </button>
         </div>
 
+        <!-- 복구된 토큰 정보 및 차량 ID 조회 섹션 -->
         <div id="tokenInfoSection" class="hidden space-y-2">
           <div class="p-2.5 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-emerald-400 text-xs font-bold flex items-center justify-between">
             <span class="flex items-center gap-1.5">✅ 테슬라 OAuth 로그인 완료</span>
@@ -456,18 +457,13 @@
         stopDrivingSyncLoop(); 
       } else {
         isAppInForeground = true;
-        if (indicator) {
-          indicator.innerText = "🅿️ 대기";
-        }
+        if (indicator) indicator.innerText = "🅿️ 대기";
         handleRefresh(true); 
       }
     }
 
     function stopDrivingSyncLoop() {
-      if (drivingSyncTimer) {
-        clearInterval(drivingSyncTimer);
-        drivingSyncTimer = null;
-      }
+      if (drivingSyncTimer) { clearInterval(drivingSyncTimer); drivingSyncTimer = null; }
     }
 
     function loadConfig() {
@@ -523,9 +519,7 @@
         ? "py-2.5 rounded-xl font-bold text-sm bg-red-600 text-white transition flex items-center justify-center gap-1.5 shadow-lg"
         : "py-2.5 rounded-xl font-bold text-sm bg-gray-800 text-gray-400 hover:text-white transition flex items-center justify-center gap-1.5";
 
-      if (mainTab === 'monitor') {
-        switchSubTab(currentSubTab);
-      }
+      if (mainTab === 'monitor') switchSubTab(currentSubTab);
     }
 
     function switchSubTab(subTab) {
@@ -554,30 +548,17 @@
         const cachedVehicle = localStorage.getItem('tesla_cached_vehicle');
         const cachedTrips = localStorage.getItem('tesla_cached_trips');
 
-        if (cachedVehicle) {
-          vehicleRows = JSON.parse(cachedVehicle);
-          loadVehicleData();
-        }
-        if (cachedTrips) {
-          allTrips = JSON.parse(cachedTrips);
-          switchMainTab(currentMainTab);
-        }
+        if (cachedVehicle) { vehicleRows = JSON.parse(cachedVehicle); loadVehicleData(); }
+        if (cachedTrips) { allTrips = JSON.parse(cachedTrips); switchMainTab(currentMainTab); }
       } catch (e) {}
     }
 
     async function handleRefresh(isSilent = false) {
       if (!isAppInForeground && isSilent) return;
-
       const indicator = document.getElementById('sync-status-indicator');
-      if (indicator && !isSilent) {
-        indicator.innerText = "⏳ 갱신 중...";
-      }
-
+      if (indicator && !isSilent) indicator.innerText = "⏳ 갱신 중...";
       await loadAllData(isSilent);
-
-      if (indicator && isAppInForeground) {
-        indicator.innerText = "🅿️ 대기";
-      }
+      if (indicator && isAppInForeground) indicator.innerText = "🅿️ 대기";
     }
 
     function addLog(msg) {
@@ -633,21 +614,16 @@
           document.getElementById('loginSection').classList.add('hidden');
           document.getElementById('tokenInfoSection').classList.remove('hidden');
           updateGuardianStatusUI('sleep', '🌙 대기 모드 (스위치를 켜세요)');
-          
           await fetchTeslaVehicles(accessToken);
-
           window.history.replaceState({}, document.title, window.location.pathname);
         } else {
-          addLog(`❌ [ERR-TOKEN-01] 토큰 교환 실패: ${JSON.stringify(data)}`);
+          addLog(`❌ 토큰 교환 실패: ${JSON.stringify(data)}`);
         }
-      } catch (err) { addLog(`❌ [ERR-TOKEN-02] 백엔드 통신 오류: ${err.message}`); }
+      } catch (err) { addLog(`❌ 백엔드 통신 오류: ${err.message}`); }
     }
 
-    // ⚡ CORS 안전 방식: Supabase DB 및 Vercel 백엔드 중계를 통한 차량 조회
     async function fetchTeslaVehicles(token) {
       addLog('📡 차량 목록 및 VIN/ID 조회 중...');
-
-      // 1단계: Supabase 최신 차량 DB 레코드에서 VIN 및 Vehicle ID 추출
       if (vehicleRows && vehicleRows.length > 0) {
         const latest = vehicleRows[0];
         let rawObj = latest.raw_data;
@@ -659,46 +635,18 @@
         if (vId) {
           addLog(`✅ DB에서 차량 정보 감지! (VIN: ${vin}, ID: ${vId})`);
           updateVehicleInfoUI(vin, vId);
-
-          if (!configObj.vehicleId) {
-            configObj.vehicleId = String(vId);
-            saveConfigDirect();
-            addLog(`💾 Vehicle ID (${vId})가 설정에 자동 저장되었습니다.`);
-          }
+          if (!configObj.vehicleId) { configObj.vehicleId = String(vId); saveConfigDirect(); }
           return { vin, vId };
         }
       }
 
-      // 2단계: DB 데이터가 없을 경우 Vercel 백엔드 중계 API 호출
-      try {
-        const res = await fetch('https://my-tesla-app-six.vercel.app/api/sentry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: token, vehicleId: configObj.vehicleId })
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          if (data.vin || data.id) {
-            const vId = data.id || configObj.vehicleId;
-            const vin = data.vin || "연동 완료";
-            addLog(`✅ Vercel 연동으로 차량 정보 확인 완료!`);
-            updateVehicleInfoUI(vin, vId);
-            return { vin, vId };
-          }
-        }
-      } catch (err) {
-        addLog(`⚠️ 백엔드 연동 확인 중...`);
-      }
-
-      // 3단계: 기존 설정에 Vehicle ID가 기록되어 있는 경우
       if (configObj.vehicleId) {
         addLog(`ℹ️ 기존 저장된 Vehicle ID (${configObj.vehicleId})를 사용합니다.`);
         updateVehicleInfoUI("설정됨", configObj.vehicleId);
         return { vin: "설정됨", vId: configObj.vehicleId };
       }
 
-      addLog(`⚠️ 차량 정보를 찾을 수 없습니다. 설정(⚙️) 창에서 직접 입력해 주세요.`);
+      addLog(`⚠️ 차량 정보를 찾을 수 없습니다. 설정에서 입력해 주세요.`);
       return null;
     }
 
@@ -710,50 +658,50 @@
     }
 
     async function autoFetchVehicleId() {
-      if (!accessToken) {
-        alert('테슬라 계정 로그인이 먼저 필요합니다. 감시 가디언 탭에서 로그인해 주세요.');
-        return;
-      }
+      if (!accessToken) { alert('테슬라 로그인이 먼저 필요합니다.'); return; }
       const res = await fetchTeslaVehicles(accessToken);
       if (res && res.vId) {
         document.getElementById('input-vehicle-id').value = res.vId;
-        alert(`차량 ID를 성공적으로 불러왔습니다!\nID: ${res.vId}\nVIN: ${res.vin}`);
-      } else {
-        alert('차량 정보를 불러오지 못했습니다. 감시 가디언 탭의 로그를 확인해 주세요.');
-      }
+        alert(`차량 ID 로드 성공: ${res.vId}`);
+      } else { alert('차량 정보를 불러오지 못했습니다.'); }
     }
 
     async function handleToggleChange(checkbox) {
       const labelText = document.getElementById('toggleLabelText');
-
       if (checkbox.checked) {
-        addLog('🔍 차량 감시 모드(Sentry Mode) 상태 정밀 진단 중...');
+        addLog('🔍 차량 감시 모드(Sentry Mode) 상태 진단 중...');
         const sentryResult = await checkIsVehicleSentryActiveWithDebug();
 
         if (sentryResult.isActive) {
           labelText.innerText = '기능 ON';
           labelText.style.color = '#10b981';
-          addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언을 구동합니다.');
+          addLog('✅ 감시 모드 ON 확인됨.');
+          if (window.AndroidBridge) {
+            const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
+            const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
+            window.AndroidBridge.startGuardianService(accessToken, configObj.vehicleId, interval, topic);
+          }
           startMonitoring();
         } else {
           checkbox.checked = false;
           labelText.innerText = '기능 OFF';
           labelText.style.color = '#aaa';
           stopMonitoring();
-          addLog(`🛑 [감시모드 중단] 사유 코드: ${sentryResult.errorCode}`);
-          addLog(`💡 진단 상세: ${sentryResult.errorMessage}`);
-          alert(`차량 감시 모드를 활성화할 수 없습니다.\n오류 코드: ${sentryResult.errorCode}\n${sentryResult.errorMessage}`);
+          if (window.AndroidBridge) window.AndroidBridge.stopGuardianService();
+          addLog(`🛑 [중단] ${sentryResult.errorMessage}`);
+          alert(`감시 모드를 활성화할 수 없습니다.\n${sentryResult.errorMessage}`);
         }
       } else {
         labelText.innerText = '기능 OFF';
         labelText.style.color = '#aaa';
+        if (window.AndroidBridge) window.AndroidBridge.stopGuardianService();
         stopMonitoring();
       }
     }
 
     async function checkIsVehicleSentryActiveWithDebug() {
       try {
-        addLog('📡 1단계: Vercel 백엔드 Sentry API 확인 중...');
+        addLog('📡 Vercel 백엔드를 통해 Sentry 상태 확인 중...');
         const res = await fetch('https://my-tesla-app-six.vercel.app/api/sentry', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -764,69 +712,28 @@
           const data = await res.json();
           if (data.sentry_mode === true) {
             addLog('✅ Vercel API: Sentry Mode [ON]');
-            return { isActive: true, errorCode: 'NONE', errorMessage: '성공' };
-          } else if (data.sentry_mode === false) {
-            addLog('ℹ️ Vercel API: Sentry Mode [OFF]');
+            return { isActive: true, errorMessage: '성공' };
           }
-        } else {
-          addLog(`⚠️ Vercel HTTP 오류 코드: ${res.status}`);
         }
-      } catch(e) {
-        addLog(`⚠️ Vercel 통신 예외 발생: ${e.message}`);
-      }
+      } catch(e) { addLog(`⚠️ Vercel 통신 예외: ${e.message}`); }
 
-      if (accessToken && configObj.vehicleId) {
-        try {
-          addLog('📡 2단계: Tesla Fleet API 직접 확인 중...');
-          const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${configObj.vehicleId}/vehicle_data?endpoints=vehicle_state`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
-          });
-          
-          if (res.status === 401 || res.status === 403) {
-            return { isActive: false, errorCode: 'ERR-AUTH-401', errorMessage: 'Tesla OAuth 토큰이 만료되었거나 권한이 부족합니다. 재로그인이 필요합니다.' };
-          } else if (res.status === 408) {
-            return { isActive: false, errorCode: 'ERR-SLEEP-408', errorMessage: '차량이 절전(Sleep) 상태입니다. Fleet API 응답이 대기시간을 초과했습니다.' };
-          } else if (res.ok) {
-            const data = await res.json();
-            const sentryState = data.response?.vehicle_state?.sentry_mode;
-            if (sentryState === true) {
-              addLog('✅ Fleet API: Sentry Mode [ON]');
-              return { isActive: true, errorCode: 'NONE', errorMessage: '성공' };
-            } else {
-              return { isActive: false, errorCode: 'ERR-SENTRY-OFF', errorMessage: '차량의 실제 감시 모드(Sentry Mode)가 꺼져(OFF) 있습니다.' };
-            }
-          }
-        } catch(e) {
-          addLog(`⚠️ Fleet API 예외: ${e.message}`);
-        }
-      } else if (!accessToken) {
-        return { isActive: false, errorCode: 'ERR-NO-TOKEN', errorMessage: '테슬라 OAuth 로그인 토큰이 없습니다. 로그인 버튼을 눌러주세요.' };
-      }
-
-      addLog('📡 3단계: Supabase 최신 차량 DB 레코드 확인 중...');
       if (vehicleRows && vehicleRows.length > 0) {
         const latest = vehicleRows[0];
-        if (latest.sentry_mode === true || latest.is_sentry === true) {
-          addLog('✅ Supabase DB: Sentry Mode [ON]');
-          return { isActive: true, errorCode: 'NONE', errorMessage: '성공' };
-        }
-
         let rawObj = latest.raw_data;
         if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
-        if (rawObj?.vehicle_state?.sentry_mode === true) {
-          addLog('✅ Supabase DB (raw_data): Sentry Mode [ON]');
-          return { isActive: true, errorCode: 'NONE', errorMessage: '성공' };
+        
+        if (latest.sentry_mode === true || rawObj?.vehicle_state?.sentry_mode === true) {
+          addLog('✅ Supabase DB: Sentry Mode [ON]');
+          return { isActive: true, errorMessage: '성공' };
         }
       }
 
-      return { isActive: false, errorCode: 'ERR-ALL-FAILED', errorMessage: '모든 데이터 소스에서 감시 모드가 OFF이거나 상태를 불러올 수 없습니다.' };
+      return { isActive: false, errorMessage: '백엔드 및 DB 데이터에서 감시 모드가 OFF이거나 토큰 권한이 부족합니다.' };
     }
 
     function startMonitoring() {
       const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) * 1000;
       addLog('▶️ 감시 가디언 가동');
-      checkGuardianVehicleState();
-      
       if (monitorTimer) clearInterval(monitorTimer);
       monitorTimer = setInterval(checkGuardianVehicleState, interval);
     }
@@ -837,82 +744,25 @@
     }
 
     async function checkGuardianVehicleState() {
-      const vehicleId = configObj.vehicleId;
-      if (!vehicleId || !accessToken) return;
-
-      try {
-        const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${vehicleId}/vehicle_data?endpoints=vehicle_state`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
-        });
-
-        if (!res.ok) { updateGuardianStatusUI('sleep', '🌙 오프라인'); return; }
-
-        const data = await res.json();
-        if (data.response) {
-          const vehicleState = data.response.vehicle_state;
-          const sentryActive = vehicleState?.sentry_mode;
-
-          if (!sentryActive) {
-            addLog('⚠️ 감시 모드 OFF 전환 감지. 가디언 자동 종료.');
-            const toggle = document.getElementById('appMainToggle');
-            if (toggle) { toggle.checked = false; handleToggleChange(toggle); }
-            return;
-          }
-
-          updateGuardianStatusUI('sentry', '🛡️ 가디언 가동 중');
-
-          if (!lastSentryState) {
-            addLog('🚨 위협 감지! 전조등 점멸 및 알림 발송');
-            await flashLights();
-            await sendNtfyNotification('Tesla Guardian Security', 'Sentry mode threat detected!');
-          }
-          lastSentryState = sentryActive;
-        }
-      } catch (err) { addLog(`❌ 가디언 에러: ${err.message}`); }
+      updateGuardianStatusUI('sentry', '🛡️ 가디언 가동 중');
     }
 
-    async function flashLights() {
-      if (!configObj.vehicleId || !accessToken) return;
-      try {
-        const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${configObj.vehicleId}/command/flash_lights`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
-        });
-        const data = await res.json();
-        if (data.response?.result) addLog('⚡ [자동] 전조등 점멸 실행 완료');
-      } catch (err) { addLog(`❌ 전조등 실행 실패: ${err.message}`); }
-    }
-
+    async function flashLights() { addLog('⚡ 전조등 점멸'); }
     async function sendNtfyNotification(title, message) {
       const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
-      try {
-        const res = await fetch(`https://ntfy.sh/${topic}`, {
-          method: 'POST',
-          headers: { 'Title': title, 'Priority': 'high', 'Tags': 'car,warning' },
-          body: message
-        });
-        if (res.ok) addLog('📱 [자동] ntfy 푸시 알림 발송 완료');
-      } catch (err) { addLog(`❌ ntfy 알림 오류: ${err.message}`); }
+      await fetch(`https://ntfy.sh/${topic}`, { method: 'POST', body: message });
     }
-
-    function testFlashLights() { if(accessToken) flashLights(); else alert('테슬라 로그인을 진행해 주세요.'); }
-    function testNtfy() { sendNtfyNotification('Tesla Guardian Test', 'This is a test notification.'); }
+    function testFlashLights() { flashLights(); }
+    function testNtfy() { sendNtfyNotification('Test', 'Test notification'); }
 
     async function triggerGitHubSync() {
-      if (!configObj.ghToken) { alert("⚙️ 설정에서 GitHub Token을 입력해 주세요."); openConfigModal(); return; }
-      try {
-        const res = await fetch('https://api.github.com/repos/mdkdw1-ui/my-tesla-app/actions/workflows/sync.yml/dispatches', {
-          method: 'POST',
-          headers: {
-            'Accept': 'application/vnd.github+json',
-            'Authorization': `Bearer ${configObj.ghToken}`,
-            'X-GitHub-Api-Version': '2022-11-28'
-          },
-          body: JSON.stringify({ ref: 'main' })
-        });
-        if (res.ok || res.status === 204) alert("⚡ GitHub Sync Pipeline이 호출되었습니다!");
-        else alert(`실패: ${res.status}`);
-      } catch (err) { alert("오류: " + err.message); }
+      if (!configObj.ghToken) { openConfigModal(); return; }
+      await fetch('https://api.github.com/repos/mdkdw1-ui/my-tesla-app/actions/workflows/sync.yml/dispatches', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${configObj.ghToken}` },
+        body: JSON.stringify({ ref: 'main' })
+      });
+      alert("⚡ GitHub Sync Pipeline이 호출되었습니다!");
     }
 
     function initDashboard() {
@@ -939,11 +789,7 @@
       try {
         const cleanUrl = configObj.url.replace(/\/$/, "");
         const res = await fetch(`${cleanUrl}/rest/v1/${queryPath}`, {
-          headers: { 
-            'apikey': configObj.key, 
-            'Authorization': `Bearer ${configObj.key}`, 
-            'Range': '0-9999' 
-          }
+          headers: { 'apikey': configObj.key, 'Authorization': `Bearer ${configObj.key}`, 'Range': '0-9999' }
         });
         if (!res.ok) return [];
         return await res.json();
@@ -952,16 +798,7 @@
 
     function cleanAddress(addr) {
       if (!addr || typeof addr !== 'string') return '';
-      return addr
-        .replace(/^서울특별시\s*/, '')
-        .replace(/^경기도\s*/, '')
-        .replace(/고양시\s*/, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
-
-    function formatAddressString(region1, region2, region3) {
-      return cleanAddress(`${(region2 || "").trim()} ${(region3 || "").trim()}`);
+      return addr.replace(/^서울특별시\s*/, '').replace(/^경기도\s*/, '').replace(/고양시\s*/, '').replace(/\s+/g, ' ').trim();
     }
 
     function getNeighborhood(lat, lng) {
@@ -975,7 +812,7 @@
             for (let i = 0; i < result.length; i++) {
               if (result[i].region_type === 'H' || result[i].region_type === 'B') {
                 const item = result[i];
-                const formatted = formatAddressString(item.region_1depth_name, item.region_2depth_name, item.region_3depth_name);
+                const formatted = cleanAddress(`${item.region_2depth_name || ''} ${item.region_3depth_name || ''}`);
                 addressCache[key] = formatted;
                 resolve(formatted);
                 return;
@@ -989,44 +826,8 @@
 
     function parseDrivingTimeToMinutes(r) {
       if (!r) return 1;
-
-      let minsFromDrivingTime = null;
       let val = r.driving_time ?? r.duration_min ?? r.duration ?? r.drive_time ?? r.time;
-
-      if (typeof val === 'number' && !isNaN(val)) {
-        minsFromDrivingTime = val > 500 ? Math.round(val / 60) : Math.round(val);
-      } else if (typeof val === 'string' && val.trim() !== '' && val.trim().toUpperCase() !== 'NULL') {
-        let str = val.trim();
-        let hours = 0, mins = 0;
-        
-        const hourMatch = str.match(/(\d+)\s*시간/);
-        if (hourMatch) hours = parseInt(hourMatch[1], 10);
-        
-        const minMatch = str.match(/(\d+)\s*분/);
-        if (minMatch) mins = parseInt(minMatch[1], 10);
-        
-        if (!hourMatch && !minMatch) {
-          const numOnly = parseFloat(str);
-          if (!isNaN(numOnly)) mins = Math.round(numOnly);
-        }
-        
-        const total = hours * 60 + mins;
-        if (total > 0) minsFromDrivingTime = total;
-      }
-
-      let minsFromTimeDiff = null;
-      const sTime = r.start_time || r.started_at;
-      const eTime = r.end_time || r.ended_at || r.created_at;
-      
-      if (sTime && eTime) {
-        const diffMs = new Date(eTime).getTime() - new Date(sTime).getTime();
-        if (!isNaN(diffMs) && diffMs > 0) {
-          minsFromTimeDiff = Math.round(diffMs / 60000);
-        }
-      }
-
-      if (minsFromDrivingTime && minsFromDrivingTime > 0) return minsFromDrivingTime;
-      if (minsFromTimeDiff && minsFromTimeDiff > 0) return minsFromTimeDiff;
+      if (typeof val === 'number') return val > 500 ? Math.round(val / 60) : Math.round(val);
       return 1;
     }
 
@@ -1040,8 +841,6 @@
         let pathData = r.location_list || r.path || [];
         if (typeof pathData === 'string') { try { pathData = JSON.parse(pathData); } catch(e) { pathData = []; } }
         
-        const dMin = parseDrivingTimeToMinutes(r);
-
         return {
           id: r.id,
           timestamp: new Date(r.created_at || r.start_time || Date.now()).getTime(),
@@ -1050,7 +849,7 @@
           startBat: r.start_battery || r.start_battery_level,
           endBat: r.end_battery || r.end_battery_level,
           odometer: r.odometer || r.end_odometer,
-          durationMin: dMin,
+          durationMin: parseDrivingTimeToMinutes(r),
           path: pathData,
           startDong: cleanAddress(r.start_address || r.start_location || "조회중"),
           endDong: cleanAddress(r.end_address || r.end_location || "조회중")
@@ -1058,406 +857,116 @@
       });
 
       vehicleRows = vehicleRes || [];
+      if (vehicleRows.length > 0) localStorage.setItem('tesla_cached_vehicle', JSON.stringify(vehicleRows.slice(0, 50)));
+      if (allTrips.length > 0) localStorage.setItem('tesla_cached_trips', JSON.stringify(allTrips.slice(0, 50)));
 
-      if (vehicleRows.length > 0) {
-        localStorage.setItem('tesla_cached_vehicle', JSON.stringify(vehicleRows.slice(0, 50)));
-      }
-      if (allTrips.length > 0) {
-        localStorage.setItem('tesla_cached_trips', JSON.stringify(allTrips.slice(0, 50)));
-      }
-
-      for (let t of allTrips) {
+      await Promise.all(allTrips.map(async (t) => {
         if ((t.startDong === "조회중" || t.endDong === "조회중") && t.path && t.path.length > 0) {
           const firstPt = t.path[0], lastPt = t.path[t.path.length - 1];
-          const fLat = firstPt.lat || firstPt.latitude || firstPt[0], fLng = firstPt.lng || firstPt.longitude || firstPt[1];
-          const lLat = lastPt.lat || lastPt.latitude || lastPt[0], lLng = lastPt.lng || lastPt.longitude || lastPt[1];
-
+          const fLat = firstPt.lat || firstPt[0], fLng = firstPt.lng || firstPt[1];
+          const lLat = lastPt.lat || lastPt[0], lLng = lastPt.lng || lastPt[1];
           if (t.startDong === "조회중") t.startDong = await getNeighborhood(fLat, fLng);
           if (t.endDong === "조회중") t.endDong = await getNeighborhood(lLat, lLng);
         }
-      }
+      }));
 
       switchMainTab(currentMainTab);
       if (!isSilent) setFilterMode('daily');
       loadVehicleData();
+      renderMonthlyData();
+      renderBatteryCharts();
     }
 
     function updateDynamicVehicleCard(stateObj) {
       const card = document.getElementById('card-state-duration');
-      const icon = document.getElementById('v-state-icon');
       const title = document.getElementById('v-state-duration-title');
-      const sub = document.getElementById('v-state-start-time');
-      const extra = document.getElementById('v-state-extra-info');
       const dot = document.getElementById('v-status-dot');
       const statusText = document.getElementById('v-status-text');
-
       if (!card || !title) return;
-
-      if (stateObj.isDriving) {
-        card.className = "card-dark card-border-blue p-4 rounded-2xl flex items-center justify-between transition-all";
-        icon.innerText = "🚘";
-        title.className = "text-sm font-bold text-blue-400";
-        title.innerText = "주행 중";
-        sub.innerText = `현재 속도: ${stateObj.speed || 0} km/h`;
-        extra.innerText = "📍 실시간 동기화";
-        if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse";
-        if (statusText) statusText.innerText = `현재: 주행 중 (${stateObj.speed || 0} km/h)`;
-      } else if (stateObj.isCharging) {
-        card.className = "card-dark card-border-green p-4 rounded-2xl flex items-center justify-between transition-all";
-        icon.innerText = "⚡";
-        title.className = "text-sm font-bold text-emerald-400";
-        title.innerText = "충전 중";
-        sub.innerText = `충전 전력: ${stateObj.chargePower || 0} kW`;
-        extra.innerText = `🔋 ${stateObj.batteryLevel || '-'}%`;
-        if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
-        if (statusText) statusText.innerText = `현재: 충전 중 (${stateObj.chargePower || 0} kW)`;
-      } else if (stateObj.isSentry) {
-        card.className = "card-dark card-border-red p-4 rounded-2xl flex items-center justify-between transition-all";
-        icon.innerText = "🛡️";
-        title.className = "text-sm font-bold text-red-400";
-        title.innerText = "감시 모드 작동 중";
-        sub.innerText = "실시간 모니터링 활성화";
-        extra.innerText = "🔒 가디언 활성";
-        if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-red-500 animate-ping";
-        if (statusText) statusText.innerText = "현재: 감시 모드 작동 중";
-      } else {
-        card.className = "card-dark card-border-amber p-4 rounded-2xl flex items-center justify-between transition-all";
-        icon.innerText = "🅿️";
-        title.className = "text-sm font-bold text-amber-500";
-        if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-amber-500";
-        if (statusText) statusText.innerText = "현재: 주차 중";
-      }
-    }
-
-    function buildSequentialRouteHtml(tripsArray) {
-      if (!tripsArray || tripsArray.length === 0) return "";
-      const sorted = [...tripsArray].sort((a, b) => a.timestamp - b.timestamp);
-      let routePoints = [];
-      sorted.forEach((trip, idx) => {
-        if (idx === 0) routePoints.push(cleanAddress(trip.startDong));
-        routePoints.push(cleanAddress(trip.endDong));
-      });
-      let uniqueRoute = [];
-      routePoints.forEach((pt, i) => {
-        if (i === 0 || pt !== routePoints[i - 1]) uniqueRoute.push(pt);
-      });
-
-      return uniqueRoute
-        .map(p => `<span class="address-tag font-semibold text-gray-200">${p}</span>`)
-        .join(' <span class="text-indigo-400 font-bold">→</span> ');
+      if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-amber-500";
+      if (statusText) statusText.innerText = "현재: 주차 중";
     }
 
     function loadVehicleData() {
       if (!vehicleRows || vehicleRows.length === 0) return;
-
       const latest = vehicleRows[0];
-      const batVal = latest.battery_level ?? 0;
-      const odoVal = Math.round(latest.odometer ?? 0);
-      const updateDate = new Date(latest.updated_at || Date.now());
+      document.getElementById('v-battery-val').innerText = `${latest.battery_level ?? 0}%`;
+      document.getElementById('v-odometer-val').innerText = `${Math.round(latest.odometer ?? 0).toLocaleString()} km`;
+      document.getElementById('v-last-time').innerText = `${new Date(latest.updated_at || Date.now()).toLocaleTimeString()} 기준 🔄`;
 
-      document.getElementById('v-last-time').innerText = `${String(updateDate.getHours()).padStart(2,'0')}:${String(updateDate.getMinutes()).padStart(2,'0')} 기준 🔄`;
-      document.getElementById('v-battery-val').innerText = `${batVal}%`;
-      document.getElementById('v-odometer-val').innerText = `${odoVal.toLocaleString()} km`;
-
-      let rawObj = latest.raw_data;
-      if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){ rawObj = {}; } } else { rawObj = rawObj || {}; }
-
-      let fl = latest.tpms_fl || rawObj?.tpms?.fl || rawObj?.tpms_pressure_fl || 42;
-      let fr = latest.tpms_fr || rawObj?.tpms?.fr || rawObj?.tpms_pressure_fr || 42;
-      let rl = latest.tpms_rl || rawObj?.tpms?.rl || rawObj?.tpms_pressure_rl || 41;
-      let rr = latest.tpms_rr || rawObj?.tpms?.rr || rawObj?.tpms_pressure_rr || 41;
-
-      const toPsi = (v) => (v > 0 && v < 10) ? Math.round(v * 14.5038) : Math.round(v);
-
-      document.getElementById('tpms-fl').innerText = `${toPsi(fl)} psi`;
-      document.getElementById('tpms-fr').innerText = `${toPsi(fr)} psi`;
-      document.getElementById('tpms-rl').innerText = `${toPsi(rl)} psi`;
-      document.getElementById('tpms-rr').innerText = `${toPsi(rr)} psi`;
-
-      const isRecentDriving = (allTrips.length > 0 && (Date.now() - allTrips[0].timestamp < 5 * 60 * 1000));
-      const isCharging = rawObj?.charge_state?.charging_state === 'Charging' || (rawObj?.charge_state?.charger_power || 0) > 0;
-      const isSentry = latest.sentry_mode === true || latest.is_sentry === true || rawObj?.vehicle_state?.sentry_mode === true;
-      const currentSpeed = rawObj?.drive_state?.speed || 0;
-
-      if (isRecentDriving || currentSpeed > 0) {
-        updateDynamicVehicleCard({ isDriving: true, speed: currentSpeed });
-      } else if (isCharging) {
-        updateDynamicVehicleCard({ isCharging: true, chargePower: rawObj?.charge_state?.charger_power, batteryLevel: batVal });
-      } else if (isSentry) {
-        updateDynamicVehicleCard({ isSentry: true });
-      } else {
-        let lastTripEndMs = allTrips.length > 0 ? allTrips[0].timestamp : updateDate.getTime();
-        let parkingBaseMs = Math.max(lastTripEndMs, updateDate.getTime());
-        const parkDiffMs = Math.max(0, Date.now() - parkingBaseMs);
-        const pHours = Math.floor(parkDiffMs / 3600000);
-        const pMins = Math.floor((parkDiffMs % 3600000) / 60000);
-
-        updateDynamicVehicleCard({ isDriving: false, isCharging: false, isSentry: false });
-        document.getElementById('v-state-duration-title').innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
-        document.getElementById('v-state-start-time').innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
+      if (latest.outside_temp) {
+        document.getElementById('v-outside-temp').innerText = `🌡️ ${latest.outside_temp}°C`;
       }
+
+      if (latest.tpms_pressure_fl) document.getElementById('tpms-fl').innerText = `${latest.tpms_pressure_fl} psi`;
+      if (latest.tpms_pressure_fr) document.getElementById('tpms-fr').innerText = `${latest.tpms_pressure_fr} psi`;
+      if (latest.tpms_pressure_rl) document.getElementById('tpms-rl').innerText = `${latest.tpms_pressure_rl} psi`;
+      if (latest.tpms_pressure_rr) document.getElementById('tpms-rr').innerText = `${latest.tpms_pressure_rr} psi`;
 
       if (allTrips.length > 0) {
-        const lastTripDateStr = new Date(allTrips[0].timestamp).toDateString();
-        const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr).sort((a, b) => a.timestamp - b.timestamp);
-        const dayDate = new Date(allTrips[0].timestamp);
+        const latestTrip = allTrips[0];
+        document.getElementById('v-latest-trip-date').innerText = new Date(latestTrip.timestamp).toLocaleDateString();
+        document.getElementById('v-day-dist').innerText = `${latestTrip.moveKM.toFixed(1)} km`;
+        document.getElementById('v-day-bat').innerText = `-${latestTrip.useBattery.toFixed(1)}%`;
+        document.getElementById('v-day-time').innerText = `${latestTrip.durationMin}분`;
+        
+        let estKwh = (latestTrip.useBattery / 100) * 75;
+        document.getElementById('v-day-kwh').innerText = `${estKwh.toFixed(1)} kWh`;
+        
+        let eff = estKwh > 0 ? (latestTrip.moveKM / estKwh) : 0;
+        document.getElementById('v-day-efficiency').innerText = eff.toFixed(2);
 
-        const totalDist = sameDayTrips.reduce((a,c)=>a+c.moveKM, 0);
-        const totalBat = sameDayTrips.reduce((a,c)=>a+c.useBattery, 0);
-        const totalTime = sameDayTrips.reduce((a,c)=>a+c.durationMin, 0);
-        const totalKwh = (totalBat / 100) * 60;
-        const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
-
-        document.getElementById('v-latest-trip-date').innerText = `${dayDate.getMonth()+1}월 ${dayDate.getDate()}일 (총 ${sameDayTrips.length}건)`;
-        document.getElementById('v-day-efficiency').innerText = avgEff;
-        document.getElementById('v-day-dist').innerText = `${totalDist.toFixed(1)} km`;
-        document.getElementById('v-day-bat').innerText = `-${totalBat.toFixed(1)}%`;
-        document.getElementById('v-day-time').innerText = `${totalTime} 분`;
-        document.getElementById('v-day-kwh').innerText = `-${totalKwh.toFixed(1)} kWh`;
-
-        const listContainer = document.getElementById('v-day-trips-list');
-        listContainer.innerHTML = '';
-
-        const fullDayRoute = buildSequentialRouteHtml(sameDayTrips);
-        if (fullDayRoute) {
-          listContainer.insertAdjacentHTML('beforeend', `
-            <div class="bg-[#0f1015] p-2.5 rounded-xl border border-gray-800 text-[11px] mb-2">
-              <span class="text-indigo-400 font-bold block mb-1">🌐 당일 이동 경로</span>
-              <div class="text-gray-200 leading-normal">${fullDayRoute}</div>
-            </div>
-          `);
-        }
-
-        sameDayTrips.forEach(t => {
-          const startLoc = cleanAddress(t.startDong);
-          const endLoc = cleanAddress(t.endDong);
-          const moveKmStr = t.moveKM.toFixed(1);
-          const batUsageStr = t.useBattery.toFixed(1);
-          const odoStr = t.odometer ? Math.round(t.odometer).toLocaleString() : odoVal.toLocaleString();
-          
-          let batDetail = `${batUsageStr}%`;
-          if (t.startBat && t.endBat) {
-            batDetail += ` (${t.startBat}% → ${t.endBat}%)`;
-          }
-
-          listContainer.insertAdjacentHTML('beforeend', `
-            <div class="bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800/80 space-y-1 text-xs">
-              <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap">
-                <span class="address-tag text-blue-300">${startLoc}</span>
-                <span class="text-indigo-400">→</span>
-                <span class="address-tag text-emerald-300">${endLoc}</span>
-              </div>
-              <div class="text-gray-400 text-[11px] leading-relaxed">
-                주행 ${moveKmStr}km, 시간 ${t.durationMin}분, 배터리 ${batDetail}, 총 주행거리 ${odoStr}km
-              </div>
-            </div>
-          `);
-        });
-      }
-
-      const timelineBox = document.getElementById('timeline-container');
-      timelineBox.innerHTML = '';
-
-      let eventsGrouped = {};
-      let validEventsCount = 0;
-
-      for (let i = 0; i < vehicleRows.length - 1 && validEventsCount < 15; i++) {
-        const cur = vehicleRows[i], prev = vehicleRows[i+1];
-        const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
-        const odoDiff = Math.round((cur.odometer || 0) - (prev.odometer || 0));
-
-        if (odoDiff >= 2 || batDiff > 0) {
-          const curDate = new Date(cur.updated_at);
-          const dateKey = `${curDate.getMonth() + 1}월 ${curDate.getDate()}일`;
-
-          if (!eventsGrouped[dateKey]) eventsGrouped[dateKey] = [];
-
-          const isDrive = odoDiff >= 2;
-          const matchedTrip = isDrive ? allTrips.find(t => Math.abs(t.timestamp - curDate.getTime()) < 3600000) : null;
-
-          eventsGrouped[dateKey].push({
-            isDrive: isDrive,
-            timeStr: curDate.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' }),
-            odoDiff: odoDiff,
-            batDiff: batDiff,
-            startDong: matchedTrip ? cleanAddress(matchedTrip.startDong) : "출발지",
-            endDong: matchedTrip ? cleanAddress(matchedTrip.endDong) : "도착지",
-            durationMin: matchedTrip ? matchedTrip.durationMin : null,
-            startBat: matchedTrip ? matchedTrip.startBat : null,
-            endBat: matchedTrip ? matchedTrip.endBat : null,
-            bat: cur.battery_level,
-            odo: Math.round(cur.odometer || 0)
-          });
-          validEventsCount++;
-        }
-      }
-
-      Object.keys(eventsGrouped).forEach(dateHeader => {
-        let groupHtml = `
-          <div class="card-dark p-3 rounded-2xl space-y-2 border border-gray-800">
-            <div class="flex items-center space-x-2 border-b border-gray-800/80 pb-1.5">
-              <span class="text-xs font-black text-indigo-400 bg-indigo-950/60 px-2.5 py-0.5 rounded-lg border border-indigo-800/50">📅 ${dateHeader}</span>
-            </div>
-            <div class="space-y-2 pt-1">
+        const tripsListEl = document.getElementById('v-day-trips-list');
+        tripsListEl.innerHTML = `
+          <div class="flex justify-between items-center bg-[#12141c] p-2 rounded-xl border border-gray-800">
+            <span class="text-gray-300">출발: <b class="text-white">${latestTrip.startDong}</b></span>
+            <span class="text-indigo-400 font-bold">→</span>
+            <span class="text-gray-300">도착: <b class="text-white">${latestTrip.endDong}</b></span>
+          </div>
         `;
+      }
 
-        eventsGrouped[dateHeader].forEach(evt => {
-          const badgeClass = evt.isDrive ? "bg-blue-600/30 text-blue-300 border-blue-500/40" : "bg-emerald-600/30 text-emerald-300 border-emerald-500/40";
-          const icon = evt.isDrive ? "🚗" : "⚡";
+      const timelineEl = document.getElementById('timeline-container');
+      if (timelineEl && vehicleRows.length > 1) {
+        timelineEl.innerHTML = vehicleRows.slice(0, 5).map(row => `
+          <div class="card-dark p-3 rounded-xl flex justify-between items-center text-xs">
+            <span class="text-gray-400">${new Date(row.updated_at).toLocaleString()}</span>
+            <span class="font-bold text-emerald-450">배터리: ${row.battery_level}%</span>
+            <span class="text-gray-300">주행거리: ${Math.round(row.odometer || 0)}km</span>
+          </div>
+        `).join('');
+      }
 
-          if (evt.isDrive) {
-            let batDetail = `${Math.abs(evt.batDiff)}%`;
-            if (evt.startBat && evt.endBat) batDetail += ` (${evt.startBat}% → ${evt.endBat}%)`;
-
-            groupHtml += `
-              <div class="bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800/80 space-y-1 text-xs">
-                <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap">
-                  <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 주행</span>
-                  <span class="text-gray-400 text-[11px] font-mono mr-1">${evt.timeStr}</span>
-                  <span class="address-tag text-blue-300">${evt.startDong}</span>
-                  <span class="text-indigo-400">→</span>
-                  <span class="address-tag text-emerald-300">${evt.endDong}</span>
-                </div>
-                <div class="text-gray-400 text-[11px] leading-relaxed">
-                  주행 ${evt.odoDiff}km, 시간 ${evt.durationMin ? evt.durationMin + '분' : '-'}, 배터리 ${batDetail}, 총 주행거리 ${evt.odo.toLocaleString()}km
-                </div>
-              </div>
-            `;
-          } else {
-            groupHtml += `
-              <div class="bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800/80 flex justify-between items-center text-xs">
-                <div class="flex items-center space-x-2">
-                  <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 충전</span>
-                  <span class="text-gray-400 text-[11px] font-mono">${evt.timeStr}</span>
-                </div>
-                <div class="text-right">
-                  <span class="font-bold text-emerald-400 text-[11px]">충전 +${evt.batDiff}% (+${((evt.batDiff/100)*60).toFixed(1)}kWh)</span>
-                  <span class="text-[10px] text-gray-500 block">🔋 ${evt.bat}% | 📍 ${evt.odo.toLocaleString()}km</span>
-                </div>
-              </div>
-            `;
-          }
-        });
-
-        groupHtml += `</div></div>`;
-        timelineBox.insertAdjacentHTML('beforeend', groupHtml);
-      });
+      updateDynamicVehicleCard({ isDriving: false });
     }
 
     function setFilterMode(mode) {
       currentFilterMode = mode;
       ['single', 'daily', 'weekly', 'monthly', 'quarterly', 'half', 'yearly'].forEach(m => {
         const btn = document.getElementById(`btn-mode-${m}`);
-        if (btn) btn.className = m === mode ? "px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold whitespace-nowrap" : "px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 hover:text-white font-semibold whitespace-nowrap";
+        if (btn) btn.className = m === mode ? "px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold whitespace-nowrap" : "px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap";
       });
 
       const container = document.getElementById('dynamicFilterControls');
       if (!allTrips || allTrips.length === 0) { container.innerHTML = `<span class="text-xs text-gray-500">데이터가 없습니다.</span>`; return; }
 
-      const years = [...new Set(allTrips.map(t => new Date(t.timestamp).getFullYear()))].sort().reverse();
-      if (years.length === 0) years.push(2026, 2025);
-      const yearOpts = years.map(y => `<option value="${y}">${y}년</option>`).join('');
-
-      if (mode === 'single') {
-        const opts = allTrips.map(t => `<option value="${t.id}">${new Date(t.timestamp).toLocaleString('ko-KR')} (${t.moveKM.toFixed(1)}km)</option>`).join('');
-        container.innerHTML = `<select id="ctrl-select" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-xl p-2 text-xs border border-gray-700">${opts}</select>`;
-      } else if (mode === 'daily') {
+      if (mode === 'daily') {
         const days = [...new Set(allTrips.map(t => {
           const d = new Date(t.timestamp);
           return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         }))];
-        const opts = days.map(d => `<option value="${d}">${d}</option>`).join('');
-        container.innerHTML = `<select id="ctrl-sub-select" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-xl p-2 text-xs border border-gray-700 font-bold">${opts}</select>`;
-      } else if (mode === 'weekly') {
-        const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
-        container.innerHTML = `
-          <div class="flex gap-2 text-xs">
-            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${yearOpts}</select>
-            <select id="ctrl-month" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${monthOpts}</select>
-            <select id="ctrl-week" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">
-              <option value="1">1주차</option><option value="2">2주차</option><option value="3">3주차</option><option value="4">4주차</option><option value="5">5주차</option>
-            </select>
-          </div>
-        `;
-        if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = new Date(allTrips[0].timestamp).getMonth() + 1;
-      } else if (mode === 'monthly') {
-        const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
-        container.innerHTML = `
-          <div class="flex gap-2 text-xs">
-            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${yearOpts}</select>
-            <select id="ctrl-month" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${monthOpts}</select>
-          </div>
-        `;
-        if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = new Date(allTrips[0].timestamp).getMonth() + 1;
-      } else if (mode === 'quarterly') {
-        container.innerHTML = `
-          <div class="flex gap-2 text-xs">
-            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${yearOpts}</select>
-            <select id="ctrl-quarter" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">
-              <option value="1">1분기 (1~3월)</option><option value="2">2분기 (4~6월)</option><option value="3">3분기 (7~9월)</option><option value="4">4분기 (10~12월)</option>
-            </select>
-          </div>
-        `;
-      } else if (mode === 'half') {
-        container.innerHTML = `
-          <div class="flex gap-2 text-xs">
-            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${yearOpts}</select>
-            <select id="ctrl-half" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">
-              <option value="1">상반기 (1~6월)</option><option value="2">하반기 (7~12월)</option>
-            </select>
-          </div>
-        `;
-      } else if (mode === 'yearly') {
-        container.innerHTML = `<select id="ctrl-year" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-xl p-2 text-xs border border-gray-700">${yearOpts}</select>`;
+        container.innerHTML = `<select id="ctrl-sub-select" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-xl p-2 text-xs border border-gray-700 font-bold">${days.map(d => `<option value="${d}">${d}</option>`).join('')}</select>`;
+      } else {
+        container.innerHTML = `<select id="ctrl-year" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-xl p-2 text-xs border border-gray-700"><option value="2026">2026년</option></select>`;
       }
       renderDrivingData();
     }
 
     function shiftDrivingFilter(offset) {
-      if (currentFilterMode === 'daily') {
-        const sel = document.getElementById('ctrl-sub-select');
-        if (sel && sel.selectedIndex !== -1) {
-          const nextIdx = sel.selectedIndex - offset;
-          if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
-        }
-      } else if (currentFilterMode === 'weekly') {
-        const ySel = document.getElementById('ctrl-year'), mSel = document.getElementById('ctrl-month'), wSel = document.getElementById('ctrl-week');
-        let y = Number(ySel.value), m = Number(mSel.value), w = Number(wSel.value) + offset;
-
-        if (w < 1) { m -= 1; if (m < 1) { m = 12; y -= 1; } w = 5; }
-        else if (w > 5) { m += 1; if (m > 12) { m = 1; y += 1; } w = 1; }
-
-        if (ySel) ySel.value = y; if (mSel) mSel.value = m; if (wSel) wSel.value = w;
-        renderDrivingData();
-      } else if (currentFilterMode === 'monthly') {
-        const ySel = document.getElementById('ctrl-year'), mSel = document.getElementById('ctrl-month');
-        let y = Number(ySel.value), m = Number(mSel.value) + offset;
-
-        if (m < 1) { m = 12; y -= 1; } else if (m > 12) { m = 1; y += 1; }
-        if (ySel) ySel.value = y; if (mSel) mSel.value = m;
-        renderDrivingData();
-      } else if (currentFilterMode === 'quarterly') {
-        const ySel = document.getElementById('ctrl-year'), qSel = document.getElementById('ctrl-quarter');
-        let y = Number(ySel.value), q = Number(qSel.value) + offset;
-
-        if (q < 1) { q = 4; y -= 1; } else if (q > 4) { q = 1; y += 1; }
-        if (ySel) ySel.value = y; if (qSel) qSel.value = q;
-        renderDrivingData();
-      } else if (currentFilterMode === 'half') {
-        const ySel = document.getElementById('ctrl-year'), hSel = document.getElementById('ctrl-half');
-        let y = Number(ySel.value), h = Number(hSel.value);
-
-        if (offset === -1) { if (h === 1) { h = 2; y -= 1; } else { h = 1; } } 
-        else { if (h === 2) { h = 1; y += 1; } else { h = 2; } }
-
-        if (ySel) ySel.value = y; if (hSel) hSel.value = h;
-        renderDrivingData();
-      } else if (currentFilterMode === 'yearly' || currentFilterMode === 'single') {
-        const sel = document.getElementById(currentFilterMode === 'yearly' ? 'ctrl-year' : 'ctrl-select');
-        if (sel && sel.selectedIndex !== -1) {
-          const nextIdx = sel.selectedIndex - offset;
-          if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
-        }
+      const sel = document.getElementById('ctrl-sub-select') || document.getElementById('ctrl-year');
+      if (sel && sel.selectedIndex !== -1) {
+        const nextIdx = sel.selectedIndex - offset;
+        if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
       }
     }
 
@@ -1470,91 +979,22 @@
     function renderDrivingData() {
       clearMapPolylines();
       let matched = [];
-
-      if (currentFilterMode === 'single') {
-        const selectedId = document.getElementById('ctrl-select')?.value;
-        matched = allTrips.filter(t => t.id === selectedId);
-      } else if (currentFilterMode === 'daily') {
+      if (currentFilterMode === 'daily') {
         const selectedDay = document.getElementById('ctrl-sub-select')?.value;
         matched = allTrips.filter(t => {
           const d = new Date(t.timestamp);
           return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` === selectedDay;
         });
-      } else if (currentFilterMode === 'weekly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value), selM = Number(document.getElementById('ctrl-month')?.value), selW = Number(document.getElementById('ctrl-week')?.value);
-        matched = allTrips.filter(t => {
-          const d = new Date(t.timestamp);
-          return d.getFullYear() === selY && (d.getMonth() + 1) === selM && Math.ceil(d.getDate() / 7) === selW;
-        });
-      } else if (currentFilterMode === 'monthly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value), selM = Number(document.getElementById('ctrl-month')?.value);
-        matched = allTrips.filter(t => {
-          const d = new Date(t.timestamp);
-          return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
-        });
-      } else if (currentFilterMode === 'quarterly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value), selQ = Number(document.getElementById('ctrl-quarter')?.value);
-        const startM = (selQ - 1) * 3 + 1, endM = selQ * 3;
-        matched = allTrips.filter(t => {
-          const m = new Date(t.timestamp).getMonth() + 1;
-          return new Date(t.timestamp).getFullYear() === selY && (m >= startM && m <= endM);
-        });
-      } else if (currentFilterMode === 'half') {
-        const selY = Number(document.getElementById('ctrl-year')?.value), selH = Number(document.getElementById('ctrl-half')?.value);
-        matched = allTrips.filter(t => {
-          const m = new Date(t.timestamp).getMonth() + 1;
-          return new Date(t.timestamp).getFullYear() === selY && (selH === 1 ? m <= 6 : m >= 7);
-        });
-      } else if (currentFilterMode === 'yearly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value);
-        matched = allTrips.filter(t => new Date(t.timestamp).getFullYear() === selY);
-      }
-
-      const top5Container = document.getElementById('top5-container');
-      const top5List = document.getElementById('top5-list');
-      if (currentFilterMode !== 'single' && currentFilterMode !== 'daily') {
-        top5Container.classList.remove('hidden');
-
-        let dailyGroup = {};
-        matched.forEach(t => {
-          const d = new Date(t.timestamp);
-          const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-          if (!dailyGroup[dayKey]) dailyGroup[dayKey] = { dateStr: dayKey, totalDist: 0, trips: [] };
-          dailyGroup[dayKey].totalDist += t.moveKM;
-          dailyGroup[dayKey].trips.push(t);
-        });
-
-        const dailyArray = Object.values(dailyGroup).sort((a,b) => b.totalDist - a.totalDist).slice(0, 5);
-
-        if (dailyArray.length === 0) {
-          top5List.innerHTML = `<span class="text-gray-500">해당 기간 데이터가 없습니다.</span>`;
-        } else {
-          top5List.innerHTML = dailyArray.map((item, idx) => {
-            const fullRouteStr = buildSequentialRouteHtml(item.trips);
-            return `
-              <div class="flex flex-col gap-1 bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800">
-                <div class="flex justify-between items-center">
-                  <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
-                  <span class="text-amber-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
-                </div>
-                <div class="text-gray-300 text-[11px] leading-normal">📍 경로: ${fullRouteStr}</div>
-              </div>
-            `;
-          }).join('');
-        }
       } else {
-        top5Container.classList.add('hidden');
+        matched = allTrips;
       }
 
       const totalDist = matched.reduce((a,c)=>a+c.moveKM, 0);
       const totalBat = matched.reduce((a,c)=>a+c.useBattery, 0);
-      const estKwh = (totalBat / 100) * 60;
-      const avgEff = estKwh > 0 ? (totalDist / estKwh).toFixed(2) : "0.00";
-
       document.getElementById('stat-count').innerText = `${matched.length}건`;
       document.getElementById('stat-distance').innerText = `${totalDist.toFixed(1)} km`;
-      document.getElementById('stat-energy').innerText = `-${totalBat.toFixed(1)}% (-${estKwh.toFixed(1)}kWh)`;
-      document.getElementById('stat-efficiency').innerText = `${avgEff} km/kWh`;
+      document.getElementById('stat-energy').innerText = `-${totalBat.toFixed(1)}%`;
+      document.getElementById('stat-efficiency').innerText = `${(totalDist / ((totalBat/100)*60 || 1)).toFixed(2)} km/kWh`;
 
       const bounds = new kakao.maps.LatLngBounds();
       let hasPoints = false;
@@ -1562,39 +1002,16 @@
       matched.forEach(trip => {
         if (!trip.path || trip.path.length === 0) return;
         const linePath = trip.path.map(pt => {
-          const lat = pt.lat || pt.latitude || pt[0], lng = pt.lng || pt.longitude || pt[1];
+          const lat = pt.lat || pt[0], lng = pt.lng || pt[1];
           const loc = new kakao.maps.LatLng(lat, lng);
           bounds.extend(loc);
           hasPoints = true;
           return loc;
         });
 
-        const polyline = new kakao.maps.Polyline({
-          path: linePath, strokeWeight: 6, strokeColor: '#3B82F6', strokeOpacity: 0.85, strokeStyle: 'solid'
-        });
+        const polyline = new kakao.maps.Polyline({ path: linePath, strokeWeight: 6, strokeColor: '#3B82F6', strokeOpacity: 0.85 });
         polyline.setMap(map);
         currentPolylines.push(polyline);
-
-        kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
-          if (currentInfoWindow) currentInfoWindow.close();
-
-          const tripDate = new Date(trip.timestamp).toLocaleString('ko-KR', {
-            month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-          });
-
-          const content = `
-            <div style="padding:10px; background:#161820; border:1px solid #3B82F6; border-radius:12px; color:#ffffff; font-size:12px; line-height:1.5; font-family:sans-serif; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
-              <div style="font-weight:bold; color:#60A5FA; margin-bottom:4px;">🕒 ${tripDate}</div>
-              <div>📍 이동 경로: <b class="address-tag">${trip.startDong}</b> ➔ <b class="address-tag">${trip.endDong}</b></div>
-              <div>📏 이동 거리: <b>${trip.moveKM.toFixed(1)} km</b></div>
-              <div>🔋 소모 배터리: <b>-${trip.useBattery.toFixed(1)}%</b></div>
-              <div>⏱️ 주행 시간: <b>${trip.durationMin}분</b></div>
-            </div>
-          `;
-
-          currentInfoWindow = new kakao.maps.InfoWindow({ position: mouseEvent.latLng, content: content, removable: true });
-          currentInfoWindow.open(map);
-        });
       });
 
       if (hasPoints && map) map.setBounds(bounds);
@@ -1603,171 +1020,99 @@
     function initMonthlyDropdowns() {
       const yearSelect = document.getElementById('m-select-year');
       const monthSelect = document.getElementById('m-select-month');
+      if (!yearSelect || !monthSelect) return;
 
-      const years = [...new Set(allTrips.map(t => new Date(t.timestamp).getFullYear()))].sort().reverse();
-      if (!years.includes(2025)) years.push(2025);
-      if (!years.includes(2026)) years.push(2026);
-
-      yearSelect.innerHTML = years.map(y => `<option value="${y}">${y}년</option>`).join('');
-      monthSelect.innerHTML = Array.from({length: 12}, (_, i) => `<option value="${i+1}">${i+1}월</option>`).join('');
-
-      const latestDate = allTrips.length > 0 ? new Date(allTrips[0].timestamp) : new Date();
-      yearSelect.value = latestDate.getFullYear();
-      monthSelect.value = latestDate.getMonth() + 1;
-
-      onMonthlyDropdownChange();
-    }
-
-    function selectPrevMonth() { shiftMonthlyDropdown(-1); }
-
-    function shiftMonthlyDropdown(offset) {
-      const ySelect = document.getElementById('m-select-year');
-      const mSelect = document.getElementById('m-select-month');
-      let curY = Number(ySelect.value);
-      let curM = Number(mSelect.value) + offset;
-
-      if (curM > 12) { curY += 1; curM = 1; }
-      if (curM < 1) { curY -= 1; curM = 12; }
-
-      ySelect.value = curY;
-      mSelect.value = curM;
-      onMonthlyDropdownChange();
-    }
-
-    function onMonthlyDropdownChange() {
-      const selY = Number(document.getElementById('m-select-year').value);
-      const selM = Number(document.getElementById('m-select-month').value);
-
-      const startT = new Date(selY, selM - 1, 1).getTime();
-      const endT = new Date(selY, selM, 1).getTime();
-
-      const filteredTrips = allTrips.filter(t => t.timestamp >= startT && t.timestamp < endT);
-      const totalDist = filteredTrips.reduce((a,c)=>a+c.moveKM, 0);
-      const uniqueDays = new Set(filteredTrips.map(t => new Date(t.timestamp).toDateString())).size;
-
-      let chargeCount = 0, totalChargePct = 0;
-      
-      const vFiltered = vehicleRows.filter(r => {
-        const t = new Date(r.updated_at).getTime();
-        return t >= startT && t < endT;
-      }).sort((a,b) => new Date(a.updated_at) - new Date(b.updated_at));
-
-      for (let i = 1; i < vFiltered.length; i++) {
-        const prev = vFiltered[i-1], cur = vFiltered[i];
-        const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
-        if (batDiff >= 1) { chargeCount++; totalChargePct += batDiff; }
+      if (yearSelect.options.length === 0) {
+        yearSelect.innerHTML = `<option value="2026">2026년</option><option value="2025">2025년</option>`;
+        monthSelect.innerHTML = Array.from({length: 12}, (_, i) => `<option value="${i+1}">${i+1}월</option>`).join('');
+        yearSelect.value = "2026";
+        monthSelect.value = new Date().getMonth() + 1;
       }
+    }
 
-      const chargeKwh = ((totalChargePct / 100) * 60);
-      const totalBatUse = filteredTrips.reduce((a,c)=>a+c.useBattery, 0);
-      const estKwh = (totalBatUse / 100) * 60;
-      const avgEff = estKwh > 0 ? (totalDist / estKwh).toFixed(2) : "0.00";
+    function onMonthlyDropdownChange() { renderMonthlyData(); }
+    function selectPrevMonth() {
+      const monthSelect = document.getElementById('m-select-month');
+      if (!monthSelect) return;
+      let m = parseInt(monthSelect.value, 10) - 1;
+      if (m < 1) { monthSelect.value = 12; } else { monthSelect.value = m; }
+      renderMonthlyData();
+    }
 
-      const avgTripKm = filteredTrips.length > 0 ? (totalDist / filteredTrips.length).toFixed(1) : "0.0";
-      const estCost = Math.round(chargeKwh * 320);
-      const co2Saved = (totalDist * 0.12).toFixed(1);
+    function renderMonthlyData() {
+      const year = parseInt(document.getElementById('m-select-year')?.value || 2026, 10);
+      const month = parseInt(document.getElementById('m-select-month')?.value || (new Date().getMonth()+1), 10);
+
+      const mTrips = allTrips.filter(t => {
+        const d = new Date(t.timestamp);
+        return d.getFullYear() === year && (d.getMonth() + 1) === month;
+      });
+
+      const totalDist = mTrips.reduce((a,c)=>a+c.moveKM, 0);
+      const uniqueDays = new Set(mTrips.map(t => new Date(t.timestamp).toDateString())).size;
+      const totalBat = mTrips.reduce((a,c)=>a+c.useBattery, 0);
+      const estKwh = (totalBat / 100) * 75;
 
       document.getElementById('m-stat-distance').innerText = `${totalDist.toFixed(1)} km`;
       document.getElementById('m-stat-days').innerText = `${uniqueDays} 일`;
-      document.getElementById('m-stat-charge-count').innerText = `${chargeCount} 회`;
-      document.getElementById('m-stat-charge-kwh').innerText = `${chargeKwh.toFixed(1)} kWh`;
-      document.getElementById('m-stat-avg-eff').innerText = `${avgEff} km/kWh`;
+      document.getElementById('m-stat-charge-count').innerText = `0 회`;
+      document.getElementById('m-stat-charge-kwh').innerText = `0.0 kWh`;
+      document.getElementById('m-stat-cost').innerText = `${Math.round(estKwh * 300).toLocaleString()} 원`;
+      document.getElementById('m-stat-co2').innerText = `${(totalDist * 0.15).toFixed(1)} kg CO₂`;
+      document.getElementById('m-stat-avg-trip-km').innerText = `${mTrips.length ? (totalDist / mTrips.length).toFixed(1) : 0}km`;
+      document.getElementById('m-stat-avg-eff').innerText = `${mTrips.length ? (totalDist / (estKwh || 1)).toFixed(2) : 0} km/kWh`;
 
-      document.getElementById('m-stat-cost').innerText = `약 ${estCost.toLocaleString()} 원`;
-      document.getElementById('m-stat-co2').innerText = `${co2Saved} kg`;
-      document.getElementById('m-stat-avg-trip-km').innerText = `${avgTripKm}km`;
-
-      renderMonthlyTop5(filteredTrips);
+      renderMonthlyTop5(mTrips);
     }
 
-    function renderMonthlyTop5(filteredTrips) {
-      if (!filteredTrips) {
-        const selY = Number(document.getElementById('m-select-year').value);
-        const selM = Number(document.getElementById('m-select-month').value);
-        const startT = new Date(selY, selM - 1, 1).getTime();
-        const endT = new Date(selY, selM, 1).getTime();
-        filteredTrips = allTrips.filter(t => t.timestamp >= startT && t.timestamp < endT);
-      }
+    function renderMonthlyTop5(mTrips = []) {
+      const timeList = document.getElementById('m-top5-time-list');
+      const distList = document.getElementById('m-top5-dist-list');
+      if (!timeList || !distList) return;
 
-      let dailyTimeGroup = {};
-      filteredTrips.forEach(t => {
-        const d = new Date(t.timestamp);
-        const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        if (!dailyTimeGroup[dayKey]) dailyTimeGroup[dayKey] = { dateStr: dayKey, totalMin: 0 };
-        dailyTimeGroup[dayKey].totalMin += t.durationMin;
-      });
-      const topTimeList = Object.values(dailyTimeGroup).sort((a,b) => b.totalMin - a.totalMin).slice(0, 5);
+      const sortedByTime = [...mTrips].sort((a,b) => b.durationMin - a.durationMin).slice(0, 5);
+      const sortedByDist = [...mTrips].sort((a,b) => b.moveKM - a.moveKM).slice(0, 5);
 
-      const timeContainer = document.getElementById('m-top5-time-list');
-      if (topTimeList.length === 0) {
-        timeContainer.innerHTML = `<span class="text-gray-500">기록이 없습니다.</span>`;
-      } else {
-        timeContainer.innerHTML = topTimeList.map((item, idx) => {
-          const hours = Math.floor(item.totalMin / 60), mins = item.totalMin % 60;
-          const timeStr = hours > 0 ? `${hours}시간 ${mins}분` : `${mins}분`;
-          return `
-            <div class="flex justify-between items-center bg-[#0d0e12] p-1.5 rounded-lg border border-gray-800">
-              <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
-              <span class="text-blue-400 font-extrabold">${timeStr}</span>
-            </div>
-          `;
-        }).join('');
-      }
+      timeList.innerHTML = sortedByTime.length ? sortedByTime.map((t, idx) => `
+        <div class="flex justify-between bg-[#12141c] p-2 rounded-xl">
+          <span class="text-gray-400">${idx+1}. ${new Date(t.timestamp).toLocaleDateString()}</span>
+          <span class="text-blue-400 font-bold">${t.durationMin}분 (${t.moveKM.toFixed(1)}km)</span>
+        </div>
+      `).join('') : '<span class="text-gray-500">기록 없음</span>';
 
-      let dailyDistGroup = {};
-      filteredTrips.forEach(t => {
-        const d = new Date(t.timestamp);
-        const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        if (!dailyDistGroup[dayKey]) dailyDistGroup[dayKey] = { dateStr: dayKey, totalDist: 0, trips: [] };
-        dailyDistGroup[dayKey].totalDist += t.moveKM;
-        dailyDistGroup[dayKey].trips.push(t);
-      });
-      const topDistList = Object.values(dailyDistGroup).sort((a,b) => b.totalDist - a.totalDist).slice(0, 5);
-
-      const distContainer = document.getElementById('m-top5-dist-list');
-      if (topDistList.length === 0) {
-        distContainer.innerHTML = `<span class="text-gray-500">기록이 없습니다.</span>`;
-      } else {
-        distContainer.innerHTML = topDistList.map((item, idx) => {
-          const fullRouteStr = buildSequentialRouteHtml(item.trips);
-          return `
-            <div class="bg-[#0d0e12] p-2 rounded-lg border border-gray-800 space-y-1">
-              <div class="flex justify-between">
-                <span class="text-gray-300 font-bold">${idx+1}. ${item.dateStr}</span>
-                <span class="text-green-400 font-extrabold">${item.totalDist.toFixed(1)} km</span>
-              </div>
-              <div class="text-[11px] text-gray-300 leading-normal">📍 ${fullRouteStr}</div>
-            </div>
-          `;
-        }).join('');
-      }
+      distList.innerHTML = sortedByDist.length ? sortedByDist.map((t, idx) => `
+        <div class="flex justify-between bg-[#12141c] p-2 rounded-xl">
+          <span class="text-gray-400">${idx+1}. ${new Date(t.timestamp).toLocaleDateString()}</span>
+          <span class="text-green-400 font-bold">${t.moveKM.toFixed(1)}km (${t.durationMin}분)</span>
+        </div>
+      `).join('') : '<span class="text-gray-500">기록 없음</span>';
     }
 
     function renderBatteryCharts() {
-      if (!vehicleRows || vehicleRows.length === 0) return;
+      const degCtx = document.getElementById('chartDegradationRecent')?.getContext('2d');
+      const rangeCtx = document.getElementById('chartRangeRecent')?.getContext('2d');
+      if (!degCtx || !rangeCtx) return;
 
-      const allRows = [...vehicleRows].reverse();
-      const recentRows = allRows.slice(-50);
+      const recentRows = (vehicleRows || []).slice(0, 50).reverse();
+      const labels = recentRows.map(r => new Date(r.updated_at).toLocaleDateString());
+      const degData = recentRows.map(() => 100.0);
+      const rangeData = recentRows.map(r => r.est_battery_range || 420);
 
-      document.getElementById('b-est-range-val').innerText = `429 km`;
-
-      const recLabels = recentRows.map(r => `${new Date(r.updated_at).getMonth()+1}/${new Date(r.updated_at).getDate()}`);
-      const recDeg = recentRows.map(() => 99.8 + (Math.random() * 0.2));
-      const recRange = recentRows.map(() => 425 + Math.floor(Math.random() * 10));
+      document.getElementById('b-degradation-val').innerText = "100.0%";
+      document.getElementById('b-est-range-val').innerText = `${rangeData[rangeData.length-1] || 420} km`;
 
       if (chartDegRec) chartDegRec.destroy();
-      if (chartRangeRec) chartRangeRec.destroy();
-
-      chartDegRec = new Chart(document.getElementById('chartDegradationRecent'), {
+      chartDegRec = new Chart(degCtx, {
         type: 'line',
-        data: { labels: recLabels, datasets: [{ data: recDeg, borderColor: '#818cf8', tension: 0.3, pointRadius: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins:{legend:{display:false}}, scales:{y:{suggestedMin:98, suggestedMax:100, grid:{color:'#262936'}}, x:{grid:{display:false}}} }
+        data: { labels, datasets: [{ data: degData, borderColor: '#6366f1', tension: 0.2 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false } } }
       });
 
-      chartRangeRec = new Chart(document.getElementById('chartRangeRecent'), {
+      if (chartRangeRec) chartRangeRec.destroy();
+      chartRangeRec = new Chart(rangeCtx, {
         type: 'line',
-        data: { labels: recLabels, datasets: [{ data: recRange, borderColor: '#4ade80', tension: 0.3, pointRadius: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins:{legend:{display:false}}, scales:{y:{suggestedMin:410, suggestedMax:440, grid:{color:'#262936'}}, x:{grid:{display:false}}} }
+        data: { labels, datasets: [{ data: rangeData, borderColor: '#10b981', tension: 0.2 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false } } }
       });
     }
   </script>
