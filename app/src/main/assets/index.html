@@ -942,7 +942,6 @@
       }
     }
 
-    // my-tesla-app repo의 api/headlights.js 백엔드 엔드포인트 연동
     async function flashLights() {
       if (!configObj.vehicleId || !accessToken) {
         addLog('⚠️ 차량 ID 또는 Access Token이 설정되어 있지 않습니다.');
@@ -1930,45 +1929,46 @@
       }
     }
 
-    // 1-4. 배터리 차트 렌더링
+    // 1-4. 배터리 차트 연동 기능 구현
     function renderBatteryCharts() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
-      const validRows = vehicleRows.filter(r => r.battery_level && r.odometer).slice(0, 50).reverse();
-      if (validRows.length === 0) return;
+      const validLogs = vehicleRows.filter(v => v.battery_level && v.battery_level > 0).slice(0, 50).reverse();
+      if (validLogs.length === 0) return;
 
-      const latest = vehicleRows[0];
-      const bat = latest.battery_level || 100;
-      const odo = latest.odometer || 0;
-      
-      const est100Range = bat > 0 ? Math.round((odo / bat) * 100) : 400;
-      const estRangeValEl = document.getElementById('b-est-range-val');
-      if (estRangeValEl) estRangeValEl.innerText = `${est100Range} km`;
+      const labels = validLogs.map(v => new Date(v.updated_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit' }));
 
-      const labels = validRows.map(r => {
-        const d = new Date(r.updated_at);
-        return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const rangeData = validLogs.map(v => {
+        let rawObj = v.raw_data;
+        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
+        const estRange = rawObj?.charge_state?.battery_range || rawObj?.battery_range || 0;
+        const batLevel = v.battery_level || 100;
+        return Math.round((estRange / batLevel) * 100);
       });
 
-      const degradationData = validRows.map(r => {
-        return (100 - ((r.odometer || 0) / 100000) * 1.5).toFixed(1);
-      });
+      const latest100Range = rangeData[rangeData.length - 1] || 430;
+      const baseMaxRange = 440; // 스펙 기준 완충 거리 (Model Y 기준)
+      const degradation = Math.min(100, Math.max(80, ((latest100Range / baseMaxRange) * 100))).toFixed(1);
 
-      const rangeData = validRows.map(r => {
-        const b = r.battery_level || 100;
-        return b > 0 ? Math.round(((r.odometer || 0) / b) * 100) : 0;
-      });
+      const degValEl = document.getElementById('b-degradation-val');
+      const rangeValEl = document.getElementById('b-est-range-val');
+      if (degValEl) degValEl.innerText = `${degradation}%`;
+      if (rangeValEl) rangeValEl.innerText = `${latest100Range} km`;
 
-      if (chartDegRec) chartDegRec.destroy();
+      const degData = rangeData.map(r => Number(((r / baseMaxRange) * 100).toFixed(1)));
+
       const ctxDeg = document.getElementById('chartDegradationRecent')?.getContext('2d');
+      const ctxRange = document.getElementById('chartRangeRecent')?.getContext('2d');
+
       if (ctxDeg) {
+        if (chartDegRec) chartDegRec.destroy();
         chartDegRec = new Chart(ctxDeg, {
           type: 'line',
           data: {
             labels: labels,
             datasets: [{
-              label: '열화율 (%)',
-              data: degradationData,
+              label: '배터리 건강도 (%)',
+              data: degData,
               borderColor: '#818cf8',
               backgroundColor: 'rgba(129, 140, 248, 0.1)',
               fill: true,
@@ -1987,15 +1987,14 @@
         });
       }
 
-      if (chartRangeRec) chartRangeRec.destroy();
-      const ctxRange = document.getElementById('chartRangeRecent')?.getContext('2d');
       if (ctxRange) {
+        if (chartRangeRec) chartRangeRec.destroy();
         chartRangeRec = new Chart(ctxRange, {
           type: 'line',
           data: {
             labels: labels,
             datasets: [{
-              label: '100% 환산 주행거리 (km)',
+              label: '100% 주행거리 (km)',
               data: rangeData,
               borderColor: '#34d399',
               backgroundColor: 'rgba(52, 211, 153, 0.1)',
