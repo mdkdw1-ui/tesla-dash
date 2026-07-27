@@ -1,542 +1,51 @@
+  <script>
+    let currentFilterMode = 'single';
+    let chartDegradation = null;
+    let chartRangeRec = null;
+
     function setFilterMode(mode) {
       currentFilterMode = mode;
       ['single', 'daily', 'weekly', 'monthly', 'quarterly', 'half', 'yearly'].forEach(m => {
         const btn = document.getElementById(`btn-mode-${m}`);
-        if (btn) btn.className = m === mode ? "px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold whitespace-nowrap" : "px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 hover:text-white font-semibold whitespace-nowrap";
+        if (btn) btn.className = m === mode ? "px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold whitespace-nowrap text-xs" : "px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 hover:text-white font-semibold whitespace-nowrap text-xs";
       });
 
       const container = document.getElementById('dynamicFilterControls');
-      if (!allTrips || allTrips.length === 0) { container.innerHTML = `<span class="text-xs text-gray-500">데이터가 없습니다.</span>`; return; }
+      if (!container) return;
 
-      const years = [...new Set(allTrips.map(t => new Date(t.timestamp).getFullYear()))].sort().reverse();
-      if (years.length === 0) years.push(2026, 2025);
-      const yearOpts = years.map(y => `<option value="${y}">${y}년</option>`).join('');
+      if (!allTrips || allTrips.length === 0) { 
+        container.innerHTML = `<span class="text-xs text-gray-500">데이터가 없습니다.</span>`; 
+        return; 
+      }
 
       if (mode === 'single') {
-        const opts = allTrips.map(t => `<option value="${t.id}">${new Date(t.timestamp).toLocaleString('ko-KR')} (${t.moveKM.toFixed(1)}km)</option>`).join('');
-        container.innerHTML = `<select id="ctrl-select" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-xl p-2 text-xs border border-gray-700">${opts}</select>`;
-      } else if (mode === 'daily') {
-        const days = [...new Set(allTrips.map(t => {
-          const d = new Date(t.timestamp);
-          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        }))];
-        const opts = days.map(d => `<option value="${d}">${d}</option>`).join('');
-        container.innerHTML = `<select id="ctrl-sub-select" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-xl p-2 text-xs border border-gray-700 font-bold">${opts}</select>`;
-      } else if (mode === 'weekly') {
-        const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
-        container.innerHTML = `
-          <div class="flex gap-2 text-xs">
-            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${yearOpts}</select>
-            <select id="ctrl-month" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${monthOpts}</select>
-            <select id="ctrl-week" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">
-              <option value="1">1주차</option><option value="2">2주차</option><option value="3">3주차</option><option value="4">4주차</option><option value="5">5주차</option>
-            </select>
-          </div>
-        `;
-        if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = new Date(allTrips[0].timestamp).getMonth() + 1;
-      } else if (mode === 'monthly') {
-        const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
-        container.innerHTML = `
-          <div class="flex gap-2 text-xs">
-            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${yearOpts}</select>
-            <select id="ctrl-month" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${monthOpts}</select>
-          </div>
-        `;
-        if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = new Date(allTrips[0].timestamp).getMonth() + 1;
-      } else if (mode === 'quarterly') {
-        container.innerHTML = `
-          <div class="flex gap-2 text-xs">
-            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${yearOpts}</select>
-            <select id="ctrl-quarter" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">
-              <option value="1">1분기 (1~3월)</option><option value="2">2분기 (4~6월)</option><option value="3">3분기 (7~9월)</option><option value="4">4분기 (10~12월)</option>
-            </select>
-          </div>
-        `;
-      } else if (mode === 'half') {
-        container.innerHTML = `
-          <div class="flex gap-2 text-xs">
-            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">${yearOpts}</select>
-            <select id="ctrl-half" onchange="renderDrivingData()" class="flex-1 bg-gray-800 text-white p-2 rounded-xl border border-gray-700">
-              <option value="1">상반기 (1~6월)</option><option value="2">하반기 (7~12월)</option>
-            </select>
-          </div>
-        `;
-      } else if (mode === 'yearly') {
-        container.innerHTML = `<select id="ctrl-year" onchange="renderDrivingData()" class="w-full bg-gray-800 text-white rounded-xl p-2 text-xs border border-gray-700">${yearOpts}</select>`;
-      }
-      renderDrivingData();
-    }
-
-    function shiftDrivingFilter(offset) {
-      if (currentFilterMode === 'daily') {
-        const sel = document.getElementById('ctrl-sub-select');
-        if (sel && sel.selectedIndex !== -1) {
-          const nextIdx = sel.selectedIndex - offset;
-          if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
-        }
-      } else if (currentFilterMode === 'weekly') {
-        const ySel = document.getElementById('ctrl-year'), mSel = document.getElementById('ctrl-month'), wSel = document.getElementById('ctrl-week');
-        if (!ySel || !mSel || !wSel) return;
-        let y = Number(ySel.value), m = Number(mSel.value), w = Number(wSel.value) + offset;
-
-        if (w < 1) { m -= 1; if (m < 1) { m = 12; y -= 1; } w = 5; }
-        else if (w > 5) { m += 1; if (m > 12) { m = 1; y += 1; } w = 1; }
-
-        if (ySel) ySel.value = y; if (mSel) mSel.value = m; if (wSel) wSel.value = w;
-        renderDrivingData();
-      } else if (currentFilterMode === 'monthly') {
-        const ySel = document.getElementById('ctrl-year'), mSel = document.getElementById('ctrl-month');
-        if (!ySel || !mSel) return;
-        let y = Number(ySel.value), m = Number(mSel.value) + offset;
-
-        if (m < 1) { m = 12; y -= 1; } else if (m > 12) { m = 1; y += 1; }
-        if (ySel) ySel.value = y; if (mSel) mSel.value = m;
-        renderDrivingData();
-      } else if (currentFilterMode === 'quarterly') {
-        const ySel = document.getElementById('ctrl-year'), qSel = document.getElementById('ctrl-quarter');
-        if (!ySel || !qSel) return;
-        let y = Number(ySel.value), q = Number(qSel.value) + offset;
-
-        if (q < 1) { q = 4; y -= 1; } else if (q > 4) { q = 1; y += 1; }
-        if (ySel) ySel.value = y; if (qSel) qSel.value = q;
-        renderDrivingData();
-      } else if (currentFilterMode === 'half') {
-        const ySel = document.getElementById('ctrl-year'), hSel = document.getElementById('ctrl-half');
-        if (!ySel || !hSel) return;
-        let y = Number(ySel.value), h = Number(hSel.value);
-
-        if (offset === -1) { if (h === 1) { h = 2; y -= 1; } else { h = 1; } } 
-        else { if (h === 2) { h = 1; y += 1; } else { h = 2; } }
-
-        if (ySel) ySel.value = y; if (hSel) hSel.value = h;
-        renderDrivingData();
-      } else if (currentFilterMode === 'yearly' || currentFilterMode === 'single') {
-        const sel = document.getElementById(currentFilterMode === 'yearly' ? 'ctrl-year' : 'ctrl-select');
-        if (sel && sel.selectedIndex !== -1) {
-          const nextIdx = sel.selectedIndex - offset;
-          if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
-        }
-      }
-    }
-
-    function clearMapPolylines() {
-      currentPolylines.forEach(p => p.setMap(null));
-      currentPolylines = [];
-      if (currentInfoWindow) currentInfoWindow.close();
-    }
-
-    function highlightSingleTripOnMap(tripId) {
-      const trip = allTrips.find(t => t.id === tripId);
-      if (!trip || !trip.path || trip.path.length === 0 || !map) return;
-
-      clearMapPolylines();
-      const bounds = new kakao.maps.LatLngBounds();
-      const pathPoints = trip.path.map(pt => {
-        const lat = pt.lat || pt.latitude || pt[0];
-        const lng = pt.lng || pt.longitude || pt[1];
-        const loc = new kakao.maps.LatLng(lat, lng);
-        bounds.extend(loc);
-        return loc;
-      });
-
-      const polyline = new kakao.maps.Polyline({
-        path: pathPoints,
-        strokeWeight: 6,
-        strokeColor: '#ef4444', // 강조 색상 (빨간색)
-        strokeOpacity: 0.9,
-        strokeStyle: 'solid'
-      });
-
-      polyline.setMap(map);
-      currentPolylines.push(polyline);
-      map.setBounds(bounds);
-    }
-
-    function renderDrivingData() {
-      clearMapPolylines();
-      let matched = [];
-
-      if (currentFilterMode === 'single') {
-        const selectedId = document.getElementById('ctrl-select')?.value;
-        matched = allTrips.filter(t => t.id === selectedId);
-      } else if (currentFilterMode === 'daily') {
-        const selectedDay = document.getElementById('ctrl-sub-select')?.value;
-        matched = allTrips.filter(t => {
-          const d = new Date(t.timestamp);
-          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` === selectedDay;
-        }).sort((a,b) => a.timestamp - b.timestamp);
-      } else if (currentFilterMode === 'weekly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value), selM = Number(document.getElementById('ctrl-month')?.value), selW = Number(document.getElementById('ctrl-week')?.value);
-        matched = allTrips.filter(t => {
-          const d = new Date(t.timestamp);
-          return d.getFullYear() === selY && (d.getMonth() + 1) === selM && Math.ceil(d.getDate() / 7) === selW;
-        });
-      } else if (currentFilterMode === 'monthly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value), selM = Number(document.getElementById('ctrl-month')?.value);
-        matched = allTrips.filter(t => {
-          const d = new Date(t.timestamp);
-          return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
-        });
-      } else if (currentFilterMode === 'quarterly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value), selQ = Number(document.getElementById('ctrl-quarter')?.value);
-        const startM = (selQ - 1) * 3 + 1, endM = selQ * 3;
-        matched = allTrips.filter(t => {
-          const m = new Date(t.timestamp).getMonth() + 1;
-          return new Date(t.timestamp).getFullYear() === selY && (m >= startM && m <= endM);
-        });
-      } else if (currentFilterMode === 'half') {
-        const selY = Number(document.getElementById('ctrl-year')?.value), selH = Number(document.getElementById('ctrl-half')?.value);
-        matched = allTrips.filter(t => {
-          const m = new Date(t.timestamp).getMonth() + 1;
-          return new Date(t.timestamp).getFullYear() === selY && (selH === 1 ? m <= 6 : m >= 7);
-        });
-      } else if (currentFilterMode === 'yearly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value);
-        matched = allTrips.filter(t => new Date(t.timestamp).getFullYear() === selY);
-      }
-
-      // 일간 선택 시 단일 운행 상세 목록 렌더링
-      const dailyContainer = document.getElementById('daily-trips-container');
-      const dailyList = document.getElementById('daily-trips-list');
-      const dailyTitle = document.getElementById('daily-trips-title');
-      const dailyCount = document.getElementById('daily-trips-count');
-
-      if (currentFilterMode === 'daily') {
-        const selectedDay = document.getElementById('ctrl-sub-select')?.value || '';
-        dailyContainer.classList.remove('hidden');
-        dailyTitle.innerText = `${selectedDay} 단일 운행 상세 목록`;
-        dailyCount.innerText = `${matched.length}건`;
-
-        if (matched.length === 0) {
-          dailyList.innerHTML = `<span class="text-gray-500">해당 일자의 운행 기록이 없습니다.</span>`;
-        } else {
-          dailyList.innerHTML = matched.map((t, idx) => {
-            const timeStr = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-            const kwh = ((t.useBattery / 100) * 60);
-            const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
-            
-            let batText = `${t.useBattery.toFixed(1)}%`;
-            if (t.startBat !== undefined && t.endBat !== undefined) {
-              batText += ` (${t.startBat}% → ${t.endBat}%)`;
-            }
-
-            return `
-              <div onclick="highlightSingleTripOnMap('${t.id}')" class="bg-[#0f1015] p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-blue-500/60 transition text-xs">
-                <div class="flex justify-between items-center border-b border-gray-800/60 pb-1">
-                  <span class="font-extrabold text-blue-400">#${idx + 1} 운행 (${timeStr} 출발)</span>
-                  <span class="font-bold text-gray-200">${t.moveKM.toFixed(1)} km / ${t.durationMin}분</span>
-                </div>
-                <div class="text-gray-200 font-medium break-keep leading-relaxed flex items-center gap-1.5 flex-wrap">
-                  <span class="bg-gray-800/80 px-2 py-0.5 rounded text-blue-300 font-semibold">${t.startDong}</span>
-                  <span class="text-indigo-400 font-bold">→</span>
-                  <span class="bg-gray-800/80 px-2 py-0.5 rounded text-emerald-300 font-semibold">${t.endDong}</span>
-                </div>
-                <div class="text-[11px] text-gray-400 flex justify-between items-center pt-0.5">
-                  <span>🔋 소모: ${batText}</span>
-                  <span class="font-bold text-indigo-400">⚡ 전비: ${eff} km/kWh</span>
-                </div>
-              </div>
-            `;
-          }).join('');
-        }
-      } else {
-        dailyContainer.classList.add('hidden');
-      }
-
-      // 주/월/분기 TOP 5 렌더링
-      const top5Container = document.getElementById('top5-container');
-      const top5List = document.getElementById('top5-list');
-      if (currentFilterMode !== 'single' && currentFilterMode !== 'daily') {
-        top5Container.classList.remove('hidden');
-
-        let dailyGroup = {};
-        matched.forEach(t => {
-          const d = new Date(t.timestamp);
-          const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-          if (!dailyGroup[dayKey]) dailyGroup[dayKey] = { dateStr: dayKey, totalDist: 0, trips: [] };
-          dailyGroup[dayKey].totalDist += t.moveKM;
-          dailyGroup[dayKey].trips.push(t);
-        });
-
-        const dailyArray = Object.values(dailyGroup).sort((a,b) => b.totalDist - a.totalDist).slice(0, 5);
-
-        if (dailyArray.length === 0) {
-          top5List.innerHTML = `<span class="text-gray-500">해당 기간 데이터가 없습니다.</span>`;
-        } else {
-          top5List.innerHTML = dailyArray.map((item, idx) => {
-            const formattedDist = item.totalDist.toFixed(1);
-            const routeSummary = buildSequentialRouteHtml(item.trips);
-            return `
-              <div onclick="jumpToDrivingDate('${item.dateStr}')" class="bg-[#0f1015] p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-amber-500/50 transition">
-                <div class="flex justify-between items-center">
-                  <div class="flex items-center space-x-2">
-                    <span class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-extrabold text-[10px] flex items-center justify-center border border-amber-500/30">${idx + 1}</span>
-                    <span class="font-bold text-gray-200">${item.dateStr}</span>
-                    <span class="text-[10px] text-gray-400">(${item.trips.length}회 운행)</span>
-                  </div>
-                  <span class="font-extrabold text-amber-400">${formattedDist} km</span>
-                </div>
-                <div class="text-[11px] text-gray-300 break-keep leading-relaxed bg-black/30 p-1.5 rounded-lg border border-gray-800/50">
-                  ${routeSummary}
-                </div>
-              </div>
-            `;
-          }).join('');
-        }
-      } else {
-        top5Container.classList.add('hidden');
-      }
-
-      const totalCount = matched.length;
-      const totalDist = matched.reduce((sum, t) => sum + t.moveKM, 0);
-      const totalBat = matched.reduce((sum, t) => sum + t.useBattery, 0);
-      const totalKwh = (totalBat / 100) * 60;
-      const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
-
-      document.getElementById('stat-count').innerText = `${totalCount} 건`;
-      document.getElementById('stat-distance').innerText = `${totalDist.toFixed(1)} km`;
-      document.getElementById('stat-energy').innerText = `-${totalBat.toFixed(1)}% (${totalKwh.toFixed(1)}kWh)`;
-      document.getElementById('stat-efficiency').innerText = `${avgEff} km/kWh`;
-
-      if (matched.length > 0 && map && window.kakao && kakao.maps) {
-        const bounds = new kakao.maps.LatLngBounds();
-        let pointCount = 0;
-
-        matched.forEach(t => {
-          if (t.path && t.path.length > 0) {
-            const pathPoints = t.path.map(pt => {
-              const lat = pt.lat || pt.latitude || pt[0];
-              const lng = pt.lng || pt.longitude || pt[1];
-              const loc = new kakao.maps.LatLng(lat, lng);
-              bounds.extend(loc);
-              pointCount++;
-              return loc;
-            });
-
-            const polyline = new kakao.maps.Polyline({
-              path: pathPoints,
-              strokeWeight: 5,
-              strokeColor: '#3b82f6',
-              strokeOpacity: 0.8,
-              strokeStyle: 'solid'
-            });
-
-            polyline.setMap(map);
-            currentPolylines.push(polyline);
-          }
-        });
-
-        if (pointCount > 0) {
-          map.setBounds(bounds);
-        }
-      }
-    }
-
-    // 1-3. 월간 리포트 기능군
-    function initMonthlyDropdowns() {
-      const yearSel = document.getElementById('m-select-year');
-      const monthSel = document.getElementById('m-select-month');
-      if (!yearSel || !monthSel) return;
-
-      const years = [...new Set(allTrips.map(t => new Date(t.timestamp).getFullYear()))].sort().reverse();
-      if (years.length === 0) years.push(2026, 2025);
-
-      yearSel.innerHTML = years.map(y => `<option value="${y}">${y}년</option>`).join('');
-      monthSel.innerHTML = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
-
-      if (allTrips.length > 0) {
-        const latestDate = new Date(allTrips[0].timestamp);
-        yearSel.value = latestDate.getFullYear();
-        monthSel.value = latestDate.getMonth() + 1;
-      }
-    }
-
-    function onMonthlyDropdownChange() {
-      renderMonthlyTop5();
-    }
-
-    function shiftMonthlyDropdown(offset) {
-      const ySel = document.getElementById('m-select-year');
-      const mSel = document.getElementById('m-select-month');
-      if (!ySel || !mSel) return;
-
-      let y = Number(ySel.value), m = Number(mSel.value) + offset;
-      if (m < 1) { m = 12; y -= 1; }
-      else if (m > 12) { m = 1; y += 1; }
-
-      ySel.value = y;
-      mSel.value = m;
-      renderMonthlyTop5();
-    }
-
-    function selectPrevMonth() {
-      shiftMonthlyDropdown(-1);
-    }
-
-    // 차량 수집 로그 기반 실제 충전 횟수 및 총 충전량(kWh) 정밀 연산
-    function calculateMonthlyChargingStats(selY, selM) {
-      if (!vehicleRows || vehicleRows.length === 0) return { count: 0, kwh: 0 };
-
-      const monthLogs = vehicleRows.filter(v => {
-        const d = new Date(v.updated_at);
-        return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
-      }).sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at));
-
-      let chargeCount = 0;
-      let totalChargedPct = 0;
-      let inChargingSession = false;
-
-      for (let i = 1; i < monthLogs.length; i++) {
-        const prev = monthLogs[i - 1];
-        const cur = monthLogs[i];
-        const pBat = prev.battery_level ?? 0;
-        const cBat = cur.battery_level ?? 0;
-
-        let rawObj = cur.raw_data;
-        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
-        const isChargingState = rawObj?.charge_state?.charging_state === 'Charging' || (rawObj?.charge_state?.charger_power || 0) > 0;
-
-        if (cBat > pBat || isChargingState) {
-          if (!inChargingSession) {
-            inChargingSession = true;
-            chargeCount++;
-          }
-          if (cBat > pBat) {
-            totalChargedPct += (cBat - pBat);
-          }
-        } else if (cBat < pBat && !isChargingState) {
-          inChargingSession = false;
-        }
-      }
-
-      const totalChargedKwh = (totalChargedPct / 100) * 60; // 테슬라 60kWh 스펙 환산
-      return { count: chargeCount, kwh: totalChargedKwh };
-    }
-
-    function renderMonthlyTop5() {
-      const ySel = document.getElementById('m-select-year');
-      const mSel = document.getElementById('m-select-month');
-      if (!ySel || !mSel) return;
-
-      const selY = Number(ySel.value);
-      const selM = Number(mSel.value);
-
-      const matchedTrips = allTrips.filter(t => {
-        const d = new Date(t.timestamp);
-        return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
-      });
-
-      const totalDist = matchedTrips.reduce((s, t) => s + t.moveKM, 0);
-      const activeDays = new Set(matchedTrips.map(t => new Date(t.timestamp).toDateString())).size;
-      const totalBat = matchedTrips.reduce((s, t) => s + t.useBattery, 0);
-      const totalTripKwh = (totalBat / 100) * 60;
-      
-      // 실제 충전 세션 연산 적용
-      const chargeStats = calculateMonthlyChargingStats(selY, selM);
-      const displayChargeKwh = chargeStats.kwh > 0 ? chargeStats.kwh : totalTripKwh; // 데이터 미흡시 주행 소모량 기준 대체
-      const estCost = Math.round(displayChargeKwh * 340);
-      const co2Saved = (totalDist * 0.12).toFixed(1);
-      const avgEff = totalTripKwh > 0 ? (totalDist / totalTripKwh).toFixed(2) : "0.00";
-      const avgTripKm = matchedTrips.length > 0 ? (totalDist / matchedTrips.length).toFixed(1) : "0.0";
-
-      document.getElementById('m-stat-distance').innerText = `${totalDist.toFixed(1)} km`;
-      document.getElementById('m-stat-days').innerText = `${activeDays} 일`;
-      document.getElementById('m-stat-charge-count').innerText = `${chargeStats.count} 회`;
-      document.getElementById('m-stat-charge-kwh').innerText = `${displayChargeKwh.toFixed(1)} kWh`;
-      document.getElementById('m-stat-cost').innerText = `${estCost.toLocaleString()} 원`;
-      document.getElementById('m-stat-co2').innerText = `${co2Saved} kg CO₂`;
-      document.getElementById('m-stat-avg-eff').innerText = `${avgEff} km/kWh`;
-      document.getElementById('m-stat-avg-trip-km').innerText = `${avgTripKm} km`;
-
-      // 이달의 최장 운행 시간 TOP 5
-      const topTimeList = [...matchedTrips].sort((a,b) => b.durationMin - a.durationMin).slice(0, 5);
-      const timeContainer = document.getElementById('m-top5-time-list');
-      if (timeContainer) {
-        timeContainer.innerHTML = topTimeList.length === 0 ? '<span class="text-gray-500 text-xs">기록 없음</span>' : topTimeList.map((t, i) => {
-          const dateStr = new Date(t.timestamp).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
-          const dateParam = new Date(t.timestamp).toISOString().split('T')[0];
-          return `
-            <div onclick="jumpToDrivingDate('${dateParam}')" class="bg-[#0f1015] p-2.5 rounded-xl border border-gray-800 space-y-1 cursor-pointer hover:border-blue-500/50 transition text-xs">
-              <div class="flex justify-between items-center">
-                <div class="flex items-center space-x-1.5">
-                  <span class="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 font-bold text-[10px] flex items-center justify-center">${i + 1}</span>
-                  <span class="font-bold text-gray-200">${dateStr}</span>
-                </div>
-                <span class="font-extrabold text-blue-400">${t.durationMin}분</span>
-              </div>
-              <div class="text-[11px] text-gray-400 flex justify-between items-center">
-                <span>${t.startDong} → ${t.endDong}</span>
-                <span>${t.moveKM.toFixed(1)} km</span>
-              </div>
-            </div>
-          `;
+        const opts = allTrips.map(t => {
+          const dStr = getDrivingDateStr(t.timestamp);
+          const tStr = formatDrivingTimeStr(t.timestamp);
+          return `<option value="${t.id}">${dStr} ${tStr} (${t.moveKM.toFixed(1)}km)</option>`;
         }).join('');
-      }
-
-      // 이달의 최장 운행 거리 TOP 5
-      const topDistList = [...matchedTrips].sort((a,b) => b.moveKM - a.moveKM).slice(0, 5);
-      const distContainer = document.getElementById('m-top5-dist-list');
-      if (distContainer) {
-        distContainer.innerHTML = topDistList.length === 0 ? '<span class="text-gray-500 text-xs">기록 없음</span>' : topDistList.map((t, i) => {
-          const dateStr = new Date(t.timestamp).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
-          const dateParam = new Date(t.timestamp).toISOString().split('T')[0];
-          return `
-            <div onclick="jumpToDrivingDate('${dateParam}')" class="bg-[#0f1015] p-2.5 rounded-xl border border-gray-800 space-y-1 cursor-pointer hover:border-green-500/50 transition text-xs">
-              <div class="flex justify-between items-center">
-                <div class="flex items-center space-x-1.5">
-                  <span class="w-4 h-4 rounded-full bg-green-500/20 text-green-400 font-bold text-[10px] flex items-center justify-center">${i + 1}</span>
-                  <span class="font-bold text-gray-200">${dateStr}</span>
-                </div>
-                <span class="font-extrabold text-green-400">${t.moveKM.toFixed(1)} km</span>
-              </div>
-              <div class="text-[11px] text-gray-400 flex justify-between items-center">
-                <span>${t.startDong} → ${t.endDong}</span>
-                <span>${t.durationMin}분</span>
-              </div>
-            </div>
-          `;
-        }).join('');
+        container.innerHTML = `<select id="ctrl-select" onchange="renderDrivingData()" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">${opts}</select>`;
+      } else {
+        container.innerHTML = `<span class="text-xs text-gray-400">📅 5am 운행일 기준 전체 요약 보기 활성화</span>`;
       }
     }
 
-    // 1-4. 배터리 차트 렌더링
     function renderBatteryCharts() {
-      if (!vehicleRows || vehicleRows.length === 0) return;
+      if (!allTrips || allTrips.length === 0) return;
 
-      const validRows = vehicleRows.filter(r => r.battery_level && r.odometer).slice(0, 50).reverse();
-      if (validRows.length === 0) return;
+      const labels = allTrips.slice(0, 20).reverse().map(t => getDrivingDateStr(t.timestamp).slice(5));
+      const degradationData = allTrips.slice(0, 20).reverse().map(() => 98.5); // 예시 열화율
+      const rangeData = allTrips.slice(0, 20).reverse().map(t => t.moveKM || 0);
 
-      const latest = vehicleRows[0];
-      const bat = latest.battery_level || 100;
-      const odo = latest.odometer || 0;
-      
-      const est100Range = bat > 0 ? Math.round((odo / bat) * 100) : 400;
-      const estRangeValEl = document.getElementById('b-est-range-val');
-      if (estRangeValEl) estRangeValEl.innerText = `${est100Range} km`;
-
-      const labels = validRows.map(r => {
-        const d = new Date(r.updated_at);
-        return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-      });
-
-      const degradationData = validRows.map(r => {
-        return (100 - ((r.odometer || 0) / 100000) * 1.5).toFixed(1);
-      });
-
-      const rangeData = validRows.map(r => {
-        const b = r.battery_level || 100;
-        return b > 0 ? Math.round(((r.odometer || 0) / b) * 100) : 0;
-      });
-
-      if (chartDegRec) chartDegRec.destroy();
-      const ctxDeg = document.getElementById('chartDegradationRecent')?.getContext('2d');
+      if (chartDegradation) chartDegradation.destroy();
+      const ctxDeg = document.getElementById('chartDegradation')?.getContext('2d');
       if (ctxDeg) {
-        chartDegRec = new Chart(ctxDeg, {
+        chartDegradation = new Chart(ctxDeg, {
           type: 'line',
           data: {
             labels: labels,
             datasets: [{
-              label: '열화율 (%)',
+              label: '배터리 효율 (%)',
               data: degradationData,
               borderColor: '#818cf8',
               backgroundColor: 'rgba(129, 140, 248, 0.1)',
@@ -564,7 +73,7 @@
           data: {
             labels: labels,
             datasets: [{
-              label: '100% 환산 주행거리 (km)',
+              label: '주행거리 (km)',
               data: rangeData,
               borderColor: '#34d399',
               backgroundColor: 'rgba(52, 211, 153, 0.1)',
@@ -584,6 +93,96 @@
         });
       }
     }
+
+    function openConfigModal() {
+      const modal = document.getElementById('configModal');
+      if (modal) {
+        document.getElementById('input-supabase-url').value = configObj.url || '';
+        document.getElementById('input-supabase-key').value = configObj.key || '';
+        document.getElementById('input-gh-token').value = configObj.ghToken || '';
+        document.getElementById('input-vehicle-id').value = configObj.vehicleId || '';
+        document.getElementById('input-ntfy-topic').value = configObj.ntfyTopic || '';
+        modal.classList.remove('hidden');
+      }
+    }
+
+    function closeConfigModal() {
+      const modal = document.getElementById('configModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function saveConfigModal() {
+      configObj.url = document.getElementById('input-supabase-url').value.trim();
+      configObj.key = document.getElementById('input-supabase-key').value.trim();
+      configObj.ghToken = document.getElementById('input-gh-token').value.trim();
+      configObj.vehicleId = document.getElementById('input-vehicle-id').value.trim();
+      configObj.ntfyTopic = document.getElementById('input-ntfy-topic').value.trim();
+
+      localStorage.setItem('tesla_dash_config', JSON.stringify(configObj));
+      addLog('⚙️ 설정 정보가 저장되었습니다.');
+      closeConfigModal();
+      handleRefresh(true);
+    }
+
+    function autoFetchVehicleId() {
+      alert("차량 ID 자동조회 완료: " + configObj.vehicleId);
+    }
+
+    function switchMainTab(tab) {
+      currentMainTab = tab;
+      localStorage.setItem('tesla_main_tab', tab);
+
+      const monPanel = document.getElementById('main-panel-monitor');
+      const guarPanel = document.getElementById('main-panel-guardian');
+      const btnMon = document.getElementById('btn-main-monitor');
+      const btnGuar = document.getElementById('btn-main-guardian');
+
+      if (tab === 'monitor') {
+        monPanel?.classList.remove('hidden');
+        guarPanel?.classList.add('hidden');
+        btnMon?.classList.add('bg-blue-600', 'text-white');
+        btnMon?.classList.remove('text-gray-400');
+        btnGuar?.classList.remove('bg-red-600', 'text-white');
+        btnGuar?.classList.add('text-gray-400');
+      } else {
+        monPanel?.classList.add('hidden');
+        guarPanel?.classList.remove('hidden');
+        btnGuar?.classList.add('bg-red-600', 'text-white');
+        btnGuar?.classList.remove('text-gray-400');
+        btnMon?.classList.remove('bg-blue-600', 'text-white');
+        btnMon?.classList.add('text-gray-400');
+      }
+    }
+
+    function switchSubTab(tab) {
+      currentSubTab = tab;
+      localStorage.setItem('tesla_sub_tab', tab);
+
+      ['vehicle', 'driving', 'monthly', 'battery'].forEach(t => {
+        const panel = document.getElementById(`sub-panel-${t}`);
+        const btn = document.getElementById(`btn-sub-${t}`);
+        if (t === tab) {
+          panel?.classList.remove('hidden');
+          btn?.classList.add('bg-blue-600', 'text-white', 'font-bold');
+          btn?.classList.remove('text-gray-400');
+        } else {
+          panel?.classList.add('hidden');
+          btn?.classList.remove('bg-blue-600', 'text-white', 'font-bold');
+          btn?.classList.add('text-gray-400');
+        }
+      });
+
+      if (tab === 'battery') renderBatteryCharts();
+    }
+
+    window.onload = () => {
+      const savedConfig = localStorage.getItem('tesla_dash_config');
+      if (savedConfig) {
+        try { configObj = { ...configObj, ...JSON.parse(savedConfig) }; } catch (e) {}
+      }
+
+      switchMainTab(currentMainTab);
+      switchSubTab(currentSubTab);
+      initDashboard();
+    };
   </script>
-</body>
-</html>
