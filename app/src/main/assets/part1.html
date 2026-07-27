@@ -1,223 +1,63 @@
-  <main class="flex-1 p-3 md:p-6 max-w-2xl mx-auto w-full flex flex-col gap-4">
+<style>
+    :root {
+        --bg-dark: #0f172a;
+        --panel-bg: rgba(30, 41, 59, 0.75);
+        --panel-border: rgba(255, 255, 255, 0.08);
+        --neon-blue: #38bdf8;
+        --neon-green: #34d399;
+    }
 
-    <!-- [메인 영역 1] 테슬라 모니터 -->
-    <div id="main-panel-monitor" class="space-y-4">
-      
-      <!-- 서브 탭 -->
-      <div class="bg-[#161820] border border-gray-800 p-1 rounded-xl grid grid-cols-4 gap-1 text-center text-xs font-semibold">
-        <button onclick="switchSubTab('vehicle')" id="btn-sub-vehicle" class="py-2 rounded-lg bg-blue-600 text-white font-bold transition">차량 정보</button>
-        <button onclick="switchSubTab('driving')" id="btn-sub-driving" class="py-2 rounded-lg text-gray-400 hover:text-white transition">주행 지도</button>
-        <button onclick="switchSubTab('monthly')" id="btn-sub-monthly" class="py-2 rounded-lg text-gray-400 hover:text-white transition">월간 리포트</button>
-        <button onclick="switchSubTab('battery')" id="btn-sub-battery" class="py-2 rounded-lg text-gray-400 hover:text-white transition">배터리</button>
-      </div>
+    body {
+        background-color: var(--bg-dark);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    }
 
-      <!-- 1-1. 차량 정보 서브 탭 -->
-      <div id="sub-panel-vehicle" class="space-y-4">
-        <div class="flex justify-between items-center px-1">
-          <h2 class="text-base font-extrabold text-white">최근 차량 상태</h2>
-          <span id="v-last-time" class="text-xs text-gray-400">--:-- 기준 🔄</span>
+    .glass-panel {
+        background: var(--panel-bg);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--panel-border);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        border-radius: 1rem;
+        transition: all 0.25s ease;
+    }
+
+    .glass-panel:hover {
+        border-color: rgba(56, 189, 248, 0.3);
+        box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5), 0 0 15px rgba(56, 189, 248, 0.1);
+    }
+
+    .clickable-card {
+        cursor: pointer;
+        transition: transform 0.15s ease, background-color 0.15s ease;
+    }
+    .clickable-card:hover {
+        transform: translateY(-2px);
+        background-color: rgba(51, 65, 85, 0.8);
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+    ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
+</style>
+
+<header class="sticky top-0 z-50 glass-panel rounded-none border-b border-slate-700/50 px-6 py-4 mb-6">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-car-side text-2xl text-sky-400"></i>
+            <h1 class="text-xl font-bold tracking-wider text-white">TESLA DASH <span class="text-xs px-2 py-0.5 rounded bg-sky-500/20 text-sky-400 border border-sky-500/30">PRO</span></h1>
         </div>
 
-        <div class="card-dark p-4 rounded-2xl flex justify-between items-center border border-gray-800 shadow-lg">
-          <div class="flex items-center space-x-2">
-            <span id="v-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-            <span id="v-status-text" class="text-sm font-semibold text-gray-200">현재: 주차 중</span>
-          </div>
-          <div class="flex items-center space-x-4 text-sm font-bold">
-            <div class="flex items-center space-x-1"><span>🔋</span><span id="v-battery-val" class="text-emerald-400">-%</span></div>
-            <div class="flex items-center space-x-1"><span>📍</span><span id="v-odometer-val" class="text-gray-100">- km</span></div>
-          </div>
+        <div class="flex items-center space-x-3">
+            <button id="btn-sync-all" onclick="handleGlobalSync()" class="flex items-center space-x-2 bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-lg font-medium text-sm transition-all shadow-lg shadow-sky-600/30 active:scale-95">
+                <i class="fa-solid fa-rotate text-sm" id="sync-icon"></i>
+                <span>갱신</span>
+            </button>
+            
+            <button id="btn-settings" onclick="openSettingsModal()" class="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-2 rounded-lg text-sm transition-all">
+                <i class="fa-solid fa-gear"></i>
+                <span class="hidden sm:inline">설정</span>
+            </button>
         </div>
-
-        <div id="card-state-duration" class="card-dark card-border-amber p-4 rounded-2xl flex items-center justify-between transition-all">
-          <div class="flex items-center space-x-3">
-            <span id="v-state-icon" class="text-2xl">🅿️</span>
-            <div>
-              <div id="v-state-duration-title" class="text-sm font-bold text-amber-500">주차 중</div>
-              <div id="v-state-start-time" class="text-[11px] text-gray-400">시각 정보 불러오는 중...</div>
-            </div>
-          </div>
-          <div id="v-state-extra-info" class="text-right text-xs font-semibold text-gray-300"></div>
-        </div>
-
-        <!-- 최근 운행일 기록 -->
-        <div class="card-dark p-4 rounded-2xl space-y-3">
-          <div class="flex justify-between items-center">
-            <span class="text-xs font-bold text-indigo-400 flex items-center gap-1">⚡ 최근 운행일 전체 기록</span>
-            <span id="v-latest-trip-date" class="text-[11px] text-gray-400 bg-gray-800 px-2 py-0.5 rounded-full">-</span>
-          </div>
-          <div class="flex items-baseline space-x-2">
-            <span id="v-day-efficiency" class="text-3xl font-black text-indigo-400">-</span>
-            <span class="text-xs font-bold text-gray-400">km/kWh (평균)</span>
-          </div>
-          <hr class="border-gray-800/80 my-1">
-          <div class="grid grid-cols-4 gap-2 text-center text-xs">
-            <div><span class="text-gray-500 block text-[10px]">총 이동거리</span><span id="v-day-dist" class="font-bold text-gray-200">- km</span></div>
-            <div><span class="text-gray-500 block text-[10px]">총 사용배터리</span><span id="v-day-bat" class="font-bold text-gray-200">-%</span></div>
-            <div><span class="text-gray-500 block text-[10px]">총 운전시간</span><span id="v-day-time" class="font-bold text-gray-200">- 분</span></div>
-            <div><span class="text-gray-500 block text-[10px]">총 사용에너지</span><span id="v-day-kwh" class="font-bold text-gray-200">- kWh</span></div>
-          </div>
-          <div id="v-day-trips-list" class="space-y-2 pt-2 border-t border-gray-800/60 text-xs"></div>
-        </div>
-
-        <!-- TPMS -->
-        <div class="card-dark p-4 rounded-2xl space-y-3">
-          <div class="flex justify-between items-center text-xs">
-            <span class="font-bold text-gray-300">🛞 타이어 공기압 (TPMS)</span>
-            <span id="v-outside-temp" class="text-gray-300 font-semibold text-[11px]">🌡️ -°C</span>
-          </div>
-          <div class="grid grid-cols-2 gap-2.5">
-            <div class="bg-[#0f1015] border border-blue-500/40 p-2.5 rounded-xl text-center"><span class="text-[10px] text-gray-400 block">앞 왼쪽 (FL)</span><span id="tpms-fl" class="text-base font-extrabold text-blue-400">- psi</span></div>
-            <div class="bg-[#0f1015] border border-blue-500/40 p-2.5 rounded-xl text-center"><span class="text-[10px] text-gray-400 block">앞 오른쪽 (FR)</span><span id="tpms-fr" class="text-base font-extrabold text-blue-400">- psi</span></div>
-            <div class="bg-[#0f1015] border border-blue-500/40 p-2.5 rounded-xl text-center"><span class="text-[10px] text-gray-400 block">뒤 왼쪽 (RL)</span><span id="tpms-rl" class="text-base font-extrabold text-blue-400">- psi</span></div>
-            <div class="bg-[#0f1015] border border-blue-500/40 p-2.5 rounded-xl text-center"><span class="text-[10px] text-gray-400 block">뒤 오른쪽 (RR)</span><span id="tpms-rr" class="text-base font-extrabold text-blue-400">- psi</span></div>
-          </div>
-        </div>
-
-        <div class="space-y-2 pt-1">
-          <h3 class="text-xs font-bold text-gray-400 px-1">최근 상태 히스토리</h3>
-          <div id="timeline-container" class="space-y-3"></div>
-        </div>
-      </div>
-
-      <!-- 1-2. 주행 지도 서브 탭 -->
-      <div id="sub-panel-driving" class="hidden space-y-3">
-        <div class="card-dark rounded-2xl p-4 flex flex-col gap-3">
-          <span class="text-xs font-bold text-gray-400">📅 조회 기간 조건</span>
-          
-          <div class="flex gap-1.5 overflow-x-auto pb-1 text-xs">
-            <button onclick="setFilterMode('single')" id="btn-mode-single" class="px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold whitespace-nowrap">단일운행</button>
-            <button onclick="setFilterMode('daily')" id="btn-mode-daily" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">일간</button>
-            <button onclick="setFilterMode('weekly')" id="btn-mode-weekly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">주간</button>
-            <button onclick="setFilterMode('monthly')" id="btn-mode-monthly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">월간</button>
-            <button onclick="setFilterMode('quarterly')" id="btn-mode-quarterly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">분기</button>
-            <button onclick="setFilterMode('half')" id="btn-mode-half" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">반년</button>
-            <button onclick="setFilterMode('yearly')" id="btn-mode-yearly" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-semibold whitespace-nowrap">년</button>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <button onclick="shiftDrivingFilter(-1)" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold rounded-xl text-xs transition">◀</button>
-            <div id="dynamicFilterControls" class="flex-1"></div>
-            <button onclick="shiftDrivingFilter(1)" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold rounded-xl text-xs transition">▶</button>
-          </div>
-
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#0d0e12] p-3 rounded-xl text-center text-xs border border-gray-800/80">
-            <div><span class="text-gray-500 block text-[10px]">운행건수</span><span id="stat-count" class="font-bold text-blue-400">-</span></div>
-            <div><span class="text-gray-500 block text-[10px]">이동거리</span><span id="stat-distance" class="font-bold text-green-400">-</span></div>
-            <div><span class="text-gray-500 block text-[10px]">소모 배터리/전력</span><span id="stat-energy" class="font-bold text-yellow-400">-</span></div>
-            <div><span class="text-gray-500 block text-[10px]">평균 전비</span><span id="stat-efficiency" class="font-bold text-indigo-400">-</span></div>
-          </div>
-        </div>
-
-        <!-- 지도 화면 -->
-        <div class="card-dark rounded-2xl overflow-hidden w-full aspect-[4/3] relative border border-gray-800 shadow-lg">
-          <div id="map" class="w-full h-full"></div>
-        </div>
-
-        <!-- 일간 운행 선택 시 나타나는 단일 운행 상세 정보 목록 -->
-        <div id="daily-trips-container" class="card-dark rounded-2xl p-4 hidden space-y-3">
-          <div class="flex justify-between items-center border-b border-gray-800 pb-2">
-            <h3 class="text-xs font-bold text-blue-400 flex items-center gap-1.5">
-              <span>🚗</span> <span id="daily-trips-title">선택일 단일 운행 상세 목록</span>
-            </h3>
-            <span id="daily-trips-count" class="text-[10px] text-gray-400 bg-gray-800 px-2 py-0.5 rounded-full">0건</span>
-          </div>
-          <div id="daily-trips-list" class="space-y-2 text-xs"></div>
-        </div>
-
-        <!-- 주/월/분기 TOP 5 목록 -->
-        <div id="top5-container" class="card-dark rounded-2xl p-4 hidden space-y-3">
-          <h3 id="top5-title" class="text-xs font-bold text-amber-400">🔥 해당 기간 일자별 최장 운행 거리 TOP 5 (터치 시 해당일 이동)</h3>
-          <div id="top5-list" class="space-y-2 text-xs"></div>
-        </div>
-      </div>
-
-      <!-- 1-3. 월간 리포트 서브 탭 -->
-      <div id="sub-panel-monthly" class="hidden space-y-4">
-        <div class="card-dark p-4 rounded-2xl space-y-3">
-          <div class="flex justify-between items-center">
-            <span class="text-xs font-bold text-gray-400">📊 월별 리포트 선택</span>
-            <button onclick="selectPrevMonth()" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-blue-400 font-bold border border-gray-700 transition">◀ 지난달 보기</button>
-          </div>
-          <div class="flex items-center gap-2 text-xs">
-            <button onclick="shiftMonthlyDropdown(-1)" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold rounded-xl transition">◀</button>
-            <select id="m-select-year" onchange="onMonthlyDropdownChange()" class="flex-1 bg-gray-800 text-white rounded-xl p-2.5 border border-gray-700 font-bold"></select>
-            <select id="m-select-month" onchange="onMonthlyDropdownChange()" class="flex-1 bg-gray-800 text-white rounded-xl p-2.5 border border-gray-700 font-bold"></select>
-            <button onclick="shiftMonthlyDropdown(1)" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold rounded-xl transition">▶</button>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div class="card-dark p-4 rounded-2xl flex flex-col gap-1">
-            <span class="text-[11px] text-gray-400">총 주행거리</span>
-            <span id="m-stat-distance" class="text-xl font-extrabold text-green-400">- km</span>
-          </div>
-          <div class="card-dark p-4 rounded-2xl flex flex-col gap-1">
-            <span class="text-[11px] text-gray-400">주행한 날</span>
-            <span id="m-stat-days" class="text-xl font-extrabold text-blue-400">- 일</span>
-          </div>
-          <div class="card-dark p-4 rounded-2xl flex flex-col gap-1">
-            <span class="text-[11px] text-gray-400">충전 횟수</span>
-            <span id="m-stat-charge-count" class="text-xl font-extrabold text-emerald-400">- 회</span>
-          </div>
-          <div class="card-dark p-4 rounded-2xl flex flex-col gap-1">
-            <span class="text-[11px] text-gray-400">총 충전량</span>
-            <span id="m-stat-charge-kwh" class="text-xl font-extrabold text-emerald-300">- kWh</span>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div class="card-dark p-4 rounded-2xl flex flex-col gap-1 border border-indigo-500/30">
-            <span class="text-[11px] text-gray-400">💳 추정 충전 비용</span>
-            <span id="m-stat-cost" class="text-lg font-extrabold text-indigo-300">- 원</span>
-          </div>
-          <div class="card-dark p-4 rounded-2xl flex flex-col gap-1 border border-teal-500/30">
-            <span class="text-[11px] text-gray-400">🌱 탄소 절감량</span>
-            <span id="m-stat-co2" class="text-lg font-extrabold text-teal-300">- kg CO₂</span>
-          </div>
-        </div>
-
-        <div class="card-dark p-4 rounded-2xl flex justify-between items-center">
-          <div>
-            <span class="text-xs font-bold text-gray-300 block">평균 전비</span>
-            <span class="text-[10px] text-gray-500">운행 1회당 평균 <span id="m-stat-avg-trip-km" class="text-gray-300 font-bold">-km</span></span>
-          </div>
-          <span id="m-stat-avg-eff" class="text-2xl font-black text-indigo-400">- km/kWh</span>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div class="card-dark p-4 rounded-2xl space-y-2">
-            <h4 class="text-xs font-bold text-blue-400">⏱️ 이달의 최장 운행 시간 TOP 5 (터치 시 주행 지도 이동)</h4>
-            <div id="m-top5-time-list" class="space-y-2 text-xs"></div>
-          </div>
-          <div class="card-dark p-4 rounded-2xl space-y-2">
-            <h4 class="text-xs font-bold text-green-400">📍 이달의 최장 운행 거리 TOP 5 (터치 시 주행 지도 이동)</h4>
-            <div id="m-top5-dist-list" class="space-y-2 text-xs"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 1-4. 배터리 서브 탭 -->
-      <div id="sub-panel-battery" class="hidden space-y-4">
-        <div class="grid grid-cols-2 gap-3">
-          <div class="card-dark p-4 rounded-2xl">
-            <span class="text-[11px] text-gray-400 block mb-1">최근 열화율</span>
-            <span id="b-degradation-val" class="text-2xl font-black text-indigo-400">100.0%</span>
-          </div>
-          <div class="card-dark p-4 rounded-2xl">
-            <span class="text-[11px] text-gray-400 block mb-1">100% 충전 시 주행 가능 거리 추정</span>
-            <span id="b-est-range-val" class="text-2xl font-black text-green-400">- km</span>
-          </div>
-        </div>
-
-        <div class="card-dark p-4 rounded-2xl space-y-2">
-          <h3 class="text-xs font-bold text-gray-300">최근 열화율 추이 (최근 50개)</h3>
-          <div class="w-full h-36"><canvas id="chartDegradationRecent"></canvas></div>
-        </div>
-        <div class="card-dark p-4 rounded-2xl space-y-2">
-          <h3 class="text-xs font-bold text-gray-300">최근 100% 환산 주행거리 (최근 50개)</h3>
-          <div class="w-full h-36"><canvas id="chartRangeRecent"></canvas></div>
-        </div>
-      </div>
-
     </div>
+</header>
