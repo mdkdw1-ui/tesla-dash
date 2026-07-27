@@ -1,0 +1,431 @@
+    function initDashboard() {
+      loadKakaoSdk(configObj.kakaoKey, () => {
+        initMap();
+        handleRefresh(false);
+      });
+    }
+
+    function loadKakaoSdk(appKey, callback) {
+      if (window.kakao && window.kakao.maps) { kakao.maps.load(() => { geocoder = new kakao.maps.services.Geocoder(); callback(); }); return; }
+      const script = document.createElement('script');
+      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false&libraries=services`;
+      script.onload = () => { kakao.maps.load(() => { geocoder = new kakao.maps.services.Geocoder(); callback(); }); };
+      document.head.appendChild(script);
+    }
+
+    function initMap() {
+      map = new kakao.maps.Map(document.getElementById('map'), { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 5 });
+    }
+
+    async function fetchSupabaseTable(queryPath) {
+      if (!configObj.url || !configObj.key) return [];
+      try {
+        const cleanUrl = configObj.url.replace(/\/$/, "");
+        const res = await fetch(`${cleanUrl}/rest/v1/${queryPath}`, {
+          headers: { 
+            'apikey': configObj.key, 
+            'Authorization': `Bearer ${configObj.key}`, 
+            'Range': '0-9999' 
+          }
+        });
+        if (!res.ok) return [];
+        return await res.json();
+      } catch (err) { return []; }
+    }
+
+    function cleanAddress(addr) {
+      if (!addr || typeof addr !== 'string') return '';
+      return addr
+        .replace(/^서울특별시\s*/, '')
+        .replace(/^경기도\s*/, '')
+        .replace(/고양시\s*/, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function formatAddressString(region1, region2, region3) {
+      return cleanAddress(`${(region2 || "").trim()} ${(region3 || "").trim()}`);
+    }
+
+    function getNeighborhood(lat, lng) {
+      return new Promise((resolve) => {
+        if (!lat || !lng || !geocoder) { resolve("위치 미상"); return; }
+        const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+        if (addressCache[key]) { resolve(addressCache[key]); return; }
+
+        geocoder.coord2RegionCode(lng, lat, (result, status) => {
+          if (status === kakao.maps.services.Status.OK) {
+            for (let i = 0; i < result.length; i++) {
+              if (result[i].region_type === 'H' || result[i].region_type === 'B') {
+                const item = result[i];
+                const formatted = formatAddressString(item.region_1depth_name, item.region_2depth_name, item.region_3depth_name);
+                addressCache[key] = formatted;
+                try { localStorage.setItem('tesla_address_cache', JSON.stringify(addressCache)); } catch(e){}
+                resolve(formatted);
+                return;
+              }
+            }
+          }
+          resolve("확인불가");
+        });
+      });
+    }
+
+    function parseDrivingTimeToMinutes(r) {
+      if (!r) return 1;
+
+      let val = r.duration_min ?? r.driving_time ?? r.drivingTime ?? r.duration;
+
+      if (typeof val === 'number' && !isNaN(val) && val > 0) {
+        return Math.round(val);
+      }
+      
+      if (typeof val === 'string' && val.trim() !== '' && val.trim().toUpperCase() !== 'NULL') {
+        let str = val.trim();
+        let hours = 0, mins = 0;
+        
+        const hourMatch = str.match(/(\d+)\s*시간/);
+        if (hourMatch) hours = parseInt(hourMatch[1], 10);
+        
+        const minMatch = str.match(/(\d+)\s*분/);
+        if (minMatch) mins = parseInt(minMatch[1], 10);
+        
+        if (hourMatch || minMatch) {
+          return hours * 60 + mins;
+        }
+
+        const numOnly = parseFloat(str);
+        if (!isNaN(numOnly) && numOnly > 0) return Math.round(numOnly);
+      }
+
+      const sTime = r.start_time || r.started_at;
+      const eTime = r.end_time || r.ended_at || r.created_at;
+      if (sTime && eTime) {
+        const diffMs = new Date(eTime).getTime() - new Date(sTime).getTime();
+        if (!isNaN(diffMs) && diffMs > 0) {
+          return Math.round(diffMs / 60000);
+        }
+      }
+
+      return 1;
+    }
+
+    async function loadAllData(isSilent = false) {
+      const [drivingRes, vehicleRes] = await Promise.all([
+        fetchSupabaseTable('driving?order=created_at.desc'),
+        fetchSupabaseTable('vehicle?order=updated_at.desc&limit=5000')
+      ]);
+
+      allTrips = (drivingRes || []).map(r => {
+        let pathData = r.location_list || r.path || [];
+        if (typeof pathData === 'string') { try { pathData = JSON.parse(pathData); } catch(e) { pathData = []; } }
+        
+        const dMin = parseDrivingTimeToMinutes(r);
+
+        return {
+          id: r.id,
+          timestamp: new Date(r.created_at || r.start_time || Date.now()).getTime(),
+          moveKM: Number(r.move_km || r.distance || r.km || 0),
+          useBattery: Number(r.use_battery || r.battery_used || 0),
+          startBat: r.start_battery || r.start_battery_level,
+          endBat: r.end_battery || r.end_battery_level,
+          odometer: r.odometer || r.end_odometer,
+          durationMin: dMin,
+          path: pathData,
+          startDong: cleanAddress(r.start_address || r.start_location || "조회중"),
+          endDong: cleanAddress(r.end_address || r.end_location || "조회중")
+        };
+      });
+
+      vehicleRows = vehicleRes || [];
+
+      if (vehicleRows.length > 0) {
+        localStorage.setItem('tesla_cached_vehicle', JSON.stringify(vehicleRows.slice(0, 50)));
+      }
+      if (allTrips.length > 0) {
+        localStorage.setItem('tesla_cached_trips', JSON.stringify(allTrips.slice(0, 50)));
+      }
+
+      switchMainTab(currentMainTab);
+      if (!isSilent) setFilterMode('daily');
+      loadVehicleData();
+
+      for (let t of allTrips) {
+        if ((t.startDong === "조회중" || t.endDong === "조회중") && t.path && t.path.length > 0) {
+          const firstPt = t.path[0], lastPt = t.path[t.path.length - 1];
+          const fLat = firstPt.lat || firstPt.latitude || firstPt[0], fLng = firstPt.lng || firstPt.longitude || firstPt[1];
+          const lLat = lastPt.lat || lastPt.latitude || lastPt[0], lLng = lastPt.lng || lastPt.longitude || lastPt[1];
+
+          if (t.startDong === "조회중") t.startDong = await getNeighborhood(fLat, fLng);
+          if (t.endDong === "조회중") t.endDong = await getNeighborhood(lLat, lLng);
+        }
+      }
+    }
+
+    function updateDynamicVehicleCard(stateObj) {
+      const card = document.getElementById('card-state-duration');
+      const icon = document.getElementById('v-state-icon');
+      const title = document.getElementById('v-state-duration-title');
+      const sub = document.getElementById('v-state-start-time');
+      const extra = document.getElementById('v-state-extra-info');
+      const dot = document.getElementById('v-status-dot');
+      const statusText = document.getElementById('v-status-text');
+
+      if (!card || !title) return;
+
+      if (stateObj.isDriving) {
+        card.className = "card-dark card-border-blue p-4 rounded-2xl flex items-center justify-between transition-all";
+        icon.innerText = "🚘";
+        title.className = "text-sm font-bold text-blue-400";
+        title.innerText = "주행 중";
+        sub.innerText = `현재 속도: ${stateObj.speed || 0} km/h`;
+        extra.innerText = "📍 실시간 동기화";
+        if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse";
+        if (statusText) statusText.innerText = `현재: 주행 중 (${stateObj.speed || 0} km/h)`;
+      } else if (stateObj.isCharging) {
+        card.className = "card-dark card-border-green p-4 rounded-2xl flex items-center justify-between transition-all";
+        icon.innerText = "⚡";
+        title.className = "text-sm font-bold text-emerald-400";
+        title.innerText = "충전 중";
+        sub.innerText = `충전 전력: ${stateObj.chargePower || 0} kW`;
+        extra.innerText = `🔋 ${stateObj.batteryLevel || '-'}%`;
+        if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+        if (statusText) statusText.innerText = `현재: 충전 중 (${stateObj.chargePower || 0} kW)`;
+      } else if (stateObj.isSentry) {
+        card.className = "card-dark card-border-red p-4 rounded-2xl flex items-center justify-between transition-all";
+        icon.innerText = "🛡️";
+        title.className = "text-sm font-bold text-red-400";
+        title.innerText = "감시 모드 작동 중";
+        sub.innerText = "실시간 모니터링 활성화";
+        extra.innerText = "🔒 가디언 활성";
+        if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-red-500 animate-ping";
+        if (statusText) statusText.innerText = "현재: 감시 모드 작동 중";
+      } else {
+        card.className = "card-dark card-border-amber p-4 rounded-2xl flex items-center justify-between transition-all";
+        icon.innerText = "🅿️";
+        title.className = "text-sm font-bold text-amber-500";
+        if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-amber-500";
+        if (statusText) statusText.innerText = "현재: 주차 중";
+      }
+    }
+
+    function buildSequentialRouteHtml(tripsArray) {
+      if (!tripsArray || tripsArray.length === 0) return "";
+      const sorted = [...tripsArray].sort((a, b) => a.timestamp - b.timestamp);
+      let routePoints = [];
+      sorted.forEach((trip, idx) => {
+        if (idx === 0) routePoints.push(cleanAddress(trip.startDong));
+        routePoints.push(cleanAddress(trip.endDong));
+      });
+      let uniqueRoute = [];
+      routePoints.forEach((pt, i) => {
+        if (i === 0 || pt !== routePoints[i - 1]) uniqueRoute.push(pt);
+      });
+
+      return uniqueRoute
+        .map(p => `<span class="address-tag font-semibold text-gray-200">${p}</span>`)
+        .join(' <span class="text-indigo-400 font-bold">→</span> ');
+    }
+
+    function loadVehicleData() {
+      if (!vehicleRows || vehicleRows.length === 0) return;
+
+      const latest = vehicleRows[0];
+      const batVal = latest.battery_level ?? 0;
+      const odoVal = Math.round(latest.odometer ?? 0);
+      const updateDate = new Date(latest.updated_at || Date.now());
+
+      document.getElementById('v-last-time').innerText = `${String(updateDate.getHours()).padStart(2,'0')}:${String(updateDate.getMinutes()).padStart(2,'0')} 기준 🔄`;
+      document.getElementById('v-battery-val').innerText = `${batVal}%`;
+      document.getElementById('v-odometer-val').innerText = `${odoVal.toLocaleString()} km`;
+
+      let rawObj = latest.raw_data;
+      if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){ rawObj = {}; } } else { rawObj = rawObj || {}; }
+
+      const outsideTemp = latest.outside_temp ?? rawObj?.climate_state?.outside_temp;
+      if (outsideTemp !== undefined && outsideTemp !== null) {
+        document.getElementById('v-outside-temp').innerText = `🌡️ ${outsideTemp}°C`;
+      }
+
+      let fl = latest.tpms_fl || rawObj?.vehicle_state?.tpms_pressure_fl || rawObj?.tpms?.fl || rawObj?.tpms_pressure_fl || 42;
+      let fr = latest.tpms_fr || rawObj?.vehicle_state?.tpms_pressure_fr || rawObj?.tpms?.fr || rawObj?.tpms_pressure_fr || 42;
+      let rl = latest.tpms_rl || rawObj?.vehicle_state?.tpms_pressure_rl || rawObj?.tpms?.rl || rawObj?.tpms_pressure_rl || 41;
+      let rr = latest.tpms_rr || rawObj?.vehicle_state?.tpms_pressure_rr || rawObj?.tpms?.rr || rawObj?.tpms_pressure_rr || 41;
+
+      const toPsi = (v) => (v > 0 && v < 10) ? Math.round(v * 14.5038) : Math.round(v);
+
+      document.getElementById('tpms-fl').innerText = `${toPsi(fl)} psi`;
+      document.getElementById('tpms-fr').innerText = `${toPsi(fr)} psi`;
+      document.getElementById('tpms-rl').innerText = `${toPsi(rl)} psi`;
+      document.getElementById('tpms-rr').innerText = `${toPsi(rr)} psi`;
+
+      const isRecentDriving = (allTrips.length > 0 && (Date.now() - allTrips[0].timestamp < 5 * 60 * 1000));
+      const isCharging = rawObj?.charge_state?.charging_state === 'Charging' || (rawObj?.charge_state?.charger_power || 0) > 0;
+      const isSentry = latest.sentry_mode === true || latest.is_sentry === true || rawObj?.vehicle_state?.sentry_mode === true;
+      const currentSpeed = rawObj?.drive_state?.speed || 0;
+
+      if (isRecentDriving || currentSpeed > 0) {
+        updateDynamicVehicleCard({ isDriving: true, speed: currentSpeed });
+      } else if (isCharging) {
+        updateDynamicVehicleCard({ isCharging: true, chargePower: rawObj?.charge_state?.charger_power, batteryLevel: batVal });
+      } else if (isSentry) {
+        updateDynamicVehicleCard({ isSentry: true });
+      } else {
+        let lastTripEndMs = allTrips.length > 0 ? allTrips[0].timestamp : updateDate.getTime();
+        let parkingBaseMs = Math.max(lastTripEndMs, updateDate.getTime());
+        const parkDiffMs = Math.max(0, Date.now() - parkingBaseMs);
+        const pHours = Math.floor(parkDiffMs / 3600000);
+        const pMins = Math.floor((parkDiffMs % 3600000) / 60000);
+
+        updateDynamicVehicleCard({ isDriving: false, isCharging: false, isSentry: false });
+        document.getElementById('v-state-duration-title').innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
+        document.getElementById('v-state-start-time').innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
+      }
+
+      if (allTrips.length > 0) {
+        const lastTripDateStr = new Date(allTrips[0].timestamp).toDateString();
+        const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr).sort((a, b) => a.timestamp - b.timestamp);
+        const dayDate = new Date(allTrips[0].timestamp);
+
+        const totalDist = sameDayTrips.reduce((a,c)=>a+c.moveKM, 0);
+        const totalBat = sameDayTrips.reduce((a,c)=>a+c.useBattery, 0);
+        const totalTime = sameDayTrips.reduce((a,c)=>a+c.durationMin, 0);
+        const totalKwh = (totalBat / 100) * 60;
+        const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
+
+        document.getElementById('v-latest-trip-date').innerText = `${dayDate.getMonth()+1}월 ${dayDate.getDate()}일 (총 ${sameDayTrips.length}건)`;
+        document.getElementById('v-day-efficiency').innerText = avgEff;
+        document.getElementById('v-day-dist').innerText = `${totalDist.toFixed(1)} km`;
+        document.getElementById('v-day-bat').innerText = `-${totalBat.toFixed(1)}%`;
+        document.getElementById('v-day-time').innerText = `${totalTime} 분`;
+        document.getElementById('v-day-kwh').innerText = `-${totalKwh.toFixed(1)} kWh`;
+
+        const listContainer = document.getElementById('v-day-trips-list');
+        listContainer.innerHTML = '';
+
+        const fullDayRoute = buildSequentialRouteHtml(sameDayTrips);
+        if (fullDayRoute) {
+          listContainer.insertAdjacentHTML('beforeend', `
+            <div class="bg-[#0f1015] p-2.5 rounded-xl border border-gray-800 text-[11px] mb-2">
+              <span class="text-indigo-400 font-bold block mb-1">🌐 당일 이동 경로</span>
+              <div class="text-gray-200 leading-normal break-keep">${fullDayRoute}</div>
+            </div>
+          `);
+        }
+
+        sameDayTrips.forEach(t => {
+          const startLoc = cleanAddress(t.startDong);
+          const endLoc = cleanAddress(t.endDong);
+          const moveKmStr = t.moveKM.toFixed(1);
+          const batUsageStr = t.useBattery.toFixed(1);
+          const odoStr = t.odometer ? Math.round(t.odometer).toLocaleString() : odoVal.toLocaleString();
+          
+          let batDetail = `${batUsageStr}%`;
+          if (t.startBat && t.endBat) {
+            batDetail += ` (${t.startBat}% → ${t.endBat}%)`;
+          }
+
+          listContainer.insertAdjacentHTML('beforeend', `
+            <div class="bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800/80 space-y-1 text-xs">
+              <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
+                <span class="address-tag text-blue-300 font-semibold">${startLoc}</span>
+                <span class="text-indigo-400 font-bold">→</span>
+                <span class="address-tag text-emerald-300 font-semibold">${endLoc}</span>
+              </div>
+              <div class="text-gray-400 text-[11px] leading-relaxed">
+                주행 ${moveKmStr}km, 시간 ${t.durationMin}분, 배터리 ${batDetail}, 총 주행거리 ${odoStr}km
+              </div>
+            </div>
+          `);
+        });
+      }
+
+      const timelineBox = document.getElementById('timeline-container');
+      timelineBox.innerHTML = '';
+
+      let eventsGrouped = {};
+      let validEventsCount = 0;
+
+      for (let i = 0; i < vehicleRows.length - 1 && validEventsCount < 15; i++) {
+        const cur = vehicleRows[i], prev = vehicleRows[i+1];
+        const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
+        const odoDiff = Math.round((cur.odometer || 0) - (prev.odometer || 0));
+
+        if (odoDiff >= 2 || batDiff > 0) {
+          const curDate = new Date(cur.updated_at);
+          const dateKey = `${curDate.getMonth() + 1}월 ${curDate.getDate()}일`;
+
+          if (!eventsGrouped[dateKey]) eventsGrouped[dateKey] = [];
+
+          const isDrive = odoDiff >= 2;
+          const matchedTrip = isDrive ? allTrips.find(t => Math.abs(t.timestamp - curDate.getTime()) < 3600000) : null;
+
+          eventsGrouped[dateKey].push({
+            isDrive: isDrive,
+            timeStr: curDate.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' }),
+            odoDiff: odoDiff,
+            batDiff: batDiff,
+            startDong: matchedTrip ? cleanAddress(matchedTrip.startDong) : "출발지",
+            endDong: matchedTrip ? cleanAddress(matchedTrip.endDong) : "도착지",
+            durationMin: matchedTrip ? matchedTrip.durationMin : null,
+            startBat: matchedTrip ? matchedTrip.startBat : null,
+            endBat: matchedTrip ? matchedTrip.endBat : null,
+            bat: cur.battery_level,
+            odo: Math.round(cur.odometer || 0)
+          });
+          validEventsCount++;
+        }
+      }
+
+      Object.keys(eventsGrouped).forEach(dateHeader => {
+        let groupHtml = `
+          <div class="card-dark p-3 rounded-2xl space-y-2 border border-gray-800">
+            <div class="flex items-center space-x-2 border-b border-gray-800/80 pb-1.5">
+              <span class="text-xs font-black text-indigo-400 bg-indigo-950/60 px-2.5 py-0.5 rounded-lg border border-indigo-800/50">📅 ${dateHeader}</span>
+            </div>
+            <div class="space-y-2 pt-1">
+        `;
+
+        eventsGrouped[dateHeader].forEach(evt => {
+          const badgeClass = evt.isDrive ? "bg-blue-600/30 text-blue-300 border-blue-500/40" : "bg-emerald-600/30 text-emerald-300 border-emerald-500/40";
+          const icon = evt.isDrive ? "🚗" : "⚡";
+
+          if (evt.isDrive) {
+            let batDetail = `${Math.abs(evt.batDiff)}%`;
+            if (evt.startBat && evt.endBat) batDetail += ` (${evt.startBat}% → ${evt.endBat}%)`;
+
+            groupHtml += `
+              <div class="bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800/80 space-y-1 text-xs">
+                <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
+                  <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 주행</span>
+                  <span class="text-gray-400 text-[11px] font-mono mr-1">${evt.timeStr}</span>
+                  <span class="address-tag text-blue-300 font-semibold">${evt.startDong}</span>
+                  <span class="text-indigo-400 font-bold">→</span>
+                  <span class="address-tag text-emerald-300 font-semibold">${evt.endDong}</span>
+                </div>
+                <div class="text-gray-400 text-[11px] leading-relaxed">
+                  주행 ${evt.odoDiff}km, 시간 ${evt.durationMin ? evt.durationMin + '분' : '-'}, 배터리 ${batDetail}, 총 주행거리 ${evt.odo.toLocaleString()}km
+                </div>
+              </div>
+            `;
+          } else {
+            groupHtml += `
+              <div class="bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800/80 flex justify-between items-center text-xs">
+                <div class="flex items-center space-x-2">
+                  <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 충전</span>
+                  <span class="text-gray-400 text-[11px] font-mono">${evt.timeStr}</span>
+                </div>
+                <div class="text-right">
+                  <span class="font-bold text-emerald-400 text-[11px]">충전 +${evt.batDiff}% (+${((evt.batDiff/100)*60).toFixed(1)}kWh)</span>
+                  <span class="text-[10px] text-gray-500 block">🔋 ${evt.bat}% | 📍 ${evt.odo.toLocaleString()}km</span>
+                </div>
+              </div>
+            `;
+          }
+        });
+
+        groupHtml += `</div></div>`;
+        timelineBox.insertAdjacentHTML('beforeend', groupHtml);
+      });
+    }
+

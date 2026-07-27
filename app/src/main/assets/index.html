@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Tesla Command Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    body { background-color: #0d0e12; color: #f3f4f6; font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .card-dark { background-color: #161820; border: 1px solid #262936; }
+    .card-border-amber { border: 1px solid #d97706; }
+    .card-border-blue { border: 1px solid #3b82f6; }
+    .card-border-green { border: 1px solid #10b981; }
+    .card-border-red { border: 1px solid #ef4444; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-thumb { background: #262936; border-radius: 4px; }
+    
+    .address-tag { display: inline-block; word-break: keep-all; overflow-wrap: break-word; }
+    .status-badge-1line { white-space: nowrap; flex-shrink: 0; }
+
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: .3s; border-radius: 24px; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+    input:checked + .slider { background-color: #10b981; }
+    input:checked + .slider:before { transform: translateX(20px); }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col pb-10">
+
+  <!-- 헤더 타이틀 바 -->
+  <header class="bg-[#12141c]/90 backdrop-blur-md border-b border-gray-800/80 sticky top-0 z-40 px-3 py-2.5 flex justify-between items-center shadow-lg">
+    <div class="flex items-center space-x-2">
+      <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center text-white font-bold text-sm shadow-md border border-red-500/30">
+        ⚡
+      </div>
+      <div>
+        <h1 class="text-sm font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub</h1>
+        <p class="text-[9px] text-gray-400 font-medium">Monitor & Guardian</p>
+      </div>
+    </div>
+
+    <div class="flex items-center space-x-1.5">
+      <span id="sync-status-indicator" class="hidden sm:inline-block text-[10px] text-gray-400 font-mono bg-gray-800/80 px-2 py-1 rounded-lg border border-gray-700/60">🅿️ 대기</span>
+      
+      <button onclick="handleRefresh(false)" title="수동 갱신" class="p-1.5 sm:px-2.5 sm:py-1 text-xs font-semibold rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/40 transition active:scale-95 flex items-center gap-1">
+        <i class="fa-solid fa-arrows-rotate"></i> <span class="hidden sm:inline">갱신</span>
+      </button>
+      <button onclick="triggerGitHubSync()" title="GitHub Sync 실행" class="p-1.5 sm:px-2.5 sm:py-1 text-xs font-semibold rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/40 transition active:scale-95 flex items-center gap-1">
+        <i class="fa-solid fa-bolt"></i> <span class="hidden sm:inline">Sync</span>
+      </button>
+      <button onclick="openConfigModal()" title="설정" class="p-1.5 sm:px-2.5 sm:py-1 text-xs font-semibold rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition active:scale-95 flex items-center gap-1">
+        <i class="fa-solid fa-gear"></i> <span class="hidden sm:inline">설정</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 메인 탭 -->
+  <div class="bg-[#12141c] border-b border-gray-800/80 p-2">
+    <div class="grid grid-cols-2 gap-2 max-w-2xl mx-auto">
+      <button onclick="switchMainTab('monitor')" id="btn-main-monitor" class="py-2.5 rounded-xl font-bold text-sm bg-blue-600 text-white transition flex items-center justify-center gap-1.5 shadow-lg">
+        <i class="fa-solid fa-car"></i> 테슬라 모니터
+      </button>
+      <button onclick="switchMainTab('guardian')" id="btn-main-guardian" class="py-2.5 rounded-xl font-bold text-sm bg-gray-800 text-gray-400 hover:text-white transition flex items-center justify-center gap-1.5">
+        <i class="fa-solid fa-shield-halved"></i> 감시 가디언
+      </button>
+    </div>
+  </div>
