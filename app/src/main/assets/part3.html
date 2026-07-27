@@ -14,6 +14,7 @@
     let currentSubTab = localStorage.getItem('tesla_sub_tab') || 'vehicle';
     
     const VERCEL_BACKEND_URL = "https://my-tesla-app-six.vercel.app/api/exchange"; 
+    const VERCEL_SYNC_URL = "https://my-tesla-app-six.vercel.app/api/sync";
     const CLIENT_ID = "272ac00a-248e-4fa7-8027-1fc06e8e9a24";
     const REDIRECT_URI = "https://my-tesla-app-six.vercel.app/api/callback";
     let callbackHandled = false;
@@ -122,6 +123,61 @@
       }
     }
 
+    /* ===== Vercel sync.js 연동 (teslacam-93532 -> Supabase 동기화) ===== */
+    async function triggerVercelSync() {
+      addLog('⚡ [Vercel Sync] teslacam-93532 → Supabase 데이터 동기화 시작...');
+      try {
+        const res = await fetch(VERCEL_SYNC_URL, { method: 'GET' });
+        
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          addLog(`✅ [Vercel Sync] 동기화 성공 (HTTP ${res.status}): ${data.message || '정상 처리'}`);
+          return { success: true, status: res.status };
+        } else {
+          const errText = await res.text().catch(() => '');
+          addLog(`❌ [Vercel Sync] 동기화 실패 (HTTP ${res.status}): ${errText || res.statusText}`);
+          return { success: false, status: res.status, error: errText || res.statusText };
+        }
+      } catch (err) {
+        addLog(`❌ [Vercel Sync] 네트워크 오류: ${err.message}`);
+        return { success: false, status: 'NET_ERR', error: err.message };
+      }
+    }
+
+    /* ===== 단일 통합 갱신 함수 (갱신 버튼 클릭 시) ===== */
+    async function handleUnifiedRefresh() {
+      const indicator = document.getElementById('sync-status-indicator');
+      if (indicator) indicator.innerText = "🔄 Sync 중...";
+
+      // 1 단계: Vercel api/sync.js 실행
+      const syncResult = await triggerVercelSync();
+
+      if (!syncResult.success) {
+        if (indicator) indicator.innerText = `❌ Sync 에러 (${syncResult.status})`;
+      } else {
+        if (indicator) indicator.innerText = "📥 DB 로딩...";
+      }
+
+      // 2 단계: Supabase DB 최신 데이터 가져와 UI 반영
+      await loadAllData(false);
+
+      if (indicator) {
+        if (!syncResult.success) {
+          indicator.innerText = `⚠️ 완료 (Sync ${syncResult.status})`;
+        } else {
+          indicator.innerText = "🅿️ 대기";
+        }
+      }
+    }
+
+    function handleRefresh(isSilent = false) {
+      if (isSilent) {
+        loadAllData(true);
+      } else {
+        handleUnifiedRefresh();
+      }
+    }
+
     function loadConfig() {
       const enc = localStorage.getItem('tesla_dashboard_config');
       if (!enc) return false;
@@ -133,7 +189,9 @@
           return true;
         }
         return false;
-      } catch (e) { return false; }
+      } catch (e) {
+        return false;
+      }
     }
 
     function saveConfig(e) {
@@ -146,114 +204,13 @@
         vehicleId: document.getElementById('input-vehicle-id').value.trim(),
         ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
       };
-      localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
+
+      const ciphertext = CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString();
+      localStorage.setItem('tesla_dashboard_config', ciphertext);
+      initSupabaseClient();
       closeConfigModal();
-      location.reload();
-    }
-
-    function openConfigModal() {
-      if (configObj.kakaoKey) document.getElementById('input-kakao-key').value = configObj.kakaoKey;
-      if (configObj.url) document.getElementById('input-supabase-url').value = configObj.url;
-      if (configObj.key) document.getElementById('input-supabase-key').value = configObj.key;
-      if (configObj.ghToken) document.getElementById('input-gh-token').value = configObj.ghToken;
-      if (configObj.vehicleId) document.getElementById('input-vehicle-id').value = configObj.vehicleId;
-      if (configObj.ntfyTopic) document.getElementById('input-ntfy-topic').value = configObj.ntfyTopic;
-      document.getElementById('modal-config').classList.remove('hidden');
-    }
-
-    function closeConfigModal() {
-      document.getElementById('modal-config').classList.add('hidden');
-    }
-
-    function switchMainTab(mainTab) {
-      currentMainTab = mainTab;
-      localStorage.setItem('tesla_main_tab', mainTab);
-
-      document.getElementById('main-panel-monitor').classList.toggle('hidden', mainTab !== 'monitor');
-      document.getElementById('main-panel-guardian').classList.toggle('hidden', mainTab !== 'guardian');
-
-      document.getElementById('btn-main-monitor').className = mainTab === 'monitor'
-        ? "py-2.5 rounded-xl font-bold text-sm bg-blue-600 text-white transition flex items-center justify-center gap-1.5 shadow-lg"
-        : "py-2.5 rounded-xl font-bold text-sm bg-gray-800 text-gray-400 hover:text-white transition flex items-center justify-center gap-1.5";
-
-      document.getElementById('btn-main-guardian').className = mainTab === 'guardian'
-        ? "py-2.5 rounded-xl font-bold text-sm bg-red-600 text-white transition flex items-center justify-center gap-1.5 shadow-lg"
-        : "py-2.5 rounded-xl font-bold text-sm bg-gray-800 text-gray-400 hover:text-white transition flex items-center justify-center gap-1.5";
-
-      if (mainTab === 'monitor') {
-        switchSubTab(currentSubTab);
-      }
-    }
-
-    function switchSubTab(subTab) {
-      currentSubTab = subTab;
-      localStorage.setItem('tesla_sub_tab', subTab);
-
-      ['vehicle', 'driving', 'monthly', 'battery'].forEach(t => {
-        const panel = document.getElementById(`sub-panel-${t}`);
-        if (panel) panel.classList.toggle('hidden', t !== subTab);
-
-        const btn = document.getElementById(`btn-sub-${t}`);
-        if (btn) {
-          btn.className = t === subTab
-            ? "py-2 rounded-lg bg-blue-600 text-white font-bold transition shadow-md"
-            : "py-2 rounded-lg text-gray-400 hover:text-white transition";
-        }
-      });
-
-      if (subTab === 'driving' && map) {
-        setTimeout(() => {
-          map.relayout();
-          renderDrivingData();
-        }, 100);
-      }
-      if (subTab === 'monthly') { initMonthlyDropdowns(); renderMonthlyTop5(); }
-      if (subTab === 'battery') renderBatteryCharts();
-    }
-
-    function jumpToDrivingDate(dateStr) {
-      switchMainTab('monitor');
-      switchSubTab('driving');
-      setFilterMode('daily');
-
-      setTimeout(() => {
-        const subSelect = document.getElementById('ctrl-sub-select');
-        if (subSelect) {
-          subSelect.value = dateStr;
-          renderDrivingData();
-        }
-      }, 50);
-    }
-
-    function loadCachedDataFirst() {
-      try {
-        const cachedVehicle = localStorage.getItem('tesla_cached_vehicle');
-        const cachedTrips = localStorage.getItem('tesla_cached_trips');
-
-        if (cachedVehicle) {
-          vehicleRows = JSON.parse(cachedVehicle);
-          loadVehicleData();
-        }
-        if (cachedTrips) {
-          allTrips = JSON.parse(cachedTrips);
-          switchMainTab(currentMainTab);
-        }
-      } catch (e) {}
-    }
-
-    async function handleRefresh(isSilent = false) {
-      if (!isAppInForeground && isSilent) return;
-
-      const indicator = document.getElementById('sync-status-indicator');
-      if (indicator && !isSilent) {
-        indicator.innerText = "⏳ 갱신 중...";
-      }
-
-      await loadAllData(isSilent);
-
-      if (indicator && isAppInForeground) {
-        indicator.innerText = "🅿️ 대기";
-      }
+      addLog('⚙️ 설정이 저장되었습니다.');
+      handleRefresh(false);
     }
 
     function addLog(msg) {
@@ -269,302 +226,23 @@
 
     function clearLogBox() {
       const logBox = document.getElementById('tmLogBox');
-      if (logBox) logBox.innerHTML = '<div class="tm-log-entry">[시스템] 로그 초기화됨</div>';
+      if (logBox) logBox.innerHTML = '';
     }
 
-    function renderAccessTokenUI(token) {
-      const el = document.getElementById('displayAccessToken');
-      if (el) {
-        el.innerText = token || "토큰 정보 없음";
-      }
-    }
-
-    function copyAccessToken() {
-      if (!accessToken) {
-        alert("복사할 Access Token이 없습니다.");
-        return;
-      }
-      navigator.clipboard.writeText(accessToken).then(() => {
-        alert("✅ Tesla Access Token이 클립보드에 복사되었습니다!");
-      }).catch(err => {
-        alert("복사 실패: " + err);
-      });
-    }
-
-    function updateGuardianStatusUI(statusType, text) {
-      const badge = document.getElementById('vehicleStatusBadge');
-      const timeText = document.getElementById('guardianLastCheck');
-      if (!badge) return;
-
-      let badgeClasses = "px-3 py-1 text-xs font-bold rounded-full border ";
-      if (statusType === 'sentry') badgeClasses += "bg-red-900/40 text-red-300 border-red-500/50 animate-pulse";
-      else if (statusType === 'driving') badgeClasses += "bg-blue-900/40 text-blue-300 border-blue-500/50";
-      else if (statusType === 'charging') badgeClasses += "bg-emerald-900/40 text-emerald-300 border-emerald-500/50";
-      else badgeClasses += "bg-gray-800 text-gray-400 border-gray-700";
-
-      badge.className = badgeClasses;
-      badge.innerText = text;
-      if (timeText) timeText.innerText = `마지막 확인: ${new Date().toLocaleTimeString()}`;
-    }
-
-    function requestTeslaLogin() {
-      const scope = "openid offline_access vehicle_device_data vehicle_cmds";
-      const authUrl = `https://auth.tesla.com/oauth2/v3/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scope)}&state=sentry_app`;
-      window.location.href = authUrl;
-    }
-
-    async function exchangeCodeWithBackend(code) {
-      try {
-        const res = await fetch(VERCEL_BACKEND_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code })
-        });
-        const data = await res.json();
-        if (data.access_token) {
-          accessToken = data.access_token;
-          localStorage.setItem('tesla_access_token', accessToken);
-          addLog('✅ 테슬라 Access Token 발급 성공!');
-          
-          document.getElementById('loginSection').classList.add('hidden');
-          document.getElementById('tokenInfoSection').classList.remove('hidden');
-          renderAccessTokenUI(accessToken);
-          
-          await fetchTeslaVehicles(accessToken, true);
-          updateGuardianStatusUI('sleep', '🌙 대기 모드 (스위치를 켜세요)');
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } else {
-          addLog(`❌ 토큰 교환 실패: ${JSON.stringify(data)}`);
-        }
-      } catch (err) { addLog(`❌ 백엔드 통신 오류: ${err.message}`); }
-    }
-
-    async function fetchTeslaVehicles(token, isSilent = false) {
-      if (!isSilent) addLog('📡 차량 목록 및 VIN/ID 동기화 중...');
-      
-      if (vehicleRows && vehicleRows.length > 0) {
-        const latest = vehicleRows[0];
-        let rawObj = latest.raw_data;
-        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
-
-        const vId = latest.vehicle_id || latest.id || rawObj?.id || rawObj?.vehicle_id;
-        const vin = latest.vin || rawObj?.vin || "정보 없음";
-
-        if (vId) {
-          if (!isSilent) addLog(`✅ DB에서 차량 정보 감지! (VIN: ${vin}, ID: ${vId})`);
-          updateVehicleInfoUI(vin, vId);
-          if (!configObj.vehicleId) { 
-            configObj.vehicleId = String(vId); 
-            localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
-          }
-          return { vin, vId };
-        }
-      }
-
-      if (configObj.vehicleId) {
-        updateVehicleInfoUI("설정됨", configObj.vehicleId);
-        return { vin: "설정됨", vId: configObj.vehicleId };
-      }
-
-      return null;
-    }
-
-    function updateVehicleInfoUI(vin, vId) {
-      const vinEl = document.getElementById('displayVin');
-      const idEl = document.getElementById('displayVehicleId');
-      if (vinEl) vinEl.innerText = `VIN: ${vin || '-'}`;
-      if (idEl) idEl.innerText = `Vehicle ID: ${vId || configObj.vehicleId || '-'}`;
-    }
-
-    async function autoFetchVehicleId() {
-      if (!accessToken) { 
-        alert('테슬라 로그인이 먼저 필요합니다.'); 
-        return; 
-      }
-      const res = await fetchTeslaVehicles(accessToken);
-      if (res && res.vId) {
-        document.getElementById('input-vehicle-id').value = res.vId;
-        alert(`차량 ID 로드 성공: ${res.vId}`);
-      } else { 
-        alert('차량 정보를 불러오지 못했습니다.'); 
-      }
-    }
-
-    async function handleToggleChange(checkbox) {
-      const labelText = document.getElementById('toggleLabelText');
-
-      if (checkbox.checked) {
-        addLog('🔍 차량 감시 모드(Sentry Mode) 상태 진단 중...');
-        const sentryResult = await checkIsVehicleSentryActiveWithDebug();
-
-        if (sentryResult.isActive) {
-          if (labelText) {
-            labelText.innerText = '기능 ON';
-            labelText.style.color = '#10b981';
-          }
-          addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언 서비스를 시작합니다.');
-
-          if (window.AndroidBridge) {
-            const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
-            const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
-            window.AndroidBridge.startGuardianService(accessToken || 'dummy_token', configObj.vehicleId || '3744141651867089', interval, topic);
-          }
-
-          startMonitoring();
-        } else {
-          checkbox.checked = false;
-          if (labelText) {
-            labelText.innerText = '기능 OFF';
-            labelText.style.color = '#aaa';
-          }
-          stopMonitoring();
-
-          if (window.AndroidBridge) {
-            window.AndroidBridge.stopGuardianService();
-          }
-
-          addLog(`🛑 [감시모드 중단] 사유: ${sentryResult.errorMessage}`);
-          alert(`차량 감시 모드를 활성화할 수 없습니다.\n${sentryResult.errorMessage}`);
-        }
-      } else {
-        if (labelText) {
-          labelText.innerText = '기능 OFF';
-          labelText.style.color = '#aaa';
-        }
-
-        if (window.AndroidBridge) {
-          window.AndroidBridge.stopGuardianService();
-        }
-
-        stopMonitoring();
-      }
-    }
-
-    async function checkIsVehicleSentryActiveWithDebug() {
-      try {
-        addLog('📡 1단계: Vercel 백엔드 Sentry API 확인 중...');
-        const res = await fetch('https://my-tesla-app-six.vercel.app/api/sentry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: accessToken, vehicleId: configObj.vehicleId })
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          if (data.sentry_mode === true) {
-            addLog('✅ Vercel API: Sentry Mode [ON] 확인됨');
-            return { isActive: true, errorMessage: '성공' };
-          } else if (data.sentry_mode === false) {
-            return { isActive: false, errorMessage: '차량의 실제 감시 모드가 꺼져 있습니다.' };
-          }
-        }
-      } catch(e) {
-        addLog(`⚠️ Vercel 통신 예외 발생: ${e.message}`);
-      }
-
-      addLog('📡 2단계: DB 최신 차량 상태 확인 중...');
-      if (vehicleRows && vehicleRows.length > 0) {
-        const latest = vehicleRows[0];
-        let rawObj = latest.raw_data;
-        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
-
-        if (latest.sentry_mode === true || latest.is_sentry === true || rawObj?.vehicle_state?.sentry_mode === true) {
-          addLog('✅ Supabase DB: Sentry Mode [ON]');
-          return { isActive: true, errorMessage: '성공' };
-        }
-      }
-
-      return { isActive: false, errorMessage: '감시 모드가 OFF이거나 상태를 불러올 수 없습니다.' };
-    }
-
-    function startMonitoring() {
-      const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) * 1000;
-      addLog('▶️ 감시 가디언 가동');
-      checkGuardianVehicleState();
-      
-      if (monitorTimer) clearInterval(monitorTimer);
-      monitorTimer = setInterval(checkGuardianVehicleState, interval);
-    }
-
-    function stopMonitoring() {
-      if (monitorTimer) clearInterval(monitorTimer);
-      addLog('⏹️ 감시 가디언 정지됨');
-    }
-
-    async function checkGuardianVehicleState() {
-      const vehicleId = configObj.vehicleId;
-      if (!vehicleId) return;
-
-      try {
-        const res = await fetch('https://my-tesla-app-six.vercel.app/api/sentry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: accessToken, vehicleId: vehicleId })
-        });
-
-        if (!res.ok) { 
-          updateGuardianStatusUI('sleep', '🌙 응답 대기/오프라인'); 
-          return; 
-        }
-
-        const data = await res.json();
-        if (data.success) {
-          const sentryActive = data.sentry_mode;
-          const isLocked = data.locked ?? true;
-
-          if (!sentryActive) {
-            addLog('⚠️ 감시 모드 OFF 전환 감지. 가디언을 정지합니다.');
-            const toggle = document.getElementById('appMainToggle');
-            if (toggle) { toggle.checked = false; handleToggleChange(toggle); }
-            return;
-          }
-
-          updateGuardianStatusUI('sentry', '🛡️ 가디언 가동 중');
-
-          const isDoorOpen = data.doors_open && (data.doors_open.df || data.doors_open.dr || data.doors_open.pf || data.doors_open.pr);
-          const isTrunkOpen = data.trunks_open && (data.trunks_open.ft || data.trunks_open.rt);
-
-          if (isLocked && (isDoorOpen || isTrunkOpen)) {
-            const targetName = isDoorOpen && isTrunkOpen ? '문/트렁크' : isDoorOpen ? '도어' : '트렁크';
-            addLog(`🚨 [경고] 잠금 상태에서 ${targetName} 무단 열림 감지!`);
-            await sendNtfyNotification(`🚨 테슬라 ${targetName} 무단 열림`, `차량이 잠긴 상태에서 ${targetName}가 열렸습니다!`, 'high');
-          }
-
-          if (data.sentry_mode_type === 'Panic' || data.sentry_mode_type === 'Alarm') {
-            addLog(`🚨🚨 [비상] 차량 충격/위협 경보 발생! (${data.sentry_mode_type})`);
-            await flashLights();
-            await sendNtfyNotification('‼️ 테슬라 긴급 충격 경보', '차량 충격 또는 경보 이벤트가 감지되었습니다!', 'urgent');
-          }
-
-          lastSentryState = sentryActive;
-        }
-      } catch (err) { 
-        addLog(`❌ 가디언 에러: ${err.message}`); 
-      }
-    }
-
-    // my-tesla-app repo의 api/headlights.js 백엔드 엔드포인트 연동
-    async function flashLights() {
-      if (!configObj.vehicleId || !accessToken) {
-        addLog('⚠️ 차량 ID 또는 Access Token이 설정되어 있지 않습니다.');
-        return;
-      }
-      try {
-        addLog('⚡ Vercel API (headlights) 전조등 점멸 요청 중...');
-        const res = await fetch('https://my-tesla-app-six.vercel.app/api/headlights', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: accessToken, vehicleId: configObj.vehicleId })
-        });
-        const data = await res.json();
-        if (res.ok && (data.success || data.response?.result)) {
-          addLog('⚡ [자동] 전조등 점멸 실행 완료');
-        } else {
-          addLog(`❌ 전조등 실행 실패: ${data.error || data.reason || JSON.stringify(data)}`);
-        }
-      } catch (err) { 
-        addLog(`❌ 전조등 실행 실패: ${err.message}`); 
-      }
+    function flashLights() {
+      if (!accessToken) { alert('테슬라 로그인을 진행해 주세요.'); return; }
+      addLog('💡 전조등 깜빡이기 요청 전송...');
+      fetch(`https://my-tesla-app-six.vercel.app/api/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: accessToken, command: 'flash_lights', vehicle_id: configObj.vehicleId })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.response && data.response.result) addLog('✅ 전조등 실행 성공');
+        else addLog(`❌ 전조등 실행 실패: ${data.error || data.reason || JSON.stringify(data)}`);
+      })
+      .catch(err => addLog(`❌ 전조등 실행 오류: ${err.message}`));
     }
 
     async function sendNtfyNotification(title, message, priority = 'high') {
@@ -581,21 +259,3 @@
 
     function testFlashLights() { if(accessToken) flashLights(); else alert('테슬라 로그인을 진행해 주세요.'); }
     function testNtfy() { sendNtfyNotification('Tesla Guardian Test', 'This is a test notification.'); }
-
-    async function triggerGitHubSync() {
-      if (!configObj.ghToken) { alert("⚙️ 설정에서 GitHub Token을 입력해 주세요."); openConfigModal(); return; }
-      try {
-        const res = await fetch('https://api.github.com/repos/mdkdw1-ui/my-tesla-app/actions/workflows/sync.yml/dispatches', {
-          method: 'POST',
-          headers: {
-            'Accept': 'application/vnd.github+json',
-            'Authorization': `Bearer ${configObj.ghToken}`,
-            'X-GitHub-Api-Version': '2022-11-28'
-          },
-          body: JSON.stringify({ ref: 'main' })
-        });
-        if (res.ok || res.status === 204) alert("⚡ GitHub Sync Pipeline이 호출되었습니다!");
-        else alert(`실패 코드: ${res.status}`);
-      } catch (err) { alert("오류: " + err.message); }
-    }
-
