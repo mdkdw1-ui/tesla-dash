@@ -1,268 +1,228 @@
-  <script>
-    function initDashboard() {
-      loadKakaoSdk(configObj.kakaoKey, () => {
-        initMap();
-        handleRefresh(false);
-      });
+<script>
+// ==========================================
+// 1. 주소 및 시간 가공 헬퍼 함수
+// ==========================================
+
+// 광역시/도 및 시 명칭 제거 (주소 간소화)
+function cleanAddress(addr) {
+  if (!addr) return '';
+  return String(addr)
+    .replace(/(서울특별시|경기도|인천광역시|부산광역시|대구광역시|광주광역시|대전광역시|울산광역시|세종특별자치시|제주특별자치도|강원특별자치도|전북특별자치도|충청북도|충청남도|전라북도|전라남도|경상북도|경상남도)/g, '')
+    .replace(/(고양시|성남시|수원시|용인시|부천시|안산시|안양시|청주시|천안시|전주시|포항시|창원시|화성시|파주시|김포시|광명시|군포시|이천시|양주시|구리시|안성시|하남시|의왕시|여주시|동두천시|과천시|남양주시)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// 새벽 5시 기준 운행일 Date 객체 반환 (시간 - 5시간 차감)
+function getDrivingDateObj(dateStr) {
+  if (!dateStr) return new Date();
+  const dateVal = new Date(String(dateStr).replace(' ', 'T'));
+  if (isNaN(dateVal.getTime())) return new Date();
+  // 5시간 차감 (5 * 60 * 60 * 1000 ms)
+  return new Date(dateVal.getTime() - 18000000);
+}
+
+// 새벽 5시 기준 YYYY-MM-DD 키 추출
+function getDrivingDateStr(dateStr) {
+  const adjusted = getDrivingDateObj(dateStr);
+  const yyyy = adjusted.getFullYear();
+  const mm = String(adjusted.getMonth() + 1).padStart(2, '0');
+  const dd = String(adjusted.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// 시각 표기 포맷터 (00시~04시 -> 24시~28시 표기)
+function formatDrivingTimeStr(dateStr) {
+  if (!dateStr) return '--:--';
+  const original = new Date(String(dateStr).replace(' ', 'T'));
+  if (isNaN(original.getTime())) return '--:--';
+
+  let hours = original.getHours();
+  const minutes = String(original.getMinutes()).padStart(2, '0');
+
+  // 새벽 00:00 ~ 04:59 범위인 경우 24시 ~ 28시로 표기
+  if (hours >= 0 && hours < 5) {
+    hours += 24;
+  }
+
+  const period = hours >= 12 && hours < 24 ? '오후' : (hours >= 24 ? '새벽' : '오전');
+  let displayHours = hours;
+  if (hours > 12 && hours < 24) displayHours = hours - 12;
+  if (hours >= 24) displayHours = hours - 24;
+
+  return `${period} ${String(displayHours).padStart(2, '0')}:${minutes}`;
+}
+
+// driving_time 복구 및 분 단위 환산 함수 (NULL 완벽 대응)
+function getCalculatedDrivingTime(row) {
+  // 1순위: DB 컬럼 필드값 확인
+  let timeVal = row.driving_time ?? row.duration ?? row.duration_min ?? row.drive_time;
+  
+  if (timeVal !== null && timeVal !== undefined && !isNaN(timeVal) && Number(timeVal) > 0) {
+    timeVal = Number(timeVal);
+    // 초(sec) 단위로 들어왔을 경우 분으로 환산
+    return (timeVal > 300 && timeVal % 60 === 0) ? Math.round(timeVal / 60) : Math.round(timeVal);
+  }
+
+  // 2순위: start_time과 end_time 시간차 연산
+  if (row.start_time && row.end_time) {
+    const tStart = new Date(String(row.start_time).replace(' ', 'T'));
+    const tEnd = new Date(String(row.end_time).replace(' ', 'T'));
+    if (!isNaN(tStart.getTime()) && !isNaN(tEnd.getTime())) {
+      const diffMins = Math.round((tEnd - tStart) / (1000 * 60));
+      if (diffMins > 0) return diffMins;
+    }
+  }
+
+  // 3순위: location 좌표 배열 타임스탬프 차이 연산
+  if (Array.isArray(row.location) && row.location.length >= 2) {
+    const pFirst = row.location[0];
+    const pLast = row.location[row.location.length - 1];
+    const t1 = new Date(pFirst.time || pFirst.timestamp);
+    const t2 = new Date(pLast.time || pLast.timestamp);
+    if (!isNaN(t1.getTime()) && !isNaN(t2.getTime())) {
+      const diffMins = Math.round((t2 - t1) / (1000 * 60));
+      if (diffMins > 0) return diffMins;
+    }
+  }
+
+  return 0; // 연산 불가 시 0분
+}
+
+// 출발지 / 도착지 주소 정제 추출
+function getFormattedAddress(row) {
+  let start = row.start_dong || row.start_address || row.start_location;
+  let end = row.end_dong || row.end_address || row.end_location;
+
+  start = start ? cleanAddress(start) : '출발지 미상';
+  end = end ? cleanAddress(end) : '도착지 미상';
+
+  return { start, end };
+}
+
+
+// ==========================================
+// 2. Supabase DB 조회 및 UI 렌더링
+// ==========================================
+
+async function fetchSupabaseData() {
+  const logBox = document.getElementById('tmLogBox');
+  const addLog = (msg) => {
+    if (logBox) {
+      logBox.innerHTML += `<div>${new Date().toLocaleTimeString()} - ${msg}</div>`;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+    console.log(msg);
+  };
+
+  addLog('🔄 Supabase 주행 데이터 수집 시작...');
+
+  const spUrl = window.SUPABASE_URL || localStorage.getItem('tm_sp_url');
+  const spKey = window.SUPABASE_ANON_KEY || localStorage.getItem('tm_sp_key');
+
+  if (!spUrl || !spKey) {
+    addLog('❌ Supabase 설정 정보(URL/KEY)가 누락되었습니다.');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${spUrl}/rest/v1/driving?select=*&order=start_time.desc`, {
+      method: 'GET',
+      headers: {
+        'apikey': spKey,
+        'Authorization': `Bearer ${spKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      addLog(`❌ Supabase Fetch Error (driving) [HTTP ${response.status}]: ${errText}`);
+      return;
     }
 
-    function loadKakaoSdk(appKey, callback) {
-      if (window.kakao && window.kakao.maps) { 
-        kakao.maps.load(() => { geocoder = new kakao.maps.services.Geocoder(); callback(); }); 
-        return; 
-      }
-      const script = document.createElement('script');
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false&libraries=services`;
-      script.onload = () => { kakao.maps.load(() => { geocoder = new kakao.maps.services.Geocoder(); callback(); }); };
-      document.head.appendChild(script);
-    }
+    const drivingData = await response.json();
+    addLog(`✅ Supabase 주행 데이터 ${drivingData.length}건 조회 완료`);
 
-    function initMap() {
-      const container = document.getElementById('map');
-      if (container) {
-        map = new kakao.maps.Map(container, { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 5 });
-      }
-    }
+    // 전역 변수 저장
+    window.tmDrivingData = drivingData;
 
-    async function fetchSupabaseTable(queryPath) {
-      if (!configObj.url || !configObj.key) return [];
-      try {
-        const cleanUrl = configObj.url.replace(/\/$/, "");
-        const res = await fetch(`${cleanUrl}/rest/v1/${queryPath}`, {
-          headers: { 
-            'apikey': configObj.key, 
-            'Authorization': `Bearer ${configObj.key}`, 
-            'Range': '0-9999' 
-          }
-        });
-        if (!res.ok) {
-          const errText = await res.text();
-          addLog(`❌ DB 데이터 불러오기 에러 [HTTP ${res.status}]: ${errText}`);
-          return [];
-        }
-        return await res.json();
-      } catch (e) {
-        addLog(`❌ DB 네트워크 에러: ${e.message}`);
-        return [];
-      }
-    }
+    // UI 렌더링 호출
+    renderDrivingList(drivingData);
 
-    /**
-     * [단일 통합 갱신 실행 함수]
-     * Vercel Sync API 호출 -> Supabase 동기화 -> 데이터 재조회 및 렌더링
-     */
-    async function handleRefresh(manualTrigger = true) {
-      if (manualTrigger) addLog('🔄 [갱신] 데이터 동기화 및 조회를 시작합니다...');
-      
-      // 1. Vercel Sync API 실행 (teslacam-93532 -> Supabase)
-      try {
-        const syncRes = await fetch('https://my-tesla-app-six.vercel.app/api/sync');
-        if (syncRes.ok) {
-          const syncData = await syncRes.json();
-          if (syncData.success) {
-            addLog(`✅ [동기화 완료] 총 ${syncData.count || 0}건의 데이터가 Supabase로 동기화되었습니다.`);
-          } else {
-            addLog(`⚠️ [동기화 주의] sync.js 응답 코드: ${syncData.error || '알 수 없는 오류'}`);
-          }
-        } else {
-          addLog(`❌ [동기화 실패] Vercel API 응답 상태: HTTP ${syncRes.status}`);
-        }
-      } catch (err) {
-        addLog(`❌ [동기화 에러] Vercel Sync 연동 실패: ${err.message}`);
-      }
+  } catch (err) {
+    addLog(`❌ 네트워크/스크립트 에러: ${err.message}`);
+  }
+}
 
-      // 2. Supabase 최신 데이터 Fetching
-      try {
-        const [dData, vData] = await Promise.all([
-          fetchSupabaseTable('driving?select=*&order=created_at.desc'),
-          fetchSupabaseTable('vehicle_status?select=*&order=created_at.desc&limit=1')
-        ]);
+// 주행 데이터 리스트 화면 카드 출력 (5am 운행일 그룹핑 적용)
+function renderDrivingList(data) {
+  const container = document.getElementById('tmDrivingListContainer');
+  if (!container) return;
 
-        if (dData && dData.length > 0) {
-          allTrips = dData.map(t => {
-            const timeVal = t.created_at || t.timestamp || t.start_time || new Date().toISOString();
-            const moveKMVal = Number(t.move_km ?? t.moveKM ?? 0);
-            const useBatVal = Number(t.use_battery ?? t.useBattery ?? 0);
-            const durationMinVal = parseDrivingTimeToMinutes(t);
-            
-            return {
-              ...t,
-              timestamp: timeVal,
-              moveKM: moveKMVal,
-              useBattery: useBatVal,
-              durationMin: durationMinVal,
-              startDong: t.start_dong || t.start_address || '위치 미상',
-              endDong: t.end_dong || t.end_address || '위치 미상'
-            };
-          });
-        } else {
-          allTrips = [];
-        }
+  if (!data || data.length === 0) {
+    container.innerHTML = '<div style="text-align:center; padding: 40px; color: #888;">주행 데이터가 없습니다.</div>';
+    return;
+  }
 
-        vehicleRows = vData || [];
+  // 1. 5am 기준 운행일별 그룹핑
+  const grouped = {};
+  data.forEach(row => {
+    const dateKey = getDrivingDateStr(row.start_time);
+    if (!grouped[dateKey]) grouped[dateKey] = [];
+    grouped[dateKey].push(row);
+  });
 
-        // 3. UI 렌더링 update
-        renderDrivingData();
-        renderVehicleInfo();
-        renderMonthlyReport();
-        if (manualTrigger) addLog('✨ 화면 데이터가 최신으로 갱신되었습니다.');
-      } catch (err) {
-        addLog(`❌ [데이터 조회 에러] ${err.message}`);
-      }
-    }
+  // 날짜 내림차순 정렬
+  const sortedDates = Object.keys(grouped).sort((a, b) => new Date(b) - new Date(a));
 
-    /**
-     * 5am 운행일 그룹핑 및 25시 시각 표기가 반영된 주행 리스트 렌더링
-     */
-    function renderDrivingData() {
-      const listContainer = document.getElementById('driving-list-container');
-      if (!listContainer) return;
-      
-      if (!allTrips || allTrips.length === 0) {
-        listContainer.innerHTML = `<div class="p-8 text-center text-gray-500 text-xs">주행 기록이 없습니다.</div>`;
-        return;
-      }
+  let html = '';
 
-      // 5am 운행일 기준으로 그룹화
-      const grouped = {};
-      allTrips.forEach(item => {
-        const drivingDate = getDrivingDateStr(item.timestamp);
-        if (!grouped[drivingDate]) grouped[drivingDate] = [];
-        grouped[drivingDate].push(item);
-      });
+  sortedDates.forEach(dateKey => {
+    const items = grouped[dateKey];
+    const dateParts = dateKey.split('-');
+    const displayHeaderDate = `${parseInt(dateParts[1])}월 ${parseInt(dateParts[2])}일`;
 
-      let html = '';
-      const sortedDates = Object.keys(grouped).sort().reverse();
+    html += `
+      <div style="margin-bottom: 20px;">
+        <div style="font-size: 15px; font-weight: bold; color: #a1a1aa; margin: 12px 4px 8px 4px; display: flex; align-items: center; gap: 6px;">
+          <span>📅 ${displayHeaderDate}</span>
+        </div>
+    `;
 
-      sortedDates.forEach(dateStr => {
-        const dayItems = grouped[dateStr];
-        const dayKM = dayItems.reduce((acc, cur) => acc + (cur.moveKM || 0), 0);
-        const dayBat = dayItems.reduce((acc, cur) => acc + (cur.useBattery || 0), 0);
-        const headerText = formatDrivingDayHeader(dateStr);
+    items.forEach(row => {
+      const driveTimeMin = getCalculatedDrivingTime(row);
+      const timeStr = driveTimeMin > 0 ? `${driveTimeMin}분` : '-';
+      const formattedTime = formatDrivingTimeStr(row.start_time);
+      const { start, end } = getFormattedAddress(row);
+      const distance = row.distance ? Math.round(row.distance) : 0;
+      const batteryUsed = row.used_battery ? Math.abs(Math.round(row.used_battery)) : 0;
+      const totalDist = row.total_distance ? Number(row.total_distance).toLocaleString() : '-';
 
-        html += `
-          <div class="card-dark rounded-2xl p-3 space-y-2 border border-gray-800">
-            <div class="flex justify-between items-center border-b border-gray-800/80 pb-2 px-1">
-              <span class="text-xs font-bold text-gray-200">📅 ${headerText}</span>
-              <span class="text-[11px] font-semibold text-blue-400">총 ${dayKM.toFixed(1)}km (${dayBat.toFixed(1)}%)</span>
+      html += `
+        <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 14px; margin-bottom: 10px; color: #fff;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="background: #2563eb; color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: bold;">주행</span>
+              <span style="font-size: 14px; font-weight: 600; color: #f4f4f5;">${formattedTime}</span>
             </div>
-            <div class="space-y-2">
-        `;
-
-        dayItems.forEach(evt => {
-          const startTimeDisplay = formatDrivingTimeStr(evt.start_time || evt.timestamp);
-          const endTimeDisplay = evt.end_time ? formatDrivingTimeStr(evt.end_time) : '';
-          const timeRangeStr = endTimeDisplay ? `${startTimeDisplay} ~ ${endTimeDisplay}` : startTimeDisplay;
-
-          const isCharge = evt.is_charge || evt.type === 'charge' || (evt.moveKM === 0 && evt.useBattery < 0);
-          
-          if (!isCharge) {
-            const batDetail = evt.useBattery !== undefined ? `${evt.useBattery.toFixed(1)}%` : '-';
-            const odoVal = evt.odo ? Number(evt.odo).toLocaleString() : '-';
-
-            html += `
-              <div class="bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800/80 space-y-1.5 hover:border-blue-500/40 transition">
-                <div class="flex justify-between items-center text-xs">
-                  <div class="flex items-center space-x-2">
-                    <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-600/20 text-blue-400 border border-blue-500/30">주행</span>
-                    <span class="text-gray-400 text-[11px] font-mono">${timeRangeStr}</span>
-                  </div>
-                  <span class="font-black text-blue-400 text-xs">+${evt.moveKM.toFixed(1)} km</span>
-                </div>
-                <div class="flex items-center space-x-1.5 text-xs pt-0.5">
-                  <span class="address-tag text-blue-300 font-semibold">${evt.startDong}</span>
-                  <span class="text-indigo-400 font-bold">→</span>
-                  <span class="address-tag text-emerald-300 font-semibold">${evt.endDong}</span>
-                </div>
-                <div class="text-gray-400 text-[11px] leading-relaxed">
-                  주행 ${evt.moveKM.toFixed(1)}km, 시간 ${evt.durationMin ? evt.durationMin + '분' : '-'}, 배터리 사용 ${batDetail}, 누적 ${odoVal}km
-                </div>
-              </div>
-            `;
-          } else {
-            const batDiffAbs = Math.abs(evt.useBattery || 0);
-            html += `
-              <div class="bg-[#0d0e12] p-2.5 rounded-xl border border-gray-800/80 flex justify-between items-center text-xs">
-                <div class="flex items-center space-x-2">
-                  <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">⚡ 충전</span>
-                  <span class="text-gray-400 text-[11px] font-mono">${startTimeDisplay}</span>
-                </div>
-                <div class="text-right">
-                  <span class="font-bold text-emerald-400 text-[11px]">충전 +${batDiffAbs.toFixed(1)}%</span>
-                </div>
-              </div>
-            `;
-          }
-        });
-
-        html += `
-            </div>
-          </div>
-        `;
-      });
-
-      listContainer.innerHTML = html;
-    }
-
-    function renderVehicleInfo() {
-      if (!vehicleRows || vehicleRows.length === 0) return;
-      const v = vehicleRows[0];
-
-      const batEl = document.getElementById('v-bat-level');
-      if (batEl) batEl.textContent = `${v.battery_level ?? '-'}%`;
-
-      const rangeEl = document.getElementById('v-est-range');
-      if (rangeEl) rangeEl.textContent = `${v.est_battery_range ? Number(v.est_battery_range).toFixed(1) : '-'} km`;
-
-      const odoEl = document.getElementById('v-odometer');
-      if (odoEl) odoEl.textContent = `${v.odometer ? Number(v.odometer).toLocaleString() : '-'} km`;
-
-      const stateEl = document.getElementById('v-state');
-      if (stateEl) stateEl.textContent = v.state || '대기';
-    }
-
-    /**
-     * 5am 운행일 기준으로 월간 데이터 집계 렌더링
-     */
-    function renderMonthlyReport() {
-      const mList = document.getElementById('monthly-report-list');
-      if (!mList) return;
-
-      if (!allTrips || allTrips.length === 0) {
-        mList.innerHTML = `<div class="p-6 text-center text-gray-500 text-xs">데이터가 없습니다.</div>`;
-        return;
-      }
-
-      // 5am 기준 운행월 그룹화 (YYYY-MM)
-      const monthlyData = {};
-      allTrips.forEach(t => {
-        const dStr = getDrivingDateStr(t.timestamp);
-        const monthKey = dStr.slice(0, 7); // YYYY-MM
-        if (!monthlyData[monthKey]) monthlyData[monthKey] = { totalKM: 0, count: 0, bat: 0 };
-        monthlyData[monthKey].totalKM += (t.moveKM || 0);
-        monthlyData[monthKey].bat += (t.useBattery || 0);
-        monthlyData[monthKey].count += 1;
-      });
-
-      let html = '';
-      const months = Object.keys(monthlyData).sort().reverse();
-
-      months.forEach(m => {
-        const data = monthlyData[m];
-        html += `
-          <div class="card-dark p-3.5 rounded-xl border border-gray-800 flex justify-between items-center text-xs">
-            <div>
-              <span class="font-bold text-gray-200 text-sm block">${m}</span>
-              <span class="text-gray-400 text-[11px]">총 ${data.count}회 운행</span>
-            </div>
-            <div class="text-right">
-              <span class="text-blue-400 font-extrabold text-sm block">${data.totalKM.toFixed(1)} km</span>
-              <span class="text-gray-400 text-[11px]">소모 배터리 ${data.bat.toFixed(1)}%</span>
+            <div style="font-size: 14px; font-weight: bold; color: #38bdf8;">
+              ${start} <span style="color: #71717a;">➔</span> ${end}
             </div>
           </div>
-        `;
-      });
+          <div style="font-size: 13px; color: #a1a1aa; display: flex; gap: 12px; flex-wrap: wrap;">
+            <span>주행 ${distance}km</span>
+            <span>시간 ${timeStr}</span>
+            <span>배터리 ${batteryUsed}%</span>
+            <span>총 주행거리 ${totalDist}km</span>
+          </div>
+        </div>
+      `;
+    });
 
-      mList.innerHTML = html;
-    }
-  </script>
+    html += `</div>`;
+  });
+
+  container.innerHTML = html;
+}
+</script>
