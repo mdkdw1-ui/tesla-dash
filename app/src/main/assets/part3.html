@@ -14,7 +14,6 @@
     let currentSubTab = localStorage.getItem('tesla_sub_tab') || 'vehicle';
     
     const VERCEL_BACKEND_URL = "https://my-tesla-app-six.vercel.app/api/exchange"; 
-    const VERCEL_SYNC_URL = "https://my-tesla-app-six.vercel.app/api/sync";
     const CLIENT_ID = "272ac00a-248e-4fa7-8027-1fc06e8e9a24";
     const REDIRECT_URI = "https://my-tesla-app-six.vercel.app/api/callback";
     let callbackHandled = false;
@@ -27,222 +26,117 @@
 
     let map = null, geocoder = null;
     let allTrips = [], vehicleRows = [];
-    let currentPolylines = [], currentInfoWindow = null;
-    let currentFilterMode = 'daily';
+
+    // ──────────────────────────────────────────────────────────
+    // [5am~익일 5am 운행일 기준 및 25시 포맷 Helper 함수들]
+    // ──────────────────────────────────────────────────────────
     
-    // 주소 변환 영구 캐시
-    let addressCache = {};
-    try {
-      const savedCache = localStorage.getItem('tesla_address_cache');
-      if (savedCache) addressCache = JSON.parse(savedCache);
-    } catch(e) {}
-
-    let chartDegRec = null, chartRangeRec = null;
-
-    /* ===== OAuth Callback Helpers (Android WebView -> JS) ===== */
-    function getQueryParam(name) {
-      const urlParams = new URLSearchParams(window.location.search);
-      const value = urlParams.get(name);
-      return value ? decodeURIComponent(value) : null;
+    /**
+     * 타임스탬프를 5am 차감하여 "운행일" 기준 Date 객체 생성
+     */
+    function getDrivingDateObj(dateInput) {
+      if (!dateInput) return new Date();
+      let isoStr = typeof dateInput === 'string' ? dateInput.replace(' ', 'T') : dateInput;
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return new Date();
+      // 5시간(5 * 3600 * 1000 ms) 차감하여 운행일자 결정
+      return new Date(d.getTime() - 5 * 60 * 60 * 1000);
     }
 
-    function clearQueryParams() {
-      window.history.replaceState({}, document.title, window.location.pathname);
+    /**
+     * 5am 기준 운행일 날짜 문자열 (YYYY-MM-DD)
+     */
+    function getDrivingDateStr(dateInput) {
+      const d = getDrivingDateObj(dateInput);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
     }
 
-    async function handleOAuthCode(code) {
-      if (!code || callbackHandled) return;
-      callbackHandled = true;
-      switchMainTab('guardian');
-      addLog('OAuth code detected, exchanging token...');
-      await exchangeCodeWithBackend(code);
-      clearQueryParams();
+    /**
+     * 5am 기준 시각 표시 문자열 (HH:mm)
+     * 새벽 00:00 ~ 04:59 시간대는 24:00 ~ 28:59 로 표시 (예: 01:30 -> 25:30)
+     */
+    function formatDrivingTimeStr(dateInput) {
+      if (!dateInput) return '-';
+      let isoStr = typeof dateInput === 'string' ? dateInput.replace(' ', 'T') : dateInput;
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '-';
+
+      let hours = d.getHours();
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+
+      if (hours < 5) {
+        hours += 24;
+      }
+
+      const hourStr = String(hours).padStart(2, '0');
+      return `${hourStr}:${minutes}`;
     }
 
-    /* Android Bridge: called from Kotlin shouldOverrideUrlLoading / onNewIntent */
-    window.handleAndroidOauthCode = async function(code) {
-      await handleOAuthCode(code);
-    };
+    /**
+     * 운행일 카드 헤더 표시 포맷 (예: 2026. 07. 27. (월))
+     */
+    function formatDrivingDayHeader(drivingDateStr) {
+      if (!drivingDateStr) return '';
+      const parts = drivingDateStr.split('-');
+      if (parts.length < 3) return drivingDateStr;
+      const year = parts[0];
+      const month = parts[1];
+      const day = parts[2];
 
-    window.addEventListener('DOMContentLoaded', async () => {
-      document.addEventListener('visibilitychange', handleAppVisibilityChange);
+      const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      const days = ['일', '월', '화', '수', '목', '금', '토'];
+      const dayOfWeek = days[d.getDay()] || '';
 
-      /* 1. Check for OAuth callback code (Android-injected first, then URL query) */
-      const androidCode = window.ANDROID_OAUTH_CODE;
-      const urlCode = getQueryParam('code');
-
-      if (androidCode) {
-        await handleOAuthCode(androidCode);
-      } else if (urlCode) {
-        await handleOAuthCode(urlCode);
-      }
-
-      /* 2. If token already exists, show token section */
-      if (accessToken) {
-        document.getElementById('loginSection')?.classList.add('hidden');
-        document.getElementById('tokenInfoSection')?.classList.remove('hidden');
-        renderAccessTokenUI(accessToken);
-        fetchTeslaVehicles(accessToken, true); // silent update
-      }
-
-      /* 3. Load config and init */
-      const isConfigLoaded = loadConfig();
-      if (!isConfigLoaded) {
-        openConfigModal();
-      } else {
-        initSupabaseClient();
-        loadCachedDataFirst();
-        initDashboard();
-      }
-    });
-
-    function initSupabaseClient() {
-      if (configObj.url && configObj.key && window.supabase) {
-        supabaseClient = supabase.createClient(configObj.url, configObj.key);
-      }
+      return `${year}. ${month}. ${day}. (${dayOfWeek})`;
     }
 
-    function handleAppVisibilityChange() {
-      const indicator = document.getElementById('sync-status-indicator');
-      if (document.hidden) {
-        isAppInForeground = false;
-        stopDrivingSyncLoop(); 
-      } else {
-        isAppInForeground = true;
-        if (indicator) {
-          indicator.innerText = "🅿️ 대기";
-        }
-        handleRefresh(true); 
+    /**
+     * driving_time 컬럼 분 단위 계산 Helper (ISO 포맷 안전 처리)
+     */
+    function parseDrivingTimeToMinutes(item) {
+      if (!item) return 0;
+      let val = item.driving_time ?? item.duration ?? item.duration_min ?? item.drive_time ?? item.driving_time_min;
+      if (val !== undefined && val !== null && !isNaN(val)) {
+        val = Number(val);
+        if (val > 300) return Math.round(val / 60); // 초 단위인 경우 분으로 변환
+        return Math.round(val);
       }
-    }
-
-    function stopDrivingSyncLoop() {
-      if (drivingSyncTimer) {
-        clearInterval(drivingSyncTimer);
-        drivingSyncTimer = null;
-      }
-    }
-
-    /* ===== Vercel sync.js 연동 (teslacam-93532 -> Supabase 동기화) ===== */
-    async function triggerVercelSync() {
-      addLog('⚡ [Vercel Sync] teslacam-93532 → Supabase 데이터 동기화 시작...');
-      try {
-        const res = await fetch(VERCEL_SYNC_URL, { method: 'GET' });
-        
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}));
-          addLog(`✅ [Vercel Sync] 동기화 성공 (HTTP ${res.status}): ${data.message || '정상 처리'}`);
-          return { success: true, status: res.status };
-        } else {
-          const errText = await res.text().catch(() => '');
-          addLog(`❌ [Vercel Sync] 동기화 실패 (HTTP ${res.status}): ${errText || res.statusText}`);
-          return { success: false, status: res.status, error: errText || res.statusText };
-        }
-      } catch (err) {
-        addLog(`❌ [Vercel Sync] 네트워크 오류: ${err.message}`);
-        return { success: false, status: 'NET_ERR', error: err.message };
-      }
-    }
-
-    /* ===== 단일 통합 갱신 함수 (갱신 버튼 클릭 시) ===== */
-    async function handleUnifiedRefresh() {
-      const indicator = document.getElementById('sync-status-indicator');
-      if (indicator) indicator.innerText = "🔄 Sync 중...";
-
-      // 1 단계: Vercel api/sync.js 실행
-      const syncResult = await triggerVercelSync();
-
-      if (!syncResult.success) {
-        if (indicator) indicator.innerText = `❌ Sync 에러 (${syncResult.status})`;
-      } else {
-        if (indicator) indicator.innerText = "📥 DB 로딩...";
-      }
-
-      // 2 단계: Supabase DB 최신 데이터 가져와 UI 반영
-      await loadAllData(false);
-
-      if (indicator) {
-        if (!syncResult.success) {
-          indicator.innerText = `⚠️ 완료 (Sync ${syncResult.status})`;
-        } else {
-          indicator.innerText = "🅿️ 대기";
+      if (item.start_time && item.end_time) {
+        const s = new Date(String(item.start_time).replace(' ', 'T')).getTime();
+        const e = new Date(String(item.end_time).replace(' ', 'T')).getTime();
+        if (!isNaN(s) && !isNaN(e) && e > s) {
+          return Math.round((e - s) / 60000);
         }
       }
-    }
-
-    function handleRefresh(isSilent = false) {
-      if (isSilent) {
-        loadAllData(true);
-      } else {
-        handleUnifiedRefresh();
-      }
-    }
-
-    function loadConfig() {
-      const enc = localStorage.getItem('tesla_dashboard_config');
-      if (!enc) return false;
-      try {
-        const dec = CryptoJS.AES.decrypt(enc, SECRET_SALT).toString(CryptoJS.enc.Utf8);
-        const parsed = JSON.parse(dec);
-        if (parsed && parsed.url && parsed.key) {
-          configObj = parsed;
-          return true;
-        }
-        return false;
-      } catch (e) {
-        return false;
-      }
-    }
-
-    function saveConfig(e) {
-      if (e) e.preventDefault();
-      configObj = {
-        kakaoKey: document.getElementById('input-kakao-key').value.trim(),
-        url: document.getElementById('input-supabase-url').value.trim().replace(/\/$/, ""),
-        key: document.getElementById('input-supabase-key').value.trim(),
-        ghToken: document.getElementById('input-gh-token').value.trim(),
-        vehicleId: document.getElementById('input-vehicle-id').value.trim(),
-        ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
-      };
-
-      const ciphertext = CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString();
-      localStorage.setItem('tesla_dashboard_config', ciphertext);
-      initSupabaseClient();
-      closeConfigModal();
-      addLog('⚙️ 설정이 저장되었습니다.');
-      handleRefresh(false);
+      return 0;
     }
 
     function addLog(msg) {
-      const logBox = document.getElementById('tmLogBox');
-      if (!logBox) return;
-      const time = new Date().toLocaleTimeString();
-      const entry = document.createElement('div');
-      entry.className = 'tm-log-entry';
-      entry.innerText = `[${time}] ${msg}`;
-      logBox.appendChild(entry);
-      logBox.scrollTop = logBox.scrollHeight;
+      const logsEl = document.getElementById('guardianLogs');
+      if (!logsEl) return;
+      const time = new Date().toLocaleTimeString('ko-KR');
+      const div = document.createElement('div');
+      div.className = "py-0.5 border-b border-gray-800/50 text-[11px] font-mono leading-relaxed";
+      div.textContent = `[${time}] ${msg}`;
+      logsEl.prepend(div);
     }
 
-    function clearLogBox() {
-      const logBox = document.getElementById('tmLogBox');
-      if (logBox) logBox.innerHTML = '';
-    }
-
-    function flashLights() {
-      if (!accessToken) { alert('테슬라 로그인을 진행해 주세요.'); return; }
-      addLog('💡 전조등 깜빡이기 요청 전송...');
-      fetch(`https://my-tesla-app-six.vercel.app/api/command`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: accessToken, command: 'flash_lights', vehicle_id: configObj.vehicleId })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.response && data.response.result) addLog('✅ 전조등 실행 성공');
-        else addLog(`❌ 전조등 실행 실패: ${data.error || data.reason || JSON.stringify(data)}`);
-      })
-      .catch(err => addLog(`❌ 전조등 실행 오류: ${err.message}`));
+    async function flashLights() {
+      if (!accessToken) return;
+      addLog('⚡ [자동] 비상등 점등 시도...');
+      try {
+        const res = await fetch(`https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/vehicles/${configObj.vehicleId}/command/flash_lights`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+        });
+        if (res.ok) addLog('💡 전조등/비상등 점등 성공!');
+        else addLog(`❌ 전조등 실행 실패: ${res.status}`);
+      } catch (err) { 
+        addLog(`❌ 전조등 실행 실패: ${err.message}`); 
+      }
     }
 
     async function sendNtfyNotification(title, message, priority = 'high') {
@@ -259,3 +153,21 @@
 
     function testFlashLights() { if(accessToken) flashLights(); else alert('테슬라 로그인을 진행해 주세요.'); }
     function testNtfy() { sendNtfyNotification('Tesla Guardian Test', 'This is a test notification.'); }
+
+    async function triggerGitHubSync() {
+      if (!configObj.ghToken) { alert("⚙️ 설정에서 GitHub Token을 입력해 주세요."); openConfigModal(); return; }
+      try {
+        const res = await fetch('https://api.github.com/repos/mdkdw1-ui/my-tesla-app/actions/workflows/sync.yml/dispatches', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/vnd.github+json',
+            'Authorization': `Bearer ${configObj.ghToken}`,
+            'X-GitHub-Api-Version': '2022-11-28'
+          },
+          body: JSON.stringify({ ref: 'main' })
+        });
+        if (res.ok) addLog('⚡ GitHub Sync 트리거 성공');
+        else addLog(`❌ Sync 실패: ${res.status}`);
+      } catch (e) { addLog(`❌ Sync 에러: ${e.message}`); }
+    }
+  </script>
