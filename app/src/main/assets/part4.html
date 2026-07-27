@@ -1,228 +1,369 @@
+<style>
+  /* Tesla Command Hub Dark Theme Styling */
+  .tm-driving-container {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 12px;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #e1e7ed;
+    background-color: #0b0e14;
+    min-height: 100vh;
+  }
+
+  .tm-day-group {
+    margin-bottom: 20px;
+    background: #121824;
+    border: 1px solid #1e283a;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .tm-day-header {
+    display: flex;
+    align-items: center;
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #232d42;
+  }
+
+  .tm-day-header-icon {
+    margin-right: 6px;
+    font-size: 16px;
+  }
+
+  .tm-card {
+    background: #171f2e;
+    border: 1px solid #25334a;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+
+  .tm-card:last-child {
+    margin-bottom: 0;
+  }
+
+  .tm-card:active {
+    transform: scale(0.99);
+    border-color: #3b82f6;
+  }
+
+  .tm-card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .tm-card-type-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    background-color: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+  }
+
+  .tm-card-type-badge.charge {
+    background-color: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.3);
+  }
+
+  .tm-card-time {
+    font-size: 13px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-left: 6px;
+  }
+
+  .tm-card-route {
+    font-size: 14px;
+    font-weight: 600;
+    color: #38bdf8;
+    flex-grow: 1;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tm-card-details {
+    font-size: 13px;
+    color: #cbd5e1;
+    line-height: 1.5;
+  }
+
+  .tm-highlight-time {
+    color: #f59e0b;
+    font-weight: 700;
+  }
+
+  .tm-log-box {
+    background: #090c10;
+    border: 1px solid #1b2230;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-family: monospace;
+    color: #10b981;
+    max-height: 120px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+    display: none;
+  }
+
+  .tm-empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #64748b;
+    font-size: 14px;
+  }
+</style>
+
+<div class="tm-driving-container">
+  <div id="tmLogBox" class="tm-log-box"></div>
+
+  <div id="tmDrivingList">
+    <div class="tm-empty-state">주행 기록을 불러오는 중입니다...</div>
+  </div>
+</div>
+
 <script>
-// ==========================================
-// 1. 주소 및 시간 가공 헬퍼 함수
-// ==========================================
+  // ----------------------------------------------------
+  // 1. [시간 및 운행일 계산 Helper] 5am 기준 & 25시 표기
+  // ----------------------------------------------------
 
-// 광역시/도 및 시 명칭 제거 (주소 간소화)
-function cleanAddress(addr) {
-  if (!addr) return '';
-  return String(addr)
-    .replace(/(서울특별시|경기도|인천광역시|부산광역시|대구광역시|광주광역시|대전광역시|울산광역시|세종특별자치시|제주특별자치도|강원특별자치도|전북특별자치도|충청북도|충청남도|전라북도|전라남도|경상북도|경상남도)/g, '')
-    .replace(/(고양시|성남시|수원시|용인시|부천시|안산시|안양시|청주시|천안시|전주시|포항시|창원시|화성시|파주시|김포시|광명시|군포시|이천시|양주시|구리시|안성시|하남시|의왕시|여주시|동두천시|과천시|남양주시)/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// 새벽 5시 기준 운행일 Date 객체 반환 (시간 - 5시간 차감)
-function getDrivingDateObj(dateStr) {
-  if (!dateStr) return new Date();
-  const dateVal = new Date(String(dateStr).replace(' ', 'T'));
-  if (isNaN(dateVal.getTime())) return new Date();
-  // 5시간 차감 (5 * 60 * 60 * 1000 ms)
-  return new Date(dateVal.getTime() - 18000000);
-}
-
-// 새벽 5시 기준 YYYY-MM-DD 키 추출
-function getDrivingDateStr(dateStr) {
-  const adjusted = getDrivingDateObj(dateStr);
-  const yyyy = adjusted.getFullYear();
-  const mm = String(adjusted.getMonth() + 1).padStart(2, '0');
-  const dd = String(adjusted.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-// 시각 표기 포맷터 (00시~04시 -> 24시~28시 표기)
-function formatDrivingTimeStr(dateStr) {
-  if (!dateStr) return '--:--';
-  const original = new Date(String(dateStr).replace(' ', 'T'));
-  if (isNaN(original.getTime())) return '--:--';
-
-  let hours = original.getHours();
-  const minutes = String(original.getMinutes()).padStart(2, '0');
-
-  // 새벽 00:00 ~ 04:59 범위인 경우 24시 ~ 28시로 표기
-  if (hours >= 0 && hours < 5) {
-    hours += 24;
+  // 타임스탬프에서 5시간을 차감하여 5am 기준 운행일 Date 객체 반환
+  function getDrivingDateObj(dateInput) {
+    if (!dateInput) return new Date();
+    const str = String(dateInput).replace(' ', 'T');
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return new Date();
+    // 5시간 차감 (5am ~ 익일 4:59am을 같은 날로 계산)
+    d.setHours(d.getHours() - 5);
+    return d;
   }
 
-  const period = hours >= 12 && hours < 24 ? '오후' : (hours >= 24 ? '새벽' : '오전');
-  let displayHours = hours;
-  if (hours > 12 && hours < 24) displayHours = hours - 12;
-  if (hours >= 24) displayHours = hours - 24;
-
-  return `${period} ${String(displayHours).padStart(2, '0')}:${minutes}`;
-}
-
-// driving_time 복구 및 분 단위 환산 함수 (NULL 완벽 대응)
-function getCalculatedDrivingTime(row) {
-  // 1순위: DB 컬럼 필드값 확인
-  let timeVal = row.driving_time ?? row.duration ?? row.duration_min ?? row.drive_time;
-  
-  if (timeVal !== null && timeVal !== undefined && !isNaN(timeVal) && Number(timeVal) > 0) {
-    timeVal = Number(timeVal);
-    // 초(sec) 단위로 들어왔을 경우 분으로 환산
-    return (timeVal > 300 && timeVal % 60 === 0) ? Math.round(timeVal / 60) : Math.round(timeVal);
+  // 운행일 날짜 문자열 반환 (YYYY-MM-DD)
+  function getDrivingDateStr(dateInput) {
+    const d = getDrivingDateObj(dateInput);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
 
-  // 2순위: start_time과 end_time 시간차 연산
-  if (row.start_time && row.end_time) {
-    const tStart = new Date(String(row.start_time).replace(' ', 'T'));
-    const tEnd = new Date(String(row.end_time).replace(' ', 'T'));
-    if (!isNaN(tStart.getTime()) && !isNaN(tEnd.getTime())) {
-      const diffMins = Math.round((tEnd - tStart) / (1000 * 60));
-      if (diffMins > 0) return diffMins;
+  // 헤더용 날짜 표기 (예: 7월 26일)
+  function formatDrivingDayHeader(dateStr) {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      return `${m}월 ${d}일`;
     }
+    return dateStr;
   }
 
-  // 3순위: location 좌표 배열 타임스탬프 차이 연산
-  if (Array.isArray(row.location) && row.location.length >= 2) {
-    const pFirst = row.location[0];
-    const pLast = row.location[row.location.length - 1];
-    const t1 = new Date(pFirst.time || pFirst.timestamp);
-    const t2 = new Date(pLast.time || pLast.timestamp);
-    if (!isNaN(t1.getTime()) && !isNaN(t2.getTime())) {
-      const diffMins = Math.round((t2 - t1) / (1000 * 60));
-      if (diffMins > 0) return diffMins;
+  // 시각 표기 로직 (새벽 00:00 ~ 04:59 ➔ 24시 ~ 28시 변환)
+  function formatDrivingTimeStr(dateInput) {
+    if (!dateInput) return '';
+    const str = String(dateInput).replace(' ', 'T');
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return '';
+
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+
+    // 새벽 0시 ~ 4시 사이라면 24 + Hour 로 환산
+    if (hours >= 0 && hours < 5) {
+      const convertedHour = 24 + hours;
+      return `${convertedHour}:${minutes}`;
     }
+
+    // 일반 시간 (오전 / 오후 HH:MM)
+    const ampm = hours >= 12 ? '오후' : '오전';
+    const displayHour = hours % 12 === 0 ? 12 : hours % 12;
+    return `${ampm} ${String(displayHour).padStart(2, '0')}:${minutes}`;
   }
 
-  return 0; // 연산 불가 시 0분
-}
+  // ----------------------------------------------------
+  // 2. [driving_time 파싱 및 DB 백그라운드 PATCH 함수]
+  // ----------------------------------------------------
 
-// 출발지 / 도착지 주소 정제 추출
-function getFormattedAddress(row) {
-  let start = row.start_dong || row.start_address || row.start_location;
-  let end = row.end_dong || row.end_address || row.end_location;
+  // driving_time / duration_min 추출 및 연산 함수
+  function parseDrivingTimeToMinutes(row, spUrl, spKey) {
+    let val = row.driving_time ?? row.duration_min ?? row.duration ?? row.drive_time;
 
-  start = start ? cleanAddress(start) : '출발지 미상';
-  end = end ? cleanAddress(end) : '도착지 미상';
-
-  return { start, end };
-}
-
-
-// ==========================================
-// 2. Supabase DB 조회 및 UI 렌더링
-// ==========================================
-
-async function fetchSupabaseData() {
-  const logBox = document.getElementById('tmLogBox');
-  const addLog = (msg) => {
-    if (logBox) {
-      logBox.innerHTML += `<div>${new Date().toLocaleTimeString()} - ${msg}</div>`;
-      logBox.scrollTop = logBox.scrollHeight;
+    // 초 단위 데이터 분 환산 체크
+    if (val && val > 300) {
+      val = Math.round(val / 60);
     }
-    console.log(msg);
-  };
 
-  addLog('🔄 Supabase 주행 데이터 수집 시작...');
+    // NULL, undefined, 또는 0인 경우 실시간 계산
+    if (!val || val === 0) {
+      if (row.start_time && row.end_time) {
+        const tStart = new Date(String(row.start_time).replace(' ', 'T'));
+        const tEnd = new Date(String(row.end_time).replace(' ', 'T'));
+        if (!isNaN(tStart.getTime()) && !isNaN(tEnd.getTime())) {
+          val = Math.max(1, Math.round((tEnd - tStart) / (1000 * 60)));
 
-  const spUrl = window.SUPABASE_URL || localStorage.getItem('tm_sp_url');
-  const spKey = window.SUPABASE_ANON_KEY || localStorage.getItem('tm_sp_key');
-
-  if (!spUrl || !spKey) {
-    addLog('❌ Supabase 설정 정보(URL/KEY)가 누락되었습니다.');
-    return;
-  }
-
-  try {
-    const response = await fetch(`${spUrl}/rest/v1/driving?select=*&order=start_time.desc`, {
-      method: 'GET',
-      headers: {
-        'apikey': spKey,
-        'Authorization': `Bearer ${spKey}`,
-        'Content-Type': 'application/json'
+          // Supabase DB에 백그라운드 PATCH 요청을 보내 NULL/0 값 보정
+          if (row.id && spUrl && spKey) {
+            patchMissingDrivingTime(row.id, val, spUrl, spKey);
+          }
+        }
       }
-    });
+    }
 
-    if (!response.ok) {
-      const errText = await response.text();
-      addLog(`❌ Supabase Fetch Error (driving) [HTTP ${response.status}]: ${errText}`);
+    return val || null;
+  }
+
+  // Supabase REST API로 missing driving_time 보정 PATCH 전송
+  async function patchMissingDrivingTime(rowId, calculatedMin, spUrl, spKey) {
+    if (!rowId || !calculatedMin || !spUrl || !spKey) return;
+    try {
+      const patchEndpoint = `${spUrl.replace(/\/$/, '')}/rest/v1/driving?id=eq.${rowId}`;
+      await fetch(patchEndpoint, {
+        method: 'PATCH',
+        headers: {
+          'apikey': spKey,
+          'Authorization': `Bearer ${spKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          driving_time: calculatedMin,
+          duration_min: calculatedMin
+        })
+      });
+      logToBox(`[Auto Patch] ID ${rowId} -> driving_time: ${calculatedMin}분 DB 보정 완료`);
+    } catch (err) {
+      logToBox(`[Auto Patch Error] ID ${rowId}: ${err.message}`);
+    }
+  }
+
+  // 시스템 로그 출력 함수
+  function logToBox(msg) {
+    console.log(msg);
+    const box = document.getElementById('tmLogBox');
+    if (box) {
+      box.style.display = 'block';
+      const timeStr = new Date().toLocaleTimeString();
+      box.innerHTML += `<div>[${timeStr}] ${msg}</div>`;
+      box.scrollTop = box.scrollHeight;
+    }
+  }
+
+  // ----------------------------------------------------
+  // 3. [메인 렌더링 함수] renderDrivingList
+  // ----------------------------------------------------
+  function renderDrivingList(drivingData, spUrl, spKey) {
+    const container = document.getElementById('tmDrivingList');
+    if (!container) return;
+
+    if (!drivingData || drivingData.length === 0) {
+      container.innerHTML = `<div class="tm-empty-state">표시할 주행 기록이 없습니다.</div>`;
       return;
     }
 
-    const drivingData = await response.json();
-    addLog(`✅ Supabase 주행 데이터 ${drivingData.length}건 조회 완료`);
+    // 1) 5am 운행일 기준으로 그룹핑
+    const grouped = {};
 
-    // 전역 변수 저장
-    window.tmDrivingData = drivingData;
-
-    // UI 렌더링 호출
-    renderDrivingList(drivingData);
-
-  } catch (err) {
-    addLog(`❌ 네트워크/스크립트 에러: ${err.message}`);
-  }
-}
-
-// 주행 데이터 리스트 화면 카드 출력 (5am 운행일 그룹핑 적용)
-function renderDrivingList(data) {
-  const container = document.getElementById('tmDrivingListContainer');
-  if (!container) return;
-
-  if (!data || data.length === 0) {
-    container.innerHTML = '<div style="text-align:center; padding: 40px; color: #888;">주행 데이터가 없습니다.</div>';
-    return;
-  }
-
-  // 1. 5am 기준 운행일별 그룹핑
-  const grouped = {};
-  data.forEach(row => {
-    const dateKey = getDrivingDateStr(row.start_time);
-    if (!grouped[dateKey]) grouped[dateKey] = [];
-    grouped[dateKey].push(row);
-  });
-
-  // 날짜 내림차순 정렬
-  const sortedDates = Object.keys(grouped).sort((a, b) => new Date(b) - new Date(a));
-
-  let html = '';
-
-  sortedDates.forEach(dateKey => {
-    const items = grouped[dateKey];
-    const dateParts = dateKey.split('-');
-    const displayHeaderDate = `${parseInt(dateParts[1])}월 ${parseInt(dateParts[2])}일`;
-
-    html += `
-      <div style="margin-bottom: 20px;">
-        <div style="font-size: 15px; font-weight: bold; color: #a1a1aa; margin: 12px 4px 8px 4px; display: flex; align-items: center; gap: 6px;">
-          <span>📅 ${displayHeaderDate}</span>
-        </div>
-    `;
-
-    items.forEach(row => {
-      const driveTimeMin = getCalculatedDrivingTime(row);
-      const timeStr = driveTimeMin > 0 ? `${driveTimeMin}분` : '-';
-      const formattedTime = formatDrivingTimeStr(row.start_time);
-      const { start, end } = getFormattedAddress(row);
-      const distance = row.distance ? Math.round(row.distance) : 0;
-      const batteryUsed = row.used_battery ? Math.abs(Math.round(row.used_battery)) : 0;
-      const totalDist = row.total_distance ? Number(row.total_distance).toLocaleString() : '-';
-
-      html += `
-        <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 14px; margin-bottom: 10px; color: #fff;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="background: #2563eb; color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: bold;">주행</span>
-              <span style="font-size: 14px; font-weight: 600; color: #f4f4f5;">${formattedTime}</span>
-            </div>
-            <div style="font-size: 14px; font-weight: bold; color: #38bdf8;">
-              ${start} <span style="color: #71717a;">➔</span> ${end}
-            </div>
-          </div>
-          <div style="font-size: 13px; color: #a1a1aa; display: flex; gap: 12px; flex-wrap: wrap;">
-            <span>주행 ${distance}km</span>
-            <span>시간 ${timeStr}</span>
-            <span>배터리 ${batteryUsed}%</span>
-            <span>총 주행거리 ${totalDist}km</span>
-          </div>
-        </div>
-      `;
+    drivingData.forEach((row) => {
+      const dateKey = getDrivingDateStr(row.start_time || row.created_at);
+      if (!grouped[dateKey]) {
+        grouped[dateKey] = [];
+      }
+      grouped[dateKey].push(row);
     });
 
-    html += `</div>`;
-  });
+    // 2) 날짜 내림차순 정렬 (최신 운행일이 맨 위로)
+    const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
-  container.innerHTML = html;
-}
+    let html = '';
+
+    sortedDates.forEach((dateKey) => {
+      const items = grouped[dateKey];
+      const headerText = formatDrivingDayHeader(dateKey);
+
+      html += `
+        <div class="tm-day-group">
+          <div class="tm-day-header">
+            <span class="tm-day-header-icon">📅</span>
+            <span>${headerText}</span>
+          </div>
+      `;
+
+      items.forEach((item) => {
+        const timeDisplay = formatDrivingTimeStr(item.start_time || item.created_at);
+        const durationMin = parseDrivingTimeToMinutes(item, spUrl, spKey);
+
+        // 주소 정제 (DB에 주소가 미존재 시 출발지 / 도착지 기본 처리)
+        const startAddr = item.start_dong || item.start_address || '출발지';
+        const endAddr = item.end_dong || item.end_address || '도착지';
+
+        const distanceKm = item.distance_km ? `${item.distance_km}km` : null;
+        const batteryUsed = (item.start_battery !== undefined && item.end_battery !== undefined)
+          ? `${Math.max(0, item.start_battery - item.end_battery)}%`
+          : null;
+
+        // 상세 텍스트 라인 조립
+        const detailsParts = [];
+        if (distanceKm) detailsParts.push(`주행 ${distanceKm}`);
+        
+        if (durationMin) {
+          detailsParts.push(`시간 <span class="tm-highlight-time">${durationMin}분</span>`);
+        } else {
+          detailsParts.push(`시간 -`);
+        }
+
+        if (batteryUsed) detailsParts.push(`배터리 ${batteryUsed}`);
+        if (item.end_odo) detailsParts.push(`총 주행거리 ${Number(item.end_odo).toLocaleString()}km`);
+
+        const detailsLine = detailsParts.join(', ');
+
+        html += `
+          <div class="tm-card">
+            <div class="tm-card-title-row">
+              <div>
+                <span class="tm-card-type-badge">🚘 주행</span>
+                <span class="tm-card-time">${timeDisplay}</span>
+              </div>
+              <div class="tm-card-route">
+                ${startAddr} ➔ ${endAddr}
+              </div>
+            </div>
+            <div class="tm-card-details">
+              ${detailsLine}
+            </div>
+          </div>
+        `;
+      });
+
+      html += `</div>`; // .tm-day-group
+    });
+
+    container.innerHTML = html;
+  }
+
+  // 외부 전역 호출 인터페이스 등록 (part3 / index 등에서 호출 가능)
+  window.initPart4DrivingList = function(data, supabaseUrl, supabaseKey) {
+    try {
+      renderDrivingList(data, supabaseUrl, supabaseKey);
+    } catch (e) {
+      logToBox(`❌ [part4] 렌더링 오류: ${e.message}`);
+    }
+  };
 </script>
