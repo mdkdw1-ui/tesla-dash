@@ -1,4 +1,3 @@
-    <!-- [메인 영역 2] 감시 가디언 -->
     <div id="main-panel-guardian" class="hidden space-y-4">
       <div class="card-dark p-4 rounded-2xl border border-red-500/30 space-y-4 shadow-xl">
         
@@ -22,63 +21,20 @@
         <div class="bg-[#0f1015] p-3 rounded-xl border border-gray-800 flex justify-between items-center">
           <div class="flex flex-col gap-1">
             <span class="text-[11px] text-gray-400">가디언 감시 상태</span>
-            <span class="text-[10px] text-gray-500" id="guardianLastCheck">마지막 확인: -</span>
+            <span class="text-[10px] text-gray-500 font-mono" id="guardian-status-detail">대기 중</span>
           </div>
-          <div id="vehicleStatusBadge" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-800 text-gray-400 border border-gray-700">
-            ❓ 로그인/데이터 필요
-          </div>
-        </div>
-
-        <div id="loginSection" class="space-y-2">
-          <label class="block text-xs text-gray-400">Tesla OAuth 계정 연동</label>
-          <button onclick="requestTeslaLogin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5">
-            🔐 테슬라 계정 로그인
-          </button>
-        </div>
-
-        <div id="tokenInfoSection" class="hidden space-y-3">
-          <div class="p-2.5 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-emerald-400 text-xs font-bold flex items-center justify-between">
-            <span class="flex items-center gap-1.5">✅ 테슬라 OAuth 로그인 완료</span>
-            <button onclick="fetchTeslaVehicles(accessToken)" class="text-[10px] underline text-emerald-300 hover:text-emerald-200">VIN/ID 동기화</button>
-          </div>
-          
-          <div id="vehicleInfoDisplay" class="p-2.5 bg-gray-800/60 border border-gray-700/60 rounded-xl text-xs space-y-1">
-            <div class="text-gray-400 text-[10px]">연동된 차량 정보</div>
-            <div class="font-mono text-gray-200" id="displayVin">VIN: -</div>
-            <div class="font-mono text-blue-400 font-bold" id="displayVehicleId">Vehicle ID: -</div>
-          </div>
-
-          <!-- Tesla Access Token 표시 영역 및 복사 버튼 -->
-          <div class="p-2.5 bg-gray-900 border border-gray-800 rounded-xl space-y-1.5">
-            <div class="flex justify-between items-center text-xs">
-              <span class="text-gray-400 font-bold text-[11px]">🔑 Tesla Access Token</span>
-              <button onclick="copyAccessToken()" class="text-[10px] text-blue-400 hover:text-blue-300 font-bold border border-blue-500/30 px-2 py-0.5 rounded bg-blue-500/10 transition">
-                📋 토큰 복사
-              </button>
-            </div>
-            <div id="displayAccessToken" class="p-2 bg-black/60 border border-gray-800 rounded-lg font-mono text-[10px] text-emerald-400 break-all select-all max-h-20 overflow-y-auto leading-relaxed">
-              -
-            </div>
+          <div id="guardian-badge" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-gray-800 text-gray-400 border border-gray-700">
+            OFF
           </div>
         </div>
 
-        <div class="space-y-1 text-xs">
-          <label class="block text-gray-400">모니터링 주기 (초)</label>
-          <input type="number" id="guardianPollInterval" value="5" min="2" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white font-mono">
-        </div>
-
-        <div class="flex gap-2 text-xs pt-1">
-          <button onclick="testFlashLights()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2 rounded-xl transition">⚡ 전조등 테스트</button>
-          <button onclick="testNtfy()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2 rounded-xl transition">📱 ntfy 테스트</button>
-        </div>
-
-        <div class="space-y-1">
+        <div class="space-y-2">
           <div class="flex justify-between items-center">
-            <span class="text-[10px] font-bold text-gray-500">실시간 작업 및 디버깅 로그</span>
-            <button onclick="clearLogBox()" class="text-[10px] text-gray-400 hover:text-white underline">로그 지우기</button>
+            <span class="text-xs font-bold text-gray-300">가디언 실행 로그</span>
+            <button onclick="clearLogs()" class="text-[10px] text-gray-500 hover:text-gray-300">로그 지우기</button>
           </div>
-          <div id="tmLogBox" class="bg-[#0b0c10] border border-gray-800/80 rounded-xl p-2.5 h-44 overflow-y-auto font-mono text-[11px] text-emerald-400 leading-relaxed">
-            <div class="tm-log-entry">[시스템] 가디언 디버깅 모드 준비 완료</div>
+          <div id="guardian-logs" class="bg-[#0b0c0e] p-3 rounded-xl border border-gray-800 font-mono text-[11px] h-48 overflow-y-auto space-y-1 text-gray-400">
+            <div>[시스템] 가디언 로그 준비됨.</div>
           </div>
         </div>
 
@@ -87,23 +43,31 @@
 
   </main>
 
-  <!-- 설정 모달 -->
-  <div id="modal-config" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-      <h3 class="text-base font-bold text-white">🔑 설정 정보 입력</h3>
-      <form onsubmit="saveConfig(event)" class="space-y-3 text-xs">
+  <div id="config-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-[#161820] border border-gray-800 w-full max-w-md rounded-2xl p-5 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-gear text-blue-400"></i> 애플리케이션 설정
+        </h3>
+        <button onclick="closeConfigModal()" class="text-gray-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
         <div>
-          <label class="block text-gray-400 mb-1">카카오맵 API Key</label>
-          <input type="text" id="input-kakao-key" required class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
+          <label class="block text-gray-400 mb-1">Kakao JavaScript App Key</label>
+          <input type="text" id="input-kakao-key" placeholder="카카오 지도 키" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
+
         <div>
           <label class="block text-gray-400 mb-1">Supabase URL</label>
-          <input type="url" id="input-supabase-url" required placeholder="https://xxx.supabase.co" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
+          <input type="text" id="input-supabase-url" placeholder="https://xxxx.supabase.co" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
+
         <div>
-          <label class="block text-gray-400 mb-1">Supabase Key (Anon 또는 Service Key)</label>
-          <input type="password" id="input-supabase-key" required class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
+          <label class="block text-gray-400 mb-1">Supabase Anon Key</label>
+          <input type="password" id="input-supabase-key" placeholder="eyJhbG..." class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
+
         <div>
           <label class="block text-gray-400 mb-1">GitHub Personal Access Token</label>
           <input type="password" id="input-gh-token" placeholder="ghp_xxxx..." class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
@@ -122,9 +86,37 @@
           <input type="text" id="input-ntfy-topic" placeholder="MJYAz6ZyjXiujaTDpJ" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white font-mono">
         </div>
         <div class="flex space-x-2 pt-2">
-          <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl transition">저장 및 적용</button>
-          <button type="button" onclick="closeConfigModal()" class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold py-2.5 rounded-xl transition">취소</button>
+          <button onclick="saveConfig()" class="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition">저장하기</button>
+          <button onclick="closeConfigModal()" class="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold rounded-xl transition">취소</button>
         </div>
-      </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="error-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4 hidden">
+    <div class="bg-[#161820] border border-red-500/50 w-full max-w-md rounded-2xl p-5 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-red-500/30 pb-3">
+        <h3 class="text-sm font-bold text-red-400 flex items-center gap-2">
+          <i class="fa-solid fa-triangle-exclamation"></i> <span id="err-modal-title">데이터 연동 오류</span>
+        </h3>
+        <button onclick="closeErrorModal()" class="text-gray-400 hover:text-white text-lg">✕</button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <div class="bg-[#0b0c0e] p-3 rounded-xl border border-gray-800 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-gray-400 font-semibold">에러 코드:</span>
+            <span id="err-modal-code" class="text-red-400 font-mono font-bold">[ERR_SYNC_000]</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-gray-400 font-semibold">발생 구간:</span>
+            <span id="err-modal-stage" class="text-amber-400 font-mono">teslacam-93532 ➔ Supabase ➔ App</span>
+          </div>
+        </div>
+        <div>
+          <label class="block text-gray-400 mb-1 font-semibold">상세 메시지:</label>
+          <pre id="err-modal-detail" class="w-full bg-[#0b0c0e] p-2.5 rounded border border-gray-800 text-gray-300 font-mono text-[11px] whitespace-pre-wrap break-all max-h-40 overflow-y-auto"></pre>
+        </div>
+        <button onclick="closeErrorModal()" class="w-full py-2.5 bg-red-600/30 hover:bg-red-600/50 text-red-200 border border-red-500/50 font-bold rounded-xl transition">확인</button>
+      </div>
     </div>
   </div>
