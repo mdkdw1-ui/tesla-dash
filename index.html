@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.15</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.5</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -2064,21 +2064,31 @@ const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(r
               const batText = t.useBattery ? `-${t.useBattery.toFixed(1)}%` : '-';
 
               // 팝업 내부 HTML 디자인 (다크 모드 감성)
-              const content = `
-                <div style="padding:12px 14px; background:#0f172a; color:#f3f4f6; border:1px solid rgba(59,130,246,0.5); border-radius:12px; font-size:12px; min-width:210px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.5);">
-                  <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
+                            const content = `
+                <div style="padding:14px; background:#0f172a; color:#f3f4f6; border:1px solid rgba(59,130,246,0.5); border-radius:12px; font-size:12px; min-width:240px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.5);">
+                  <div style="font-weight:bold; color:#60a5fa; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
                     <span>🚗 주행 상세 정보</span>
                     <span style="font-size:10px; color:#9ca3af;">${tripDate}</span>
                   </div>
-                  <div style="margin-bottom:4px;"><b>출발:</b> ${startText}</div>
-                  <div style="margin-bottom:6px;"><b>도착:</b> ${endText}</div>
-                  <div style="display:flex; justify-content:space-between; background:rgba(255,255,255,0.05); padding:6px 8px; border-radius:6px; margin-top:4px;">
-                    <span>거리: <b>${distText}</b></span>
-                    <span>시간: <b>${timeText}</b></span>
-                    <span>배터리: <b style="color:#f87171;">${batText}</b></span>
+                  <div style="margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><b>출발:</b> ${startText}</div>
+                  <div style="margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><b>도착:</b> ${endText}</div>
+                  <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; background:rgba(255,255,255,0.05); padding:8px; border-radius:8px; text-align:center;">
+                    <div>
+                      <div style="font-size:10px; color:#9ca3af; margin-bottom:2px;">거리</div>
+                      <div style="font-weight:bold; font-size:11px; white-space:nowrap;">${distText}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:#9ca3af; margin-bottom:2px;">시간</div>
+                      <div style="font-weight:bold; font-size:11px; white-space:nowrap;">${timeText}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:#9ca3af; margin-bottom:2px;">소모량</div>
+                      <div style="font-weight:bold; font-size:11px; color:#f87171; white-space:nowrap;">${batText}</div>
+                    </div>
                   </div>
                 </div>
               `;
+
 
               // 클릭한 지점(또는 경로 중간 지점)에 인포윈도우 생성
               currentInfoWindow = new kakao.maps.InfoWindow({
