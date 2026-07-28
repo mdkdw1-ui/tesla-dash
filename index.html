@@ -2079,14 +2079,13 @@ checkTeslaAuth();
             plugins: { legend: { display: false } },
             scales: {
               x: { display: false },
-              // 기존 2082줄의 y: { ... } 전체를 아래처럼 변경합니다.
-y: { 
-  min: Math.floor(Math.min(...degData) - 1), 
-  max: 100, 
-  grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
-  ticks: { color: '#9ca3af', stepSize: 1 } 
-}
-}
+              y: { 
+                min: Math.floor(Math.min(...degData) - 1), 
+                max: 100, 
+                grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
+                ticks: { color: '#9ca3af', stepSize: 1 } 
+              }
+            }
           }
         });
       }
@@ -2112,25 +2111,21 @@ y: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-scales: {
-  x: { display: false },
-// 두 번째 차트의 y: { ... } 부분 변경
-y: { 
-  min: Math.floor(Math.min(...rangeData) - 20),
-  max: Math.ceil(Math.max(...rangeData) + 20),
-  grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
-  ticks: { color: '#9ca3af' } 
-}
-
-    // 데이터 변동폭이 잘 보이도록 자동 스케일링 설정
-    grace: '10%' // 데이터 최저/최고값 대비 위아래 10% 여백만 두고 Y축을 확대
-  }
-}
-
+            scales: {
+              x: { display: false },
+              y: { 
+                min: Math.floor(Math.min(...rangeData) - 20),
+                max: Math.ceil(Math.max(...rangeData) + 20),
+                grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
+                ticks: { color: '#9ca3af' },
+                grace: '10%'
+              }
+            }
           }
         });
       }
     }
+
   </script>
 </body>
 </html>
