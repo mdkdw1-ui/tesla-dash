@@ -2286,7 +2286,7 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
 
       // 전체 데이터를 최신순으로 정렬한 뒤 최근 50개 추출
 const sortedRows = [...vehicleRows].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-const recent50 = sortedRows.slice(0, 50).reverse(); // 시간순 정렬로 복원하여 차트에 표시
+const recent50 = sortedRows.slice(0, 300).reverse(); // 시간순 정렬로 복원하여 차트에 표시
 
       const labels = recent50.map(v => {
         const d = new Date(v.updated_at);
