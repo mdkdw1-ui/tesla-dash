@@ -2254,13 +2254,13 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
     }
 
     // 1-4. 배터리 차트 (최근 50개 데이터 동기화 시각화)
-        function renderBatteryCharts() {
+            function renderBatteryCharts() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
       const recent50 = vehicleRows.slice(0, 50).reverse();
       const labels = recent50.map(v => {
         const d = new Date(v.updated_at);
-        return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
       });
 
       const degData = recent50.map(v => {
@@ -2307,36 +2307,34 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
             }]
           },
           options: {
-                  // 1. 열화율 차트 옵션 부분 수정
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { 
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: 'rgba(15, 17, 23, 0.9)',
-            titleColor: '#f3f4f6',
-            bodyColor: '#818cf8',
-            borderColor: 'rgba(99, 102, 241, 0.3)',
-            borderWidth: 1,
-            padding: 10,
-            displayColors: false
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { 
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: 'rgba(15, 17, 23, 0.9)',
+                titleColor: '#f3f4f6',
+                bodyColor: '#818cf8',
+                borderColor: 'rgba(99, 102, 241, 0.3)',
+                borderWidth: 1,
+                padding: 10,
+                displayColors: false
+              }
+            },
+            scales: {
+              x: { 
+                display: true, // X축 날짜 표시 켜기
+                grid: { display: false },
+                ticks: { color: '#9ca3af', font: { size: 10 }, maxTicksLimit: 6 }
+              },
+              y: { 
+                min: 94, 
+                max: 100, 
+                grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
+                ticks: { color: '#9ca3af', stepSize: 2 }
+              }
+            }
           }
-        },
-        scales: {
-          x: { 
-            display: true, // 👈 X축 날짜 표시 켜기
-            grid: { display: false },
-            ticks: { color: '#9ca3af', font: { size: 10 }, maxTicksLimit: 6 } // 겹치지 않게 최대 6개 정도만 표시
-          },
-          y: { 
-            min: 94, max: 100, // 사진처럼 94%~100% 고정 척도 적용
-            grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
-            ticks: { color: '#9ca3af', stepSize: 2 }
-          }
-        }
-      }
-
         });
       }
 
@@ -2378,7 +2376,11 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
               }
             },
             scales: {
-              x: { display: true },
+              x: { 
+                display: true, // 주행거리 그래프도 X축 날짜 표시 켜기
+                grid: { display: false },
+                ticks: { color: '#9ca3af', font: { size: 10 }, maxTicksLimit: 6 }
+              },
               y: { 
                 min: Math.floor(minRange - 15),
                 max: Math.ceil(maxRange + 15),
@@ -2394,4 +2396,4 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
 
   </script>
 </body>
-                                                                                                                                                                        </html>
+</html>
