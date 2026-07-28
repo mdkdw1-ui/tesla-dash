@@ -1836,14 +1836,18 @@ async function exchangeTeslaToken(code) {
             const timeStr = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
             const kwh = ((t.useBattery / 100) * 60);
             const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
-   // [수정 후] vehicle 테이블의 outside_temp와 시간대별 매칭 및 안전한 파싱
+   // [수정 후] driving과 vehicle 양쪽 모두에서 외기 온도 탐색
 let rawT = t.raw_data;
 if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
 
-// 1차로 driving 자체 데이터에서 온도 탐색
-let resolvedTemp = t.outsideTemp ?? t.outside_temp ?? rawT?.climate_state?.outside_temp ?? rawT?.outside_temp;
+// 1차: driving 테이블 자체의 외기 온도 컬럼 및 raw_data 탐색
+let resolvedTemp = 
+  t.outside_temp ?? 
+  t.outsideTemp ?? 
+  rawT?.climate_state?.outside_temp ?? 
+  rawT?.outside_temp;
 
-// 2차로 driving에 온도가 없다면, vehicleRows에서 시간대가 가장 근접한 outside_temp 값을 매칭
+// 2차: driving에 온도가 없다면, 기존 방식대로 vehicleRows에서 가장 가까운 시점의 온도 매칭
 if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
   const tripTime = new Date(t.timestamp).getTime();
   if (!isNaN(tripTime)) {
@@ -1865,6 +1869,7 @@ if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp))
 const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp) && Number(resolvedTemp) !== 0) 
   ? `${Math.round(Number(resolvedTemp))}°C` 
   : '-';
+
 
 
             
