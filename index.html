@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.2</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.3</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -1836,18 +1836,30 @@ async function exchangeTeslaToken(code) {
             const timeStr = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
             const kwh = ((t.useBattery / 100) * 60);
             const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
-            // 변경 후 (raw_data 안의 온도까지 이중 체크)
-// [수정 후]
+            // [수정 후]
 let rawT = t.raw_data;
 if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
 
-// driving, vehicle 테이블 및 중첩된 raw_data 구조에서 외기 온도 필드를 순차적으로 탐색
-const resolvedTemp = 
-  t.outsideTemp ?? 
-  t.outside_temp ?? 
-  rawT?.climate_state?.outside_temp ?? 
-  rawT?.outside_temp ?? 
-  rawT?.vehicle_state?.outside_temp;
+// 1차로 driving 자체 데이터 및 raw_data에서 온도 탐색
+let resolvedTemp = t.outsideTemp ?? t.outside_temp ?? rawT?.climate_state?.outside_temp ?? rawT?.outside_temp;
+
+// 2차로 driving에 온도가 없다면, vehicleRows에서 시간대가 가장 근접한 outside_temp 값을 매칭
+if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
+  const tripTime = new Date(t.timestamp).getTime();
+  let closestVehicle = vehicleRows.reduce((prev, curr) => {
+    const prevDiff = Math.abs(new Date(prev.updated_at).getTime() - tripTime);
+    const currDiff = Math.abs(new Date(curr.updated_at).getTime() - tripTime);
+    return currDiff < prevDiff ? curr : prev;
+  });
+  
+  if (closestVehicle) {
+    resolvedTemp = closestVehicle.outside_temp ?? (() => {
+      let vRaw = closestVehicle.raw_data;
+      if (typeof vRaw === 'string') { try { vRaw = JSON.parse(vRaw); } catch(e){} }
+      return vRaw?.climate_state?.outside_temp ?? vRaw?.outside_temp;
+    })();
+  }
+}
 
 const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp)) 
   ? `${Math.round(Number(resolvedTemp))}°C` 
@@ -2244,4 +2256,4 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
 
   </script>
 </body>
-  </html>
+</html>
