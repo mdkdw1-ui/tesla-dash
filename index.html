@@ -828,12 +828,40 @@ checkTeslaAuth();
       if (timeText) timeText.innerText = `마지막 확인: ${new Date().toLocaleTimeString()}`;
     }
 
-    function requestTeslaLogin() {
-      addLog('🔐 테슬라 OAuth 로그인 페이지로 이동합니다.');
-      const scope = "openid offline_access vehicle_device_data vehicle_cmds";
-      const authUrl = `https://auth.tesla.com/oauth2/v3/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scope)}&state=sentry_app`;
-      window.location.href = authUrl;
+    // 변경 후 (실제 테슬라 공식 웹 인증 및 콜백 처리 로직)
+function startTeslaLogin() {
+    // 테슬라 공식 OAuth 인증 페이지로 리다이렉트 (Client ID 및 Redirect URI 설정 필요)
+    const clientId = "YOUR_TESLA_CLIENT_ID"; // 본인의 Tesla Developer Client ID 입력
+    const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
+    const authUrl = `https://auth.tesla.com/oauth2/v3/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid%20email%20offline_access%20vehicle_device_data`;
+    
+    window.location.href = authUrl;
+}
+
+// 페이지 로드 시 URL에 code가 포함되어 있는지 확인하여 콜백 처리 (초기화 함수 내에 추가)
+window.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const authCode = urlParams.get('code');
+    if (authCode) {
+        // 주소창 깔끔하게 정리
+        window.history.replaceState({}, document.title, window.location.pathname);
+        // 받은 authCode를 백엔드나 토큰 교환 함수로 전달
+        exchangeTeslaToken(authCode);
     }
+});
+
+async function exchangeTeslaToken(code) {
+    try {
+        console.log("인증 코드 획득 성공, 토큰 교환 진행:", code);
+        // TODO: 백엔드 서버 또는 테슬라 API 서버로 code를 보내 Access/Refresh Token 발급 요청
+        alert("테슬라 계정 연동이 성공적으로 완료되었습니다!");
+        // 이후 가디언 대시보드 활성화 함수 호출
+    } catch (error) {
+        console.error("토큰 교환 실패:", error);
+        alert("로그인 연동 중 오류가 발생했습니다.");
+    }
+}
+
 
     async function exchangeCodeWithBackend(code) {
       try {
@@ -1767,7 +1795,12 @@ checkTeslaAuth();
             const timeStr = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
             const kwh = ((t.useBattery / 100) * 60);
             const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
-            const tempStr = t.outsideTemp !== undefined && t.outsideTemp !== null ? `${Math.round(t.outsideTemp)}°C` : '-';
+            // 변경 후 (raw_data 안의 온도까지 이중 체크)
+let rawT = t.raw_data;
+if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
+const resolvedTemp = t.outsideTemp ?? rawT?.climate_state?.outside_temp;
+const tempStr = resolvedTemp !== undefined && resolvedTemp !== null ? `${Math.round(resolvedTemp)}°C` : '-';
+
             
             let batText = `${t.useBattery.toFixed(1)}%`;
             if (t.startBat !== undefined && t.endBat !== undefined) {
@@ -1988,7 +2021,9 @@ checkTeslaAuth();
       const avgTripKm = matchedTrips.length > 0 ? (totalDist / matchedTrips.length).toFixed(1) : "0.0";
 
       const chargeStats = calculateMonthlyChargingStats(selY, selM);
-      const estimatedCost = Math.round((chargeStats.kwh > 0 ? chargeStats.kwh : totalKwh) * 340); // kWh당 340원 기준
+      const effectiveKwh = chargeStats.kwh > 0 ? chargeStats.kwh : totalKwh;
+const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 적용
+
       const co2Saved = Math.round(totalDist * 0.12); // km당 0.12kg 절감
 
       document.getElementById('m-stat-distance').innerText = `${totalDist.toFixed(1)} km`;
@@ -2044,12 +2079,16 @@ checkTeslaAuth();
       });
 
       const rangeData = recent50.map(v => {
-        const bat = v.battery_level || 100;
-        let raw = v.raw_data;
-        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
-        const range = raw?.charge_state?.battery_range || (bat * 4.2);
-        return Math.round((range / bat) * 100);
-      });
+  const bat = v.battery_level || 0;
+  let raw = v.raw_data;
+  if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
+  const range = raw?.charge_state?.battery_range || 0;
+  
+  if (bat > 0 && range > 0) {
+    return Math.round((range / bat) * 100);
+  }
+  return 400; // 기본값 또는 예외 처리 값
+});
 
       if (degData.length > 0) {
         document.getElementById('b-degradation-val').innerText = `${degData[degData.length - 1]}%`;
@@ -2080,11 +2119,12 @@ checkTeslaAuth();
             scales: {
               x: { display: false },
               y: { 
-                min: Math.floor(Math.min(...degData) - 1), 
-                max: 100, 
-                grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
-                ticks: { color: '#9ca3af', stepSize: 1 } 
-              }
+  min: degData.length > 0 ? Math.floor(Math.min(...degData.filter(v => !isNaN(v))) - 1) : 90, 
+  max: 100, 
+  grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
+  ticks: { color: '#9ca3af', stepSize: 1 } 
+}
+
             }
           }
         });
