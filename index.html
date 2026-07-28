@@ -684,9 +684,14 @@
       document.getElementById('modal-config').classList.add('hidden');
     }
 
-    function switchMainTab(mainTab) {
+        function switchMainTab(mainTab, pushHistory = true) {
       currentMainTab = mainTab;
       localStorage.setItem('tesla_main_tab', mainTab);
+
+      // 사용자가 직접 탭을 눌러서 이동한 경우에만 히스토리 기록
+      if (pushHistory) {
+        history.pushState({ tab: mainTab, sub: currentSubTab }, '', '');
+      }
 
       document.getElementById('main-panel-monitor').classList.toggle('hidden', mainTab !== 'monitor');
       document.getElementById('main-panel-guardian').classList.toggle('hidden', mainTab !== 'guardian');
@@ -700,13 +705,17 @@
         : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
 
       if (mainTab === 'monitor') {
-        switchSubTab(currentSubTab);
+        switchSubTab(currentSubTab, false); // 서브탭 이동 시에도 히스토리 중복 방지
       }
     }
 
-    function switchSubTab(subTab) {
+    function switchSubTab(subTab, pushHistory = true) {
       currentSubTab = subTab;
       localStorage.setItem('tesla_sub_tab', subTab);
+
+      if (pushHistory) {
+        history.pushState({ tab: currentMainTab, sub: subTab }, '', '');
+      }
 
       ['vehicle', 'driving', 'monthly', 'battery'].forEach(t => {
         const panel = document.getElementById(`sub-panel-${t}`);
@@ -719,6 +728,21 @@
             : "py-2.5 rounded-xl text-gray-400 hover:text-white transition";
         }
       });
+    }
+
+    // ✅ 뒤로가기(←) 버튼 감지 리스너는 함수 바깥(전역)에 독립적으로 위치해야 합니다!
+    window.addEventListener('popstate', function(event) {
+      if (event.state && event.state.tab) {
+        // 뒤로가기로 이동할 때는 히스토리를 다시 쌓지 않도록 false 전달
+        switchMainTab(event.state.tab, false);
+        if (event.state.sub && typeof switchSubTab === 'function') {
+          switchSubTab(event.state.sub, false);
+        }
+      } else {
+        switchMainTab('monitor', false); // 기본값
+      }
+    });
+
 
       if (subTab === 'driving' && map) {
         setTimeout(() => {
@@ -2257,7 +2281,10 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
             function renderBatteryCharts() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
-      const recent50 = vehicleRows.slice(0, 50).reverse();
+      // 전체 데이터를 최신순으로 정렬한 뒤 최근 50개 추출
+const sortedRows = [...vehicleRows].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+const recent50 = sortedRows.slice(0, 50).reverse(); // 시간순 정렬로 복원하여 차트에 표시
+
       const labels = recent50.map(v => {
         const d = new Date(v.updated_at);
         return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
@@ -2393,7 +2420,18 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
       }
     }
 
+    // ✅ 브라우저 뒤로가기(←) 버튼 감지 리스너는 스크립트 하단 전역에 배치
+    window.addEventListener('popstate', function(event) {
+      if (event.state && event.state.tab) {
+        // 기록된 이전 상태가 있다면 그 탭/서브탭으로 복원
+        // 주의: 기존 코드에서 서브탭 인자가 subTab이 아니라 다른 변수명(예: subTabName 등)이라면 맞추어 쓰세요.
+        switchMainTab(event.state.tab, event.state.sub);
+      } else {
+        // 기록이 없다면 기본 대시보드나 첫 화면으로
+        switchMainTab('dashboard', 'driving');
+      }
+    });
 
   </script>
 </body>
-</html>
+  </html>
