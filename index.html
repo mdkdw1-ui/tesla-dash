@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.0</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.11</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -505,7 +505,6 @@
   </div>
 
   <script>
-  let currentInfoWindow = null; 
     const SECRET_SALT = "Tesla_Supabase_Dashboard_2026";
     let configObj = { 
       kakaoKey: '159c5d7588efc5939d431f005912f9f3', 
@@ -2201,7 +2200,7 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
     }
 
     // 1-4. 배터리 차트 (최근 50개 데이터 동기화 시각화)
-    function renderBatteryCharts() {
+        function renderBatteryCharts() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
       const recent50 = vehicleRows.slice(0, 50).reverse();
@@ -2216,110 +2215,26 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
         return v.soh || raw?.charge_state?.battery_soh || 98.5;
       });
 
-        const rangeData = recent50.map(v => {
-    const bat = v.battery_level || 0;
-    let raw = v.raw_data;
-    if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
-    const range = raw?.charge_state?.battery_range || 0;
-    
-    if (bat > 0 && range > 0) {
-      return Math.round((range / bat) * 100);
-    }
-    return 400; // 기본값 또는 예외 처리 값
-  });
-
-  if (degData.length > 0) {
-    const degEl = document.getElementById('b-degradation-val');
-    const rangeEl = document.getElementById('b-est-range-val');
-    if (degEl) degEl.innerText = `${degData[degData.length - 1]}%`;
-    if (rangeEl) rangeEl.innerText = `${rangeData[rangeData.length - 1]} km`;
-  }
-
-  try {
-    if (window.chartDegRec) window.chartDegRec.destroy();
-  } catch(e) {}
-
-  const ctxDeg = document.getElementById('chartDegradationRecent')?.getContext('2d');
-  if (ctxDeg && degData.length > 0) {
-    window.chartDegRec = new Chart(ctxDeg, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: '열화율 (%)',
-          data: degData,
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 2
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { display: false },
-          y: { 
-            min: Math.max(85, Math.floor(Math.min(...degData.filter(v => !isNaN(v))) - 0.5)), 
-            max: 100, 
-            grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
-            ticks: { color: '#9ca3af', stepSize: 0.5 }
-          }
+      const rangeData = recent50.map(v => {
+        const bat = v.battery_level || 0;
+        let raw = v.raw_data;
+        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
+        const range = raw?.charge_state?.battery_range || 0;
+        
+        if (bat > 0 && range > 0) {
+          return Math.round((range / bat) * 100);
         }
-      }
-    });
-  }
-
-  try {
-    if (window.chartRangeRec) window.chartRangeRec.destroy();
-  } catch(e) {}
-
-  const ctxRange = document.getElementById('chartRangeRecent')?.getContext('2d');
-  if (ctxRange && rangeData.length > 0) {
-    const validRanges = rangeData.filter(v => !isNaN(v));
-    const minRange = validRanges.length > 0 ? Math.min(...validRanges) : 350;
-    const maxRange = validRanges.length > 0 ? Math.max(...validRanges) : 450;
-
-    window.chartRangeRec = new Chart(ctxRange, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: '100% 주행거리 (km)',
-          data: rangeData,
-          borderColor: '#10b981',
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 2
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { display: false },
-          y: { 
-            min: Math.floor(minRange - 15),
-            max: Math.ceil(maxRange + 15),
-            grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
-            ticks: { color: '#9ca3af' }
-          }
-        }
-      }
-    });
-  }
-
+        return 400; 
+      });
 
       if (degData.length > 0) {
-        document.getElementById('b-degradation-val').innerText = `${degData[degData.length - 1]}%`;
-        document.getElementById('b-est-range-val').innerText = `${rangeData[rangeData.length - 1]} km`;
+        const degEl = document.getElementById('b-degradation-val');
+        const rangeEl = document.getElementById('b-est-range-val');
+        if (degEl) degEl.innerText = `${degData[degData.length - 1]}%`;
+        if (rangeEl) rangeEl.innerText = `${rangeData[rangeData.length - 1]} km`;
       }
 
-      // [수정 후]
+      // 1. 열화율 차트 렌더링
       if (chartDegRec) chartDegRec.destroy();
       const ctxDeg = document.getElementById('chartDegradationRecent')?.getContext('2d');
       if (ctxDeg) {
@@ -2358,17 +2273,21 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
                 min: degData.length > 0 ? Math.max(85, Math.floor(Math.min(...degData.filter(v => !isNaN(v))) - 0.5)) : 90, 
                 max: 100, 
                 grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
-                ticks: { color: '#9ca3af', stepSize: 0.5 },
-                grace: '5%' 
+                ticks: { color: '#9ca3af', stepSize: 0.5 }
               }
             }
           }
         });
       }
 
+      // 2. 주행거리 차트 렌더링
       if (chartRangeRec) chartRangeRec.destroy();
       const ctxRange = document.getElementById('chartRangeRecent')?.getContext('2d');
       if (ctxRange) {
+        const validRanges = rangeData.filter(v => !isNaN(v));
+        const minRange = validRanges.length > 0 ? Math.min(...validRanges) : 350;
+        const maxRange = validRanges.length > 0 ? Math.max(...validRanges) : 450;
+
         chartRangeRec = new Chart(ctxRange, {
           type: 'line',
           data: {
@@ -2401,19 +2320,18 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
             scales: {
               x: { display: false },
               y: { 
-                min: Math.floor(Math.min(...rangeData) - 15),
-                max: Math.ceil(Math.max(...rangeData) + 15),
+                min: Math.floor(minRange - 15),
+                max: Math.ceil(maxRange + 15),
                 grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
-                ticks: { color: '#9ca3af' },
-                grace: '15%'
+                ticks: { color: '#9ca3af' }
               }
             }
           }
         });
       }
-
     }
+
 
   </script>
 </body>
-              </html>
+</html>
