@@ -529,6 +529,25 @@
     window.addEventListener('DOMContentLoaded', () => {
       document.addEventListener('visibilitychange', handleAppVisibilityChange);
 
+// 페이지 로드 시 테슬라 로그인 상태 확인
+function checkTeslaAuth() {
+  const token = localStorage.getItem('tesla_access_token'); // 저장된 토큰 확인
+  const guardianPanel = document.getElementById('guardianContent'); // 감시 가디언 패널 ID
+  const loginModal = document.getElementById('teslaLoginModal'); // 로그인 모달 ID
+
+  if (!token) {
+    // 로그인이 안 되어 있는 경우: 로그인 안내 모달 표시 및 주요 기능 가리기
+    if (loginModal) loginModal.classList.remove('hidden');
+    showNotification('테슬라 계정 로그인이 필요합니다.', 'warning');
+  } else {
+    // 로그인 되어 있는 경우
+    if (loginModal) loginModal.classList.add('hidden');
+  }
+}
+
+// 초기화 시 실행
+checkTeslaAuth();
+
       if (accessToken) {
         document.getElementById('loginSection')?.classList.add('hidden');
         document.getElementById('tokenInfoSection')?.classList.remove('hidden');
@@ -2060,8 +2079,14 @@
             plugins: { legend: { display: false } },
             scales: {
               x: { display: false },
-              y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af', font: { size: 10 } } }
-            }
+              // 기존 2082줄의 y: { ... } 전체를 아래처럼 변경합니다.
+y: { 
+  min: Math.floor(Math.min(...degData) - 1), 
+  max: 100, 
+  grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
+  ticks: { color: '#9ca3af', stepSize: 1 } 
+}
+}
           }
         });
       }
@@ -2087,10 +2112,21 @@
             responsive: true,
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: {
-              x: { display: false },
-              y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af', font: { size: 10 } } }
-            }
+scales: {
+  x: { display: false },
+// 두 번째 차트의 y: { ... } 부분 변경
+y: { 
+  min: Math.floor(Math.min(...rangeData) - 20),
+  max: Math.ceil(Math.max(...rangeData) + 20),
+  grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
+  ticks: { color: '#9ca3af' } 
+}
+
+    // 데이터 변동폭이 잘 보이도록 자동 스케일링 설정
+    grace: '10%' // 데이터 최저/최고값 대비 위아래 10% 여백만 두고 Y축을 확대
+  }
+}
+
           }
         });
       }
