@@ -1762,15 +1762,65 @@ async function exchangeTeslaToken(code) {
       });
 
       const polyline = new kakao.maps.Polyline({
-        path: pathPoints,
-        strokeWeight: 6,
-        strokeColor: '#ef4444',
-        strokeOpacity: 0.95,
-        strokeStyle: 'solid'
-      });
+  path: pathPoints,
+  strokeWeight: 6,
+  strokeColor: '#ef4444',
+  strokeOpacity: 0.95,
+  strokeStyle: 'solid'
+});
 
-      polyline.setMap(map);
-      currentPolylines.push(polyline);
+polyline.setMap(map);
+currentPolylines.push(polyline);
+
+// 경로(선) 클릭 시 관련 정보 팝업 띄우기
+kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
+  if (typeof currentInfoWindow !== 'undefined' && currentInfoWindow) currentInfoWindow.close();
+
+  // 외기 온도 파싱 (driving 또는 vehicle 연동 값 활용)
+  let rawT = t.raw_data;
+  if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
+  let resolvedTemp = t.outside_temp ?? t.outsideTemp ?? rawT?.climate_state?.outside_temp ?? rawT?.outside_temp;
+  
+  if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
+    const tripTime = new Date(t.timestamp).getTime();
+    let validVehicles = vehicleRows.filter(v => v.outside_temp !== null && v.outside_temp !== undefined);
+    if (validVehicles.length > 0) {
+      let closestVehicle = validVehicles.reduce((prev, curr) => {
+        return Math.abs(new Date(curr.updated_at).getTime() - tripTime) < Math.abs(new Date(prev.updated_at).getTime() - tripTime) ? curr : prev;
+      });
+      if (closestVehicle) resolvedTemp = closestVehicle.outside_temp;
+    }
+  }
+  const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp)) ? `${Math.round(Number(resolvedTemp))}°C` : '-';
+
+  const timeStr = new Date(t.timestamp).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const kwh = ((t.useBattery / 100) * 60);
+  const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
+
+  const content = `
+    <div style="padding:12px; background:#0f1117; color:#f3f4f6; border:1px solid #374151; border-radius:12px; font-size:12px; width:220px; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
+      <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; border-bottom:1px solid #1f2937; padding-bottom:4px;">
+        🚗 주행 상세 정보
+      </div>
+      <div style="margin-bottom:3px;"><b>시각:</b> ${timeStr}</div>
+      <div style="margin-bottom:3px;"><b>출발:</b> ${t.startDong || '출발지'}</div>
+      <div style="margin-bottom:3px;"><b>도착:</b> ${t.endDong || '도착지'}</div>
+      <div style="margin-bottom:3px;"><b>거리/시간:</b> ${t.moveKM.toFixed(1)}km / ${t.durationMin}분</div>
+      <div style="margin-bottom:3px;"><b>배터리 소모:</b> ${t.useBattery.toFixed(1)}%</div>
+      <div style="margin-bottom:3px;"><b>외기 온도:</b> 🌡️ ${tempStr}</div>
+      <div><b>전비:</b> ⚡ ${eff} km/kWh</div>
+    </div>
+  `;
+
+  currentInfoWindow = new kakao.maps.InfoWindow({
+    content: content,
+    position: mouseEvent.latLng,
+    removable: true
+  });
+
+  currentInfoWindow.open(map);
+});
+
       map.setBounds(bounds);
     }
 
