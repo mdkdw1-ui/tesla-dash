@@ -2307,30 +2307,36 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
             }]
           },
           options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { 
-              legend: { display: false },
-              tooltip: {
-                backgroundColor: 'rgba(15, 17, 23, 0.9)',
-                titleColor: '#f3f4f6',
-                bodyColor: '#818cf8',
-                borderColor: 'rgba(99, 102, 241, 0.3)',
-                borderWidth: 1,
-                padding: 10,
-                displayColors: false
-              }
-            },
-            scales: {
-              x: { display: false },
-              y: { 
-                min: degData.length > 0 ? Math.max(85, Math.floor(Math.min(...degData.filter(v => !isNaN(v))) - 0.5)) : 90, 
-                max: 100, 
-                grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
-                ticks: { color: '#9ca3af', stepSize: 0.5 }
-              }
-            }
+                  // 1. 열화율 차트 옵션 부분 수정
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { 
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(15, 17, 23, 0.9)',
+            titleColor: '#f3f4f6',
+            bodyColor: '#818cf8',
+            borderColor: 'rgba(99, 102, 241, 0.3)',
+            borderWidth: 1,
+            padding: 10,
+            displayColors: false
           }
+        },
+        scales: {
+          x: { 
+            display: true, // 👈 X축 날짜 표시 켜기
+            grid: { display: false },
+            ticks: { color: '#9ca3af', font: { size: 10 }, maxTicksLimit: 6 } // 겹치지 않게 최대 6개 정도만 표시
+          },
+          y: { 
+            min: 94, max: 100, // 사진처럼 94%~100% 고정 척도 적용
+            grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
+            ticks: { color: '#9ca3af', stepSize: 2 }
+          }
+        }
+      }
+
         });
       }
 
@@ -2372,7 +2378,7 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
               }
             },
             scales: {
-              x: { display: false },
+              x: { display: true },
               y: { 
                 min: Math.floor(minRange - 15),
                 max: Math.ceil(maxRange + 15),
@@ -2388,4 +2394,4 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
 
   </script>
 </body>
-</html>
+                                                                                                                                                                        </html>
