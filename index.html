@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.5</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.1</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -680,11 +680,11 @@
       document.getElementById('modal-config').classList.remove('hidden');
     }
 
-    function closeConfigModal() {
+        function closeConfigModal() {
       document.getElementById('modal-config').classList.add('hidden');
     }
 
-        function switchMainTab(mainTab, pushHistory = true) {
+    function switchMainTab(mainTab, pushHistory = true) {
       currentMainTab = mainTab;
       localStorage.setItem('tesla_main_tab', mainTab);
 
@@ -728,31 +728,34 @@
             : "py-2.5 rounded-xl text-gray-400 hover:text-white transition";
         }
       });
-    }
 
-    // ✅ 뒤로가기(←) 버튼 감지 리스너는 함수 바깥(전역)에 독립적으로 위치해야 합니다!
-    window.addEventListener('popstate', function(event) {
-      if (event.state && event.state.tab) {
-        // 뒤로가기로 이동할 때는 히스토리를 다시 쌓지 않도록 false 전달
-        switchMainTab(event.state.tab, false);
-        if (event.state.sub && typeof switchSubTab === 'function') {
-          switchSubTab(event.state.sub, false);
-        }
-      } else {
-        switchMainTab('monitor', false); // 기본값
-      }
-    });
-
-
+      // ✅ 서브탭별 추가 실행 로직은 반드시 함수 내부 맨 아래에 위치해야 합니다!
       if (subTab === 'driving' && map) {
         setTimeout(() => {
           map.relayout();
           renderDrivingData();
         }, 100);
       }
-      if (subTab === 'monthly') { initMonthlyDropdowns(); renderMonthlyTop5(); }
-      if (subTab === 'battery') renderBatteryCharts();
+      if (subTab === 'monthly') { 
+        initMonthlyDropdowns(); 
+        renderMonthlyTop5(); 
+      }
+      if (subTab === 'battery') {
+        renderBatteryCharts();
+      }
     }
+
+    // ✅ 뒤로가기(←) 버튼 감지 리스너는 함수 바깥(전역)에 독립적으로 위치
+    window.addEventListener('popstate', function(event) {
+      if (event.state && event.state.tab) {
+        switchMainTab(event.state.tab, false);
+        if (event.state.sub && typeof switchSubTab === 'function') {
+          switchSubTab(event.state.sub, false);
+        }
+      } else {
+        switchMainTab('monitor', false);
+      }
+    });
 
     // 날짜 클릭 시 해당 일간 주행 기록으로 이동
     function jumpToDrivingDate(dateStr) {
