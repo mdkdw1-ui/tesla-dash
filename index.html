@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.1</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.2</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -1837,10 +1837,21 @@ async function exchangeTeslaToken(code) {
             const kwh = ((t.useBattery / 100) * 60);
             const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
             // 변경 후 (raw_data 안의 온도까지 이중 체크)
+// [수정 후]
 let rawT = t.raw_data;
 if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
-const resolvedTemp = t.outsideTemp ?? rawT?.climate_state?.outside_temp;
-const tempStr = resolvedTemp !== undefined && resolvedTemp !== null ? `${Math.round(resolvedTemp)}°C` : '-';
+
+// driving, vehicle 테이블 및 중첩된 raw_data 구조에서 외기 온도 필드를 순차적으로 탐색
+const resolvedTemp = 
+  t.outsideTemp ?? 
+  t.outside_temp ?? 
+  rawT?.climate_state?.outside_temp ?? 
+  rawT?.outside_temp ?? 
+  rawT?.vehicle_state?.outside_temp;
+
+const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp)) 
+  ? `${Math.round(Number(resolvedTemp))}°C` 
+  : '-';
 
             
             let batText = `${t.useBattery.toFixed(1)}%`;
@@ -2233,4 +2244,4 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
 
   </script>
 </body>
-</html>
+  </html>
