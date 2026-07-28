@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.5</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.01</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -1773,20 +1773,22 @@ async function exchangeTeslaToken(code) {
 polyline.setMap(map);
 currentPolylines.push(polyline);
 
-// 클로저 문제를 방지하기 위해 현재 항목(t)을 즉시실행 함수(IIFE)로 안전하게 바인딩
-(function(currentTrip) {
+// [수정 후] 현재 순회 중인 명확한 trip 객체를 IIFE 인자로 안전하게 전달
+(function(targetTrip) {
   kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
     if (typeof currentInfoWindow !== 'undefined' && currentInfoWindow) {
       currentInfoWindow.close();
     }
 
+    if (!targetTrip) return;
+
     // 외기 온도 파싱 (driving 또는 vehicle 연동 값 활용)
-    let rawT = currentTrip.raw_data;
+    let rawT = targetTrip.raw_data;
     if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
-    let resolvedTemp = currentTrip.outside_temp ?? currentTrip.outsideTemp ?? rawT?.climate_state?.outside_temp ?? rawT?.outside_temp;
+    let resolvedTemp = targetTrip.outside_temp ?? targetTrip.outsideTemp ?? rawT?.climate_state?.outside_temp ?? rawT?.outside_temp;
     
     if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
-      const tripTime = new Date(currentTrip.timestamp).getTime();
+      const tripTime = new Date(targetTrip.timestamp).getTime();
       let validVehicles = vehicleRows.filter(v => v.outside_temp !== null && v.outside_temp !== undefined);
       if (validVehicles.length > 0) {
         let closestVehicle = validVehicles.reduce((prev, curr) => {
@@ -1797,9 +1799,9 @@ currentPolylines.push(polyline);
     }
     const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp)) ? `${Math.round(Number(resolvedTemp))}°C` : '-';
 
-    const timeStr = new Date(currentTrip.timestamp).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-    const kwh = ((currentTrip.useBattery / 100) * 60);
-    const eff = kwh > 0 ? (currentTrip.moveKM / kwh).toFixed(2) : "0.00";
+    const timeStr = new Date(targetTrip.timestamp).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const kwh = ((targetTrip.useBattery / 100) * 60);
+    const eff = kwh > 0 ? (targetTrip.moveKM / kwh).toFixed(2) : "0.00";
 
     const content = `
       <div style="padding:12px; background:#0f1117; color:#f3f4f6; border:1px solid #374151; border-radius:12px; font-size:12px; width:220px; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
@@ -1807,10 +1809,10 @@ currentPolylines.push(polyline);
           🚗 주행 상세 정보
         </div>
         <div style="margin-bottom:3px;"><b>시각:</b> ${timeStr}</div>
-        <div style="margin-bottom:3px;"><b>출발:</b> ${currentTrip.startDong || '출발지'}</div>
-        <div style="margin-bottom:3px;"><b>도착:</b> ${currentTrip.endDong || '도착지'}</div>
-        <div style="margin-bottom:3px;"><b>거리/시간:</b> ${currentTrip.moveKM.toFixed(1)}km / ${currentTrip.durationMin}분</div>
-        <div style="margin-bottom:3px;"><b>배터리 소모:</b> ${currentTrip.useBattery.toFixed(1)}%</div>
+        <div style="margin-bottom:3px;"><b>출발:</b> ${targetTrip.startDong || '출발지'}</div>
+        <div style="margin-bottom:3px;"><b>도착:</b> ${targetTrip.endDong || '도착지'}</div>
+        <div style="margin-bottom:3px;"><b>거리/시간:</b> ${targetTrip.moveKM.toFixed(1)}km / ${targetTrip.durationMin}분</div>
+        <div style="margin-bottom:3px;"><b>배터리 소모:</b> ${targetTrip.useBattery.toFixed(1)}%</div>
         <div style="margin-bottom:3px;"><b>외기 온도:</b> 🌡️ ${tempStr}</div>
         <div><b>전비:</b> ⚡ ${eff} km/kWh</div>
       </div>
@@ -1824,7 +1826,8 @@ currentPolylines.push(polyline);
 
     currentInfoWindow.open(map);
   });
-})(t);
+})(trip); // t 대신 명확한 상위 변수(trip) 전달
+
 
 
       map.setBounds(bounds);
@@ -2319,4 +2322,4 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
 
   </script>
 </body>
-              </html>
+            </html>
