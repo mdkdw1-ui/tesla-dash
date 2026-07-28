@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.01</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.02</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -1747,91 +1747,89 @@ async function exchangeTeslaToken(code) {
       if (currentInfoWindow) currentInfoWindow.close();
     }
 
-    // 단일 주행 지도 연동 및 강조
-    function highlightSingleTripOnMap(tripId) {
-      const trip = allTrips.find(t => t.id === tripId);
-      if (!trip || !trip.path || trip.path.length === 0 || !map) return;
+// [수정 후] 변수명을 명확하게 정리하고 방어 코드를 강화한 버전
+function highlightSingleTripOnMap(tripId) {
+  if (!allTrips || allTrips.length === 0) return;
+  
+  const targetTrip = allTrips.find(t => t.id === tripId);
+  if (!targetTrip || !targetTrip.path || targetTrip.path.length === 0 || !map) return;
 
-      clearMapPolylines();
-      const bounds = new kakao.maps.LatLngBounds();
-      const pathPoints = trip.path.map(pt => {
-        const lat = pt.lat || pt.latitude || pt[0];
-        const lng = pt.lng || pt.longitude || pt[1];
-        const loc = new kakao.maps.LatLng(lat, lng);
-        bounds.extend(loc);
-        return loc;
+  clearMapPolylines();
+  const bounds = new kakao.maps.LatLngBounds();
+  const pathPoints = targetTrip.path.map(pt => {
+    const lat = pt.lat || pt.latitude || pt[0];
+    const lng = pt.lng || pt.longitude || pt[1];
+    const loc = new kakao.maps.LatLng(lat, lng);
+    bounds.extend(loc);
+    return loc;
+  });
+
+  const polyline = new kakao.maps.Polyline({
+    path: pathPoints,
+    strokeWeight: 6,
+    strokeColor: '#ef4444',
+    strokeOpacity: 0.95,
+    strokeStyle: 'solid'
+  });
+
+  polyline.setMap(map);
+  currentPolylines.push(polyline);
+
+  // 클로저 및 스코프 오류 원천 차단
+  (function(currentTrip) {
+    kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
+      if (typeof currentInfoWindow !== 'undefined' && currentInfoWindow) {
+        currentInfoWindow.close();
+      }
+
+      let rawT = currentTrip.raw_data;
+      if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
+      let resolvedTemp = currentTrip.outside_temp ?? currentTrip.outsideTemp ?? rawT?.climate_state?.outside_temp ?? rawT?.outside_temp;
+      
+      if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
+        const tripTime = new Date(currentTrip.timestamp).getTime();
+        let validVehicles = vehicleRows.filter(v => v.outside_temp !== null && v.outside_temp !== undefined);
+        if (validVehicles.length > 0) {
+          let closestVehicle = validVehicles.reduce((prev, curr) => {
+            return Math.abs(new Date(curr.updated_at).getTime() - tripTime) < Math.abs(new Date(prev.updated_at).getTime() - tripTime) ? curr : prev;
+          });
+          if (closestVehicle) resolvedTemp = closestVehicle.outside_temp;
+        }
+      }
+      const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp)) ? `${Math.round(Number(resolvedTemp))}°C` : '-';
+
+      const timeStr = new Date(currentTrip.timestamp).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const kwh = ((currentTrip.useBattery / 100) * 60);
+      const eff = kwh > 0 ? (currentTrip.moveKM / kwh).toFixed(2) : "0.00";
+
+      const content = `
+        <div style="padding:12px; background:#0f1117; color:#f3f4f6; border:1px solid #374151; border-radius:12px; font-size:12px; width:220px; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
+          <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; border-bottom:1px solid #1f2937; padding-bottom:4px;">
+            🚗 주행 상세 정보
+          </div>
+          <div style="margin-bottom:3px;"><b>시각:</b> ${timeStr}</div>
+          <div style="margin-bottom:3px;"><b>출발:</b> ${currentTrip.startDong || '출발지'}</div>
+          <div style="margin-bottom:3px;"><b>도착:</b> ${currentTrip.endDong || '도착지'}</div>
+          <div style="margin-bottom:3px;"><b>거리/시간:</b> ${currentTrip.moveKM.toFixed(1)}km / ${currentTrip.durationMin}분</div>
+          <div style="margin-bottom:3px;"><b>배터리 소모:</b> ${currentTrip.useBattery.toFixed(1)}%</div>
+          <div style="margin-bottom:3px;"><b>외기 온도:</b> 🌡️ ${tempStr}</div>
+          <div><b>전비:</b> ⚡ ${eff} km/kWh</div>
+        </div>
+      `;
+
+      currentInfoWindow = new kakao.maps.InfoWindow({
+        content: content,
+        position: mouseEvent.latLng,
+        removable: true
       });
 
-      const polyline = new kakao.maps.Polyline({
-  path: pathPoints,
-  strokeWeight: 6,
-  strokeColor: '#ef4444',
-  strokeOpacity: 0.95,
-  strokeStyle: 'solid'
-});
-
-polyline.setMap(map);
-currentPolylines.push(polyline);
-
-// [수정 후] 현재 순회 중인 명확한 trip 객체를 IIFE 인자로 안전하게 전달
-(function(targetTrip) {
-  kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
-    if (typeof currentInfoWindow !== 'undefined' && currentInfoWindow) {
-      currentInfoWindow.close();
-    }
-
-    if (!targetTrip) return;
-
-    // 외기 온도 파싱 (driving 또는 vehicle 연동 값 활용)
-    let rawT = targetTrip.raw_data;
-    if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
-    let resolvedTemp = targetTrip.outside_temp ?? targetTrip.outsideTemp ?? rawT?.climate_state?.outside_temp ?? rawT?.outside_temp;
-    
-    if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
-      const tripTime = new Date(targetTrip.timestamp).getTime();
-      let validVehicles = vehicleRows.filter(v => v.outside_temp !== null && v.outside_temp !== undefined);
-      if (validVehicles.length > 0) {
-        let closestVehicle = validVehicles.reduce((prev, curr) => {
-          return Math.abs(new Date(curr.updated_at).getTime() - tripTime) < Math.abs(new Date(prev.updated_at).getTime() - tripTime) ? curr : prev;
-        });
-        if (closestVehicle) resolvedTemp = closestVehicle.outside_temp;
-      }
-    }
-    const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp)) ? `${Math.round(Number(resolvedTemp))}°C` : '-';
-
-    const timeStr = new Date(targetTrip.timestamp).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-    const kwh = ((targetTrip.useBattery / 100) * 60);
-    const eff = kwh > 0 ? (targetTrip.moveKM / kwh).toFixed(2) : "0.00";
-
-    const content = `
-      <div style="padding:12px; background:#0f1117; color:#f3f4f6; border:1px solid #374151; border-radius:12px; font-size:12px; width:220px; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
-        <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; border-bottom:1px solid #1f2937; padding-bottom:4px;">
-          🚗 주행 상세 정보
-        </div>
-        <div style="margin-bottom:3px;"><b>시각:</b> ${timeStr}</div>
-        <div style="margin-bottom:3px;"><b>출발:</b> ${targetTrip.startDong || '출발지'}</div>
-        <div style="margin-bottom:3px;"><b>도착:</b> ${targetTrip.endDong || '도착지'}</div>
-        <div style="margin-bottom:3px;"><b>거리/시간:</b> ${targetTrip.moveKM.toFixed(1)}km / ${targetTrip.durationMin}분</div>
-        <div style="margin-bottom:3px;"><b>배터리 소모:</b> ${targetTrip.useBattery.toFixed(1)}%</div>
-        <div style="margin-bottom:3px;"><b>외기 온도:</b> 🌡️ ${tempStr}</div>
-        <div><b>전비:</b> ⚡ ${eff} km/kWh</div>
-      </div>
-    `;
-
-    currentInfoWindow = new kakao.maps.InfoWindow({
-      content: content,
-      position: mouseEvent.latLng,
-      removable: true
+      currentInfoWindow.open(map);
     });
+  })(targetTrip); // targetTrip 객체를 안전하게 IIFE 인자로 전달
 
-    currentInfoWindow.open(map);
-  });
-})(trip); // t 대신 명확한 상위 변수(trip) 전달
+  map.setBounds(bounds);
+}
 
-
-
-      map.setBounds(bounds);
-    }
 
     function renderDrivingData() {
       clearMapPolylines();
@@ -2322,4 +2320,4 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
 
   </script>
 </body>
-            </html>
+</html>
