@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.02</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.0</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -1175,11 +1175,25 @@ async function exchangeTeslaToken(code) {
     function testNtfy() { sendNtfyNotification('Tesla Guardian Test', 'This is a test notification.'); }
 
     function initDashboard() {
-      loadKakaoSdk(configObj.kakaoKey, () => {
+  try {
+    if (typeof configObj === 'undefined' || !configObj.kakaoKey) {
+      console.warn("⚠️ configObj 또는 카카오 키가 설정되지 않았습니다.");
+      return;
+    }
+    
+    loadKakaoSdk(configObj.kakaoKey, () => {
+      try {
         initMap();
         handleRefresh(false);
-      });
-    }
+      } catch (err) {
+        console.error("지도 초기화 또는 데이터 갱신 중 에러 발생:", err);
+      }
+    });
+  } catch (err) {
+    console.error("대시보드 초기화 예외:", err);
+  }
+}
+
 
     function loadKakaoSdk(appKey, callback) {
       if (window.kakao && window.kakao.maps) { kakao.maps.load(() => { geocoder = new kakao.maps.services.Geocoder(); callback(); }); return; }
@@ -1747,12 +1761,20 @@ async function exchangeTeslaToken(code) {
       if (currentInfoWindow) currentInfoWindow.close();
     }
 
-// [수정 후] 변수명을 명확하게 정리하고 방어 코드를 강화한 버전
 function highlightSingleTripOnMap(tripId) {
+  // 1. 데이터와 지도 객체 존재 여부 방어 코드
   if (!allTrips || allTrips.length === 0) return;
   
   const targetTrip = allTrips.find(t => t.id === tripId);
-  if (!targetTrip || !targetTrip.path || targetTrip.path.length === 0 || !map) return;
+  if (!targetTrip || !targetTrip.path || targetTrip.path.length === 0) {
+    console.warn("⚠️ 해당 운행 기록의 경로 좌표가 없습니다.");
+    return;
+  }
+  
+  if (typeof map === 'undefined' || !map) {
+    console.warn("⚠️ 카카오맵이 아직 초기화되지 않았습니다.");
+    return;
+  }
 
   clearMapPolylines();
   const bounds = new kakao.maps.LatLngBounds();
@@ -1775,7 +1797,7 @@ function highlightSingleTripOnMap(tripId) {
   polyline.setMap(map);
   currentPolylines.push(polyline);
 
-  // 클로저 및 스코프 오류 원천 차단
+  // 2. IIFE 클로저를 통한 스코프 오염 방지
   (function(currentTrip) {
     kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
       if (typeof currentInfoWindow !== 'undefined' && currentInfoWindow) {
@@ -1786,27 +1808,14 @@ function highlightSingleTripOnMap(tripId) {
       if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
       let resolvedTemp = currentTrip.outside_temp ?? currentTrip.outsideTemp ?? rawT?.climate_state?.outside_temp ?? rawT?.outside_temp;
       
-      if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
-        const tripTime = new Date(currentTrip.timestamp).getTime();
-        let validVehicles = vehicleRows.filter(v => v.outside_temp !== null && v.outside_temp !== undefined);
-        if (validVehicles.length > 0) {
-          let closestVehicle = validVehicles.reduce((prev, curr) => {
-            return Math.abs(new Date(curr.updated_at).getTime() - tripTime) < Math.abs(new Date(prev.updated_at).getTime() - tripTime) ? curr : prev;
-          });
-          if (closestVehicle) resolvedTemp = closestVehicle.outside_temp;
-        }
-      }
       const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp)) ? `${Math.round(Number(resolvedTemp))}°C` : '-';
-
       const timeStr = new Date(currentTrip.timestamp).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
       const kwh = ((currentTrip.useBattery / 100) * 60);
       const eff = kwh > 0 ? (currentTrip.moveKM / kwh).toFixed(2) : "0.00";
 
       const content = `
         <div style="padding:12px; background:#0f1117; color:#f3f4f6; border:1px solid #374151; border-radius:12px; font-size:12px; width:220px; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
-          <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; border-bottom:1px solid #1f2937; padding-bottom:4px;">
-            🚗 주행 상세 정보
-          </div>
+          <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; border-bottom:1px solid #1f2937; padding-bottom:4px;">🚗 주행 상세 정보</div>
           <div style="margin-bottom:3px;"><b>시각:</b> ${timeStr}</div>
           <div style="margin-bottom:3px;"><b>출발:</b> ${currentTrip.startDong || '출발지'}</div>
           <div style="margin-bottom:3px;"><b>도착:</b> ${currentTrip.endDong || '도착지'}</div>
@@ -1825,10 +1834,11 @@ function highlightSingleTripOnMap(tripId) {
 
       currentInfoWindow.open(map);
     });
-  })(targetTrip); // targetTrip 객체를 안전하게 IIFE 인자로 전달
+  })(targetTrip);
 
   map.setBounds(bounds);
 }
+
 
 
     function renderDrivingData() {
@@ -2206,17 +2216,103 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
         return v.soh || raw?.charge_state?.battery_soh || 98.5;
       });
 
-      const rangeData = recent50.map(v => {
-  const bat = v.battery_level || 0;
-  let raw = v.raw_data;
-  if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
-  const range = raw?.charge_state?.battery_range || 0;
-  
-  if (bat > 0 && range > 0) {
-    return Math.round((range / bat) * 100);
+        const rangeData = recent50.map(v => {
+    const bat = v.battery_level || 0;
+    let raw = v.raw_data;
+    if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
+    const range = raw?.charge_state?.battery_range || 0;
+    
+    if (bat > 0 && range > 0) {
+      return Math.round((range / bat) * 100);
+    }
+    return 400; // 기본값 또는 예외 처리 값
+  });
+
+  if (degData.length > 0) {
+    const degEl = document.getElementById('b-degradation-val');
+    const rangeEl = document.getElementById('b-est-range-val');
+    if (degEl) degEl.innerText = `${degData[degData.length - 1]}%`;
+    if (rangeEl) rangeEl.innerText = `${rangeData[rangeData.length - 1]} km`;
   }
-  return 400; // 기본값 또는 예외 처리 값
-});
+
+  try {
+    if (window.chartDegRec) window.chartDegRec.destroy();
+  } catch(e) {}
+
+  const ctxDeg = document.getElementById('chartDegradationRecent')?.getContext('2d');
+  if (ctxDeg && degData.length > 0) {
+    window.chartDegRec = new Chart(ctxDeg, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '열화율 (%)',
+          data: degData,
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: { 
+            min: Math.max(85, Math.floor(Math.min(...degData.filter(v => !isNaN(v))) - 0.5)), 
+            max: 100, 
+            grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
+            ticks: { color: '#9ca3af', stepSize: 0.5 }
+          }
+        }
+      }
+    });
+  }
+
+  try {
+    if (window.chartRangeRec) window.chartRangeRec.destroy();
+  } catch(e) {}
+
+  const ctxRange = document.getElementById('chartRangeRecent')?.getContext('2d');
+  if (ctxRange && rangeData.length > 0) {
+    const validRanges = rangeData.filter(v => !isNaN(v));
+    const minRange = validRanges.length > 0 ? Math.min(...validRanges) : 350;
+    const maxRange = validRanges.length > 0 ? Math.max(...validRanges) : 450;
+
+    window.chartRangeRec = new Chart(ctxRange, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '100% 주행거리 (km)',
+          data: rangeData,
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16, 185, 129, 0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: { 
+            min: Math.floor(minRange - 15),
+            max: Math.ceil(maxRange + 15),
+            grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
+            ticks: { color: '#9ca3af' }
+          }
+        }
+      }
+    });
+  }
+
 
       if (degData.length > 0) {
         document.getElementById('b-degradation-val').innerText = `${degData[degData.length - 1]}%`;
@@ -2320,4 +2416,4 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
 
   </script>
 </body>
-</html>
+              </html>
