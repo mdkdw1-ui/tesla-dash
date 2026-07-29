@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.13</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.35</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -546,12 +546,24 @@
     window.addEventListener('DOMContentLoaded', () => {
             document.addEventListener('visibilitychange', handleAppVisibilityChange);
 
-      if (accessToken) {
-        document.getElementById('loginSection')?.classList.add('hidden');
-        document.getElementById('tokenInfoSection')?.classList.remove('hidden');
-        renderAccessTokenUI(accessToken);
-        fetchTeslaVehicles(accessToken, true);
-      }
+      // 💡 유효한 토큰인지, 그리고 'dummy_token'이 아닌지 철저하게 검증
+const isValidToken = accessToken && 
+                     accessToken !== 'dummy_token' && 
+                     accessToken.trim() !== '' && 
+                     accessToken !== 'undefined';
+
+if (isValidToken) {
+  // 진짜 로그인된 상태일 때만 실행
+  document.getElementById('loginSection')?.classList.add('hidden');
+  document.getElementById('tokenInfoSection')?.classList.remove('hidden');
+  renderAccessTokenUI(accessToken);
+  fetchTeslaVehicles(accessToken, true);
+} else {
+  // ❌ 가짜 토큰이거나 없으면 찌꺼기 데이터를 지우고 로그인 화면을 강제로 노출
+  localStorage.removeItem('tesla_access_token'); // 저장소의 가짜 토큰 청소
+  document.getElementById('loginSection')?.classList.remove('hidden');
+  document.getElementById('tokenInfoSection')?.classList.add('hidden');
+}
 
 
       const urlParams = new URLSearchParams(window.location.search);
@@ -2314,16 +2326,18 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
         return v.soh || raw?.charge_state?.battery_soh || 98.5;
       });
 
-      const rangeData = recentData.map(v => {
-        const bat = v.battery_level || 0;
-        let raw = v.raw_data;
-        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
-        const range = raw?.charge_state?.battery_range || 0;
+            const rangeData = recentData.map(v => {
+        const bat = Number(v.battery_level) || 0;
+        // raw_data를 거치지 않고 Supabase의 vehicle_range 또는 battery_range 컬럼을 직접 가져옴
+        // (DB 스키마 컬럼명인 battery_range 사용)
+        const range = Number(v.battery_range) || 0;
         
+        // 100% 만충 시 주행거리 환산 (0 나누기 방지 안전장치)
+        let fullRange = 400; // 기본값
         if (bat > 0 && range > 0) {
-          return Math.round((range / bat) * 100);
+          fullRange = Math.round((range / bat) * 100);
         }
-        return 400; 
+        return fullRange;
       });
 
       if (degData.length > 0) {
@@ -2461,4 +2475,4 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
 
   </script>
 </body>
-              </html>
+</html>
