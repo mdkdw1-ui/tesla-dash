@@ -1305,6 +1305,40 @@ redirect_uri: getRedirectUri()}) // REDIRECT_URI 대신 getRedirectUri() 로 변
 
     function initDashboard() {
   try {
+  
+  
+      function initDashboard() {
+  try {
+    forceLog("🔍 3단계: initDashboard 진입 성공"); // 추가
+
+    if (typeof configObj === 'undefined' || !configObj.kakaoKey) {
+      forceLog("⚠️ configObj 또는 카카오 키가 설정되지 않았습니다.", true); // 추가
+      console.warn("⚠️ configObj 또는 카카오 키가 설정되지 않았습니다.");
+      return;
+    }
+    
+    forceLog("🗺️ 4단계: 카카오 SDK 로드 시작"); // 추가
+    loadKakaoSdk(configObj.kakaoKey, () => {
+      try {
+        forceLog("🗺️ 5단계: 지도 초기화 및 데이터 갱신 시도"); // 추가
+        initMap();
+        handleRefresh(false);
+        forceLog("✅ 6단계: 대시보드 초기화 완전 성공"); // 추가
+      } catch (err) {
+        forceLog(`❌ 지도/데이터 에러: ${err.message}`, true); // 추가
+        console.error("지도 초기화 또는 데이터 갱신 중 에러 발생:", err);
+      }
+    });
+  } catch (err) {
+    forceLog(`❌ initDashboard 예외: ${err.message}`, true); // 추가
+    console.error("대시보드 초기화 예외:", err);
+  }
+}
+
+
+
+  
+  
     if (typeof configObj === 'undefined' || !configObj.kakaoKey) {
       console.warn("⚠️ configObj 또는 카카오 키가 설정되지 않았습니다.");
       return;
