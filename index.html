@@ -422,12 +422,15 @@
 
           <!-- Tesla Access Token 표시 영역 및 복사 버튼 -->
           <div class="p-3 bg-gray-950 border border-gray-800 rounded-xl space-y-2">
-            <div class="flex justify-between items-center text-xs">
-              <span class="text-gray-300 font-bold text-[11px]">🔑 Tesla Access Token</span>
-              <button onclick="copyAccessToken()" class="text-[10px] text-blue-400 hover:text-blue-300 font-bold border border-blue-500/40 px-2.5 py-1 rounded-lg bg-blue-500/10 transition active:scale-95">
-                📋 토큰 복사
-              </button>
-            </div>
+            <div class="flex justify-between items-center text-xs gap-1">
+  <span class="text-gray-300 font-bold text-[11px]">🔑 Tesla Access Token</span>
+  <div class="flex gap-1">
+    <button onclick="copyAccessToken()" class="...">📋 복사</button>
+    <!-- 💡 클릭 시 토큰을 지우고 새로고침 시키는 벼락 로그아웃 버튼 -->
+    <button onclick="localStorage.removeItem('tesla_access_token'); location.reload();" class="text-[10px] text-red-400 hover:text-red-300 font-bold border border-red-500/40 px-2.5 py-1 rounded-lg bg-red-500/10 transition active:scale-95">⚠️ 재로그인</button>
+  </div>
+</div>
+
             <div id="displayAccessToken" class="p-2.5 bg-black/80 border border-gray-800 rounded-lg font-mono text-[10px] text-emerald-400 break-all select-all max-h-20 overflow-y-auto leading-relaxed shadow-inner">
               -
             </div>
