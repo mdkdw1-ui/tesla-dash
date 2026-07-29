@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.35</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.25</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -956,7 +956,7 @@ async function exchangeTeslaToken(code) {
           localStorage.setItem('tesla_access_token', accessToken);
           addLog('✅ 테슬라 Access Token 발급 성공!');
           
-          document.getElementById('loginSection').classList.add('hidden');
+          document.getElementByIdSection').classList.add('hidden');
           document.getElementById('tokenInfoSection').classList.remove('hidden');
           renderAccessTokenUI(accessToken);
           
@@ -2306,34 +2306,32 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
       `).join('') || `<span class="text-gray-500">데이터가 없습니다.</span>`;
     }
 
-    // 1-4. 배터리 차트 (최근 데이터 확장 및 날짜 분산 시각화)
+        // 1-4. 배터리 차트 (최근 30개 데이터로 축소 및 열화율/주행거리 시각화)
     function renderBatteryCharts() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
-      // 전체 데이터를 최신순으로 정렬한 뒤 기존 50개에서 150개로 확장하여 흐름을 풍부하게 확보
+      // 전체 데이터를 최신순으로 정렬한 뒤 '최근 30개'만 가져오도록 수정
       const sortedRows = [...vehicleRows].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-      const recentData = sortedRows.slice(0, 150).reverse(); // 시간순 정렬로 복원
+      const recentData = sortedRows.slice(0, 30).reverse(); // 시간순 정렬로 복원
 
       const labels = recentData.map(v => {
         const d = new Date(v.updated_at);
-        // 월/일뿐만 아니라 시간까지 표시해주면 하루 안에서도 데이터가 촘촘할 때 구분이 잘 됩니다.
         return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
       });
 
+      // 열화율 데이터 추출
       const degData = recentData.map(v => {
         let raw = v.raw_data;
         if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
         return v.soh || raw?.charge_state?.battery_soh || 98.5;
       });
 
-            const rangeData = recentData.map(v => {
+      // 100% 환산 주행거리 데이터 추출 (Supabase 컬럼 직접 연동)
+      const rangeData = recentData.map(v => {
         const bat = Number(v.battery_level) || 0;
-        // raw_data를 거치지 않고 Supabase의 vehicle_range 또는 battery_range 컬럼을 직접 가져옴
-        // (DB 스키마 컬럼명인 battery_range 사용)
         const range = Number(v.battery_range) || 0;
         
-        // 100% 만충 시 주행거리 환산 (0 나누기 방지 안전장치)
-        let fullRange = 400; // 기본값
+        let fullRange = 400;
         if (bat > 0 && range > 0) {
           fullRange = Math.round((range / bat) * 100);
         }
@@ -2346,6 +2344,11 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
         if (degEl) degEl.innerText = `${degData[degData.length - 1]}%`;
         if (rangeEl) rangeEl.innerText = `${rangeData[rangeData.length - 1]} km`;
       }
+
+      // 유효한 열화율 값들의 min/max를 계산하여 Y축을 타이트하게 설정 (일자 느낌 완화)
+      const validDegs = degData.filter(v => !isNaN(v));
+      const minDeg = validDegs.length > 0 ? Math.min(...validDegs) : 97;
+      const maxDeg = validDegs.length > 0 ? Math.max(...validDegs) : 100;
 
       // 1. 열화율 차트 렌더링
       if (chartDegRec) chartDegRec.destroy();
@@ -2362,7 +2365,7 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
               backgroundColor: 'rgba(99, 102, 241, 0.1)',
               fill: true,
               tension: 0.3,
-              pointRadius: 1.5
+              pointRadius: 2
             }]
           },
           options: {
@@ -2384,24 +2387,20 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
               x: { 
                 display: true,
                 grid: { display: false },
-                ticks: { 
-                  color: '#9ca3af', 
-                  font: { size: 9 }, 
-                  maxTicksLimit: 8 // X축에 표시되는 레이블 개수를 늘려 촘촘하게 분산
-                }
+                ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 6 }
               },
               y: { 
-                min: 94, 
-                max: 100, 
+                min: Math.max(0, Number((minDeg - 0.5).toFixed(1))), 
+                max: Math.min(100, Number((maxDeg + 0.5).toFixed(1))), 
                 grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
-                ticks: { color: '#9ca3af', stepSize: 2 }
+                ticks: { color: '#9ca3af' }
               }
             }
           }
         });
       }
 
-      // 2. 주행거리 차트 렌더링
+      // 2. 주행거리 차트 렌더링 (최근 30개 기준)
       if (chartRangeRec) chartRangeRec.destroy();
       const ctxRange = document.getElementById('chartRangeRecent')?.getContext('2d');
       if (ctxRange) {
@@ -2420,7 +2419,7 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
               backgroundColor: 'rgba(16, 185, 129, 0.1)',
               fill: true,
               tension: 0.3,
-              pointRadius: 1.5
+              pointRadius: 2
             }]
           },
           options: {
@@ -2442,15 +2441,11 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
               x: { 
                 display: true,
                 grid: { display: false },
-                ticks: { 
-                  color: '#9ca3af', 
-                  font: { size: 9 }, 
-                  maxTicksLimit: 8 
-                }
+                ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 6 }
               },
               y: { 
-                min: Math.floor(minRange - 15),
-                max: Math.ceil(maxRange + 15),
+                min: Math.floor(minRange - 10),
+                max: Math.ceil(maxRange + 10),
                 grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
                 ticks: { color: '#9ca3af' }
               }
