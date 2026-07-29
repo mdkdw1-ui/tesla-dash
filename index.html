@@ -913,14 +913,21 @@ if (isValidToken) {
       if (timeText) timeText.innerText = `마지막 확인: ${new Date().toLocaleTimeString()}`;
     }
 
+// [추가] 1단계와 2단계에서 동일하게 사용할 Redirect URI 생성 함수 (끝 슬래시 제거)
+function getRedirectUri() {
+    let uri = window.location.origin + window.location.pathname;
+    if (uri.endsWith('/')) {
+        uri = uri.slice(0, -1); // 맨 뒤 '/'를 잘라내어 항상 https://mdkdw1-ui.github.io/tesla-dash 로 통일
+    }
+    return uri;
+}
+
+
 function startTeslaLogin() {
 
+// getRedirectUri() 함수 사용으로 2단계와 주소 100% 일치시킴
+    const REDIRECT_URI = encodeURIComponent(getRedirectUri());
     
-    // 2. 현재 페이지 주소 자동 추출 (개발자 콘솔의 Redirect URI와 동일해야 함)
-    const redirectPath = window.location.origin + window.location.pathname;
-    const REDIRECT_URI = encodeURIComponent(redirectPath);
-    
-    // 3. 테슬라 권한 스코프 (필요에 따라 조정)
     const SCOPE = encodeURIComponent("openid offline_access vehicle_device_data vehicle_cmds vehicle_charging_cmds");
     const STATE = Math.random().toString(36).substring(2, 15);
     
@@ -928,7 +935,6 @@ function startTeslaLogin() {
 
     addLog(`🔐 이동 주소: ${teslaAuthUrl}`);
 
-    // CLIENT_ID가 미입력 상태면 이동 중단
     if (CLIENT_ID === "본인의_실제_TESLA_CLIENT_ID" || !CLIENT_ID) {
         alert("코드 안의 CLIENT_ID를 테슬라 개발자 콘솔에서 발급받은 값으로 변경해주세요.");
         return;
@@ -938,7 +944,9 @@ function startTeslaLogin() {
         window.location.href = teslaAuthUrl;
     }, 500);
 }
-
+    
+    
+.
     
 
 
@@ -959,9 +967,10 @@ async function exchangeTeslaToken(code) {
         const res = await fetch(VERCEL_BACKEND_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-code: code, 
-redirect_uri: REDIRECT_URI})
+          body: JSON.stringify({
+code: code,
+redirect_uri: getRedirectUri()}) // REDIRECT_URI 대신 getRedirectUri() 로 변경
+
         });
         const data = await res.json();
         if (data.access_token) {
