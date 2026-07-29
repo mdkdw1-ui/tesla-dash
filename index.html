@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.1</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.13</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -410,7 +410,7 @@
 
         <div id="tokenInfoSection" class="hidden space-y-3">
           <div class="p-3 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-emerald-400 text-xs font-bold flex items-center justify-between shadow-inner">
-            <span class="flex items-center gap-1.5">✅ 테슬라 OAuth 로그인 완료</span>
+            <span class="flex items-center gap-1.5">✅ 테슬라 OAuth </span>
             <button onclick="fetchTeslaVehicles(accessToken)" class="text-[10px] underline text-emerald-300 hover:text-emerald-200">VIN/ID 동기화</button>
           </div>
           
@@ -1023,11 +1023,25 @@ async function exchangeTeslaToken(code) {
           }
           addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언 서비스를 시작합니다.');
 
-          if (window.AndroidBridge) {
-            const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
-            const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
-            window.AndroidBridge.startGuardianService(accessToken || 'dummy_token', configObj.vehicleId || '3744141651867089', interval, topic);
-          }
+     if (window.AndroidBridge) {
+  const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
+  const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
+  
+  // 💡 진짜 유효한 토큰인지 체크 (dummy_token이거나 비어있으면 차단)
+  const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '';
+
+  if (validToken) {
+    window.AndroidBridge.startGuardianService(
+      accessToken, 
+      configObj.vehicleId || '3744141651867089', 
+      interval, 
+      topic
+    );
+  } else {
+    console.warn('⚠️ 유효한 테슬라 Access Token이 없어 가디언 서비스를 시작할 수 없습니다. 로그인이 필요합니다.');
+    alert('테슬라 로그인이 먼저 필요합니다.');
+  }
+}
 
           startMonitoring();
         } else {
@@ -2280,26 +2294,27 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
       `).join('') || `<span class="text-gray-500">데이터가 없습니다.</span>`;
     }
 
-    // 1-4. 배터리 차트 (최근 50개 데이터 동기화 시각화)
-            function renderBatteryCharts() {
+    // 1-4. 배터리 차트 (최근 데이터 확장 및 날짜 분산 시각화)
+    function renderBatteryCharts() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
-      // 전체 데이터를 최신순으로 정렬한 뒤 최근 50개 추출
-const sortedRows = [...vehicleRows].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-const recent50 = sortedRows.slice(0, 300).reverse(); // 시간순 정렬로 복원하여 차트에 표시
+      // 전체 데이터를 최신순으로 정렬한 뒤 기존 50개에서 150개로 확장하여 흐름을 풍부하게 확보
+      const sortedRows = [...vehicleRows].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+      const recentData = sortedRows.slice(0, 150).reverse(); // 시간순 정렬로 복원
 
-      const labels = recent50.map(v => {
+      const labels = recentData.map(v => {
         const d = new Date(v.updated_at);
-        return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+        // 월/일뿐만 아니라 시간까지 표시해주면 하루 안에서도 데이터가 촘촘할 때 구분이 잘 됩니다.
+        return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
       });
 
-      const degData = recent50.map(v => {
+      const degData = recentData.map(v => {
         let raw = v.raw_data;
         if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
         return v.soh || raw?.charge_state?.battery_soh || 98.5;
       });
 
-      const rangeData = recent50.map(v => {
+      const rangeData = recentData.map(v => {
         const bat = v.battery_level || 0;
         let raw = v.raw_data;
         if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
@@ -2333,7 +2348,7 @@ const recent50 = sortedRows.slice(0, 300).reverse(); // 시간순 정렬로 복�
               backgroundColor: 'rgba(99, 102, 241, 0.1)',
               fill: true,
               tension: 0.3,
-              pointRadius: 2
+              pointRadius: 1.5
             }]
           },
           options: {
@@ -2353,9 +2368,13 @@ const recent50 = sortedRows.slice(0, 300).reverse(); // 시간순 정렬로 복�
             },
             scales: {
               x: { 
-                display: true, // X축 날짜 표시 켜기
+                display: true,
                 grid: { display: false },
-                ticks: { color: '#9ca3af', font: { size: 10 }, maxTicksLimit: 6 }
+                ticks: { 
+                  color: '#9ca3af', 
+                  font: { size: 9 }, 
+                  maxTicksLimit: 8 // X축에 표시되는 레이블 개수를 늘려 촘촘하게 분산
+                }
               },
               y: { 
                 min: 94, 
@@ -2387,7 +2406,7 @@ const recent50 = sortedRows.slice(0, 300).reverse(); // 시간순 정렬로 복�
               backgroundColor: 'rgba(16, 185, 129, 0.1)',
               fill: true,
               tension: 0.3,
-              pointRadius: 2
+              pointRadius: 1.5
             }]
           },
           options: {
@@ -2407,9 +2426,13 @@ const recent50 = sortedRows.slice(0, 300).reverse(); // 시간순 정렬로 복�
             },
             scales: {
               x: { 
-                display: true, // 주행거리 그래프도 X축 날짜 표시 켜기
+                display: true,
                 grid: { display: false },
-                ticks: { color: '#9ca3af', font: { size: 10 }, maxTicksLimit: 6 }
+                ticks: { 
+                  color: '#9ca3af', 
+                  font: { size: 9 }, 
+                  maxTicksLimit: 8 
+                }
               },
               y: { 
                 min: Math.floor(minRange - 15),
@@ -2422,6 +2445,7 @@ const recent50 = sortedRows.slice(0, 300).reverse(); // 시간순 정렬로 복�
         });
       }
     }
+
 
     // ✅ 브라우저 뒤로가기(←) 버튼 감지 리스너는 스크립트 하단 전역에 배치
     window.addEventListener('popstate', function(event) {
@@ -2437,4 +2461,4 @@ const recent50 = sortedRows.slice(0, 300).reverse(); // 시간순 정렬로 복�
 
   </script>
 </body>
-  </html>
+              </html>
