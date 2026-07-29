@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.42</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -333,42 +333,42 @@
         </div>
       </div>
 
-            <!-- 1-4. 배터리 서브 탭 (최근 50개 데이터 동기화) -->
-      <div id="sub-panel-battery" class="hidden space-y-4">
-        <div class="grid grid-cols-2 gap-3">
-          <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-indigo-500/60">
-            <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl"></div>
-            <span class="text-[11px] text-gray-400 block mb-1 font-medium">최근 열화율 (SOH)</span>
-            <span id="b-degradation-val" class="text-2xl font-black text-indigo-400">100.0%</span>
-          </div>
-          <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-emerald-500/60">
-            <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl"></div>
-            <span class="text-[11px] text-gray-400 block mb-1 font-medium">100% 충전 시 주행 가능 거리 추정</span>
-            <span id="b-est-range-val" class="text-2xl font-black text-green-400">- km</span>
-          </div>
-        </div>
-
-        <div class="glass-card p-4 rounded-2xl space-y-2 shadow-lg relative overflow-hidden border-l-2 border-indigo-500/50">
-          <div class="flex justify-between items-center">
-            <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-indigo-500 inline-block"></span> 최근 열화율 추이 (최근 50개 기록)
-            </h3>
-          </div>
-          <div class="w-full h-40"><canvas id="chartDegradationRecent"></canvas></div>
-        </div>
-        
-        <div class="glass-card p-4 rounded-2xl space-y-2 shadow-lg relative overflow-hidden border-l-2 border-emerald-500/50">
-          <div class="flex justify-between items-center">
-            <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> 최근 100% 환산 주행거리 (최근 50개 기록)
-            </h3>
-          </div>
-          <div class="w-full h-40"><canvas id="chartRangeRecent"></canvas></div>
-        </div>
-      </div>
-
-
+            <!-- 1-4. 배터리 서브 탭 -->
+<div id="sub-panel-battery" class="hidden space-y-4">
+  <div class="grid grid-cols-2 gap-3">
+    <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-indigo-500/60">
+      <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl"></div>
+      <span class="text-[11px] text-gray-400 block mb-1 font-medium">최근 100% 환산 거리</span>
+      <span id="b-est-range-val" class="text-2xl font-black text-indigo-400">- km</span>
     </div>
+    <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-emerald-500/60">
+      <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl"></div>
+      <span class="text-[11px] text-gray-400 block mb-1 font-medium">최근 충전 추가량</span>
+      <span id="b-added-val" class="text-2xl font-black text-green-400">- kWh</span>
+    </div>
+  </div>
+
+  <!-- 1. 100% 환산 주행거리 추이 차트 -->
+  <div class="glass-card p-4 rounded-2xl space-y-2 shadow-lg relative overflow-hidden border-l-2 border-indigo-500/50">
+    <div class="flex justify-between items-center">
+      <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-indigo-500 inline-block"></span> 100% 환산 주행거리 추이 (최근 30회 충전)
+      </h3>
+    </div>
+    <div class="w-full h-40"><canvas id="chartRangeRecent"></canvas></div>
+  </div>
+  
+  <!-- 2. 충전량(kWh) 및 배터리 증가량 추이 차트 -->
+  <div class="glass-card p-4 rounded-2xl space-y-2 shadow-lg relative overflow-hidden border-l-2 border-emerald-500/50">
+    <div class="flex justify-between items-center">
+      <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> 회당 충전량 추이 (kWh)
+      </h3>
+    </div>
+    <div class="w-full h-40"><canvas id="chartDegradationRecent"></canvas></div>
+  </div>
+</div>
+
 
     <!-- [메인 영역 2] 감시 가디언 -->
     <div id="main-panel-guardian" class="hidden space-y-4">
@@ -537,7 +537,7 @@
     let currentPolylines = [], currentInfoWindow = null;
     let currentFilterMode = 'daily';
     
-    // 주소 변환 캐시
+        // 주소 변환 캐시
     let addressCache = {};
     try {
       const savedCache = localStorage.getItem('tesla_address_cache');
@@ -547,29 +547,27 @@
     let chartDegRec = null, chartRangeRec = null;
 
     window.addEventListener('DOMContentLoaded', () => {
-            document.addEventListener('visibilitychange', handleAppVisibilityChange);
+      document.addEventListener('visibilitychange', handleAppVisibilityChange);
 
       // 테슬라 공식 토큰 규격(보통 60자 이상 혹은 qts_로 시작)을 검증하여 가짜 값 진입 차단
-const isValidToken = accessToken &&
-                     accessToken.trim() !== '' &&
-                     accessToken !== 'dummy_token' &&
-                     accessToken !== 'undefined' &&
-                     accessToken.length > 40;
+      const isValidToken = accessToken &&
+                           accessToken.trim() !== '' &&
+                           accessToken !== 'dummy_token' &&
+                           accessToken !== 'undefined' &&
+                           accessToken.length > 40;
 
-
-if (isValidToken) {
-  // 진짜 로그인된 상태일 때만 실행
-  document.getElementById('loginSection')?.classList.add('hidden');
-  document.getElementById('tokenInfoSection')?.classList.remove('hidden');
-  renderAccessTokenUI(accessToken);
-  fetchTeslaVehicles(accessToken, true);
-} else {
-  // ❌ 가짜 토큰이거나 없으면 찌꺼기 데이터를 지우고 로그인 화면을 강제로 노출
-  localStorage.removeItem('tesla_access_token'); // 저장소의 가짜 토큰 청소
-  document.getElementById('loginSection')?.classList.remove('hidden');
-  document.getElementById('tokenInfoSection')?.classList.add('hidden');
-}
-
+      if (isValidToken) {
+        // 진짜 로그인된 상태일 때만 실행
+        document.getElementById('loginSection')?.classList.add('hidden');
+        document.getElementById('tokenInfoSection')?.classList.remove('hidden');
+        renderAccessTokenUI(accessToken);
+        fetchTeslaVehicles(accessToken, true);
+      } else {
+        // ❌ 가짜 토큰이거나 없으면 찌꺼기 데이터를 지우고 로그인 화면을 강제로 노출
+        localStorage.removeItem('tesla_access_token'); // 저장소의 가짜 토큰 청소
+        document.getElementById('loginSection')?.classList.remove('hidden');
+        document.getElementById('tokenInfoSection')?.classList.add('hidden');
+      }
 
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
@@ -594,7 +592,8 @@ if (isValidToken) {
         supabaseClient = supabase.createClient(configObj.url, configObj.key);
       }
     }
-    // 백엔드(Vercel)를 통해 인증 코드(code)를 Access Token으로 교환하는 함수
+
+    // 백엔드(Vercel)를 통해 인증 코드(code)를 Access Token으로 교환하는 함수 (안전성 강화)
     async function exchangeCodeWithBackend(code) {
       addLog('🔄 Vercel 백엔드로 인증 코드 전송 중...');
       try {
@@ -611,6 +610,9 @@ if (isValidToken) {
 
         const data = await response.json();
         
+        // 무조건 URL의 ?code= 파라미터를 먼저 정리 (새로고침 시 중복 요청/에러 방지)
+        window.history.replaceState({}, document.title, window.location.pathname);
+
         if (response.ok && (data.access_token || data.token)) {
           accessToken = data.access_token || data.token;
           localStorage.setItem('tesla_access_token', accessToken);
@@ -622,16 +624,14 @@ if (isValidToken) {
           
           addLog('✅ 테슬라 Access Token 교환 성공!');
           
-          // URL의 ?code= 파라미터 정리
-          window.history.replaceState({}, document.title, window.location.pathname);
-          
           // 차량 정보 동기화 실행
           fetchTeslaVehicles(accessToken, true);
         } else {
-          addLog(`❌ 토큰 교환 실패: ${data.error || JSON.stringify(data)}`);
-          alert('테슬라 인증 토큰 교환 중 오류가 발생했습니다. 로그를 확인해 주세요.');
+          // 이미 만료되었거나 잘못된 코드인 경우 무리한 alert 대신 로그만 명확히 남김
+          addLog(`⚠️ 토큰 교환 실패 (만료되었거나 이미 사용된 코드일 수 있습니다): ${data.error || JSON.stringify(data)}`);
         }
       } catch (err) {
+        window.history.replaceState({}, document.title, window.location.pathname);
         addLog(`⚠️ 토큰 교환 요청 예외 발생: ${err.message}`);
         console.error(err);
       }
@@ -972,23 +972,7 @@ redirect_uri: getRedirectUri()}) // REDIRECT_URI 대신 getRedirectUri() 로 변
 
         });
         const data = await res.json();
-        if (data.access_token) {
-          accessToken = data.access_token;
-          localStorage.setItem('tesla_access_token', accessToken);
-          addLog('✅ 테슬라 Access Token 발급 성공!');
-          
-          document.getElementById('loginSection').classList.add('hidden');
-          document.getElementById('tokenInfoSection').classList.remove('hidden');
-          renderAccessTokenUI(accessToken);
-          
-          await fetchTeslaVehicles(accessToken, true);
-          updateGuardianStatusUI('sleep', '🌙 대기 모드 (스위치를 켜세요)');
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } else {
-          addLog(`❌ 토큰 교환 실패: ${JSON.stringify(data)}`);
-        }
-      } catch (err) { addLog(`❌ 백엔드 통신 오류: ${err.message}`); }
-    }
+        
 
     async function fetchTeslaVehicles(token, isSilent = false) {
       if (!isSilent) addLog('📡 차량 목록 및 VIN/ID 동기화 중...');
@@ -2327,154 +2311,175 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
       `).join('') || `<span class="text-gray-500">데이터가 없습니다.</span>`;
     }
 
-        // 1-4. 배터리 차트 (최근 30개 데이터로 축소 및 열화율/주행거리 시각화)
-    function renderBatteryCharts() {
-      if (!vehicleRows || vehicleRows.length === 0) return;
+// 1-4. 배터리 차트 렌더링 (chargingRows 데이터 연동)
+function renderBatteryCharts() {
+  // chargingRows가 없으면 vehicleRows를 폴백으로 사용하도록 처리
+  const sourceRows = (typeof chargingRows !== 'undefined' && chargingRows.length > 0) 
+    ? chargingRows 
+    : (vehicleRows || []);
 
-      // 전체 데이터를 최신순으로 정렬한 뒤 '최근 30개'만 가져오도록 수정
-      const sortedRows = [...vehicleRows].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-      const recentData = sortedRows.slice(0, 30).reverse(); // 시간순 정렬로 복원
+  if (!sourceRows || sourceRows.length === 0) return;
 
-      const labels = recentData.map(v => {
-        const d = new Date(v.updated_at);
-        return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-      });
+  // 날짜 기준 내림차순 정렬 후 최근 30개만 잘라 시간순(오래된 순) 정렬
+  const sortedRows = [...sourceRows].sort((a, b) => new Date(b.date || b.updated_at) - new Date(a.date || a.updated_at));
+  const recentData = sortedRows.slice(0, 30).reverse();
 
-      // 열화율 데이터 추출
-      const degData = recentData.map(v => {
-        let raw = v.raw_data;
-        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
-        return v.soh || raw?.charge_state?.battery_soh || 98.5;
-      });
+  // X축 라벨 (MM/DD HH:mm)
+  const labels = recentData.map(v => {
+    const d = new Date(v.date || v.updated_at);
+    return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  });
 
-      // 100% 환산 주행거리 데이터 추출 (Supabase 컬럼 직접 연동)
-      const rangeData = recentData.map(v => {
-        const bat = Number(v.battery_level) || 0;
-        const range = Number(v.battery_range) || 0;
-        
-        let fullRange = 400;
-        if (bat > 0 && range > 0) {
-          fullRange = Math.round((range / bat) * 100);
-        }
-        return fullRange;
-      });
+  // 1. 100% 환산 주행거리 계산 (added_battery_range / added_battery_level * 100)
+  const rangeData = recentData.map(v => {
+    const rangeAdded = Number(v.added_battery_range) || 0;
+    const levelAdded = Number(v.added_battery_level) || 0;
 
-      if (degData.length > 0) {
-        const degEl = document.getElementById('b-degradation-val');
-        const rangeEl = document.getElementById('b-est-range-val');
-        if (degEl) degEl.innerText = `${degData[degData.length - 1]}%`;
-        if (rangeEl) rangeEl.innerText = `${rangeData[rangeData.length - 1]} km`;
-      }
-
-      // 유효한 열화율 값들의 min/max를 계산하여 Y축을 타이트하게 설정 (일자 느낌 완화)
-      const validDegs = degData.filter(v => !isNaN(v));
-      const minDeg = validDegs.length > 0 ? Math.min(...validDegs) : 97;
-      const maxDeg = validDegs.length > 0 ? Math.max(...validDegs) : 100;
-
-      // 1. 열화율 차트 렌더링
-      if (chartDegRec) chartDegRec.destroy();
-      const ctxDeg = document.getElementById('chartDegradationRecent')?.getContext('2d');
-      if (ctxDeg) {
-        chartDegRec = new Chart(ctxDeg, {
-          type: 'line',
-          data: {
-            labels: labels,
-            datasets: [{
-              label: '열화율 (%)',
-              data: degData,
-              borderColor: '#6366f1',
-              backgroundColor: 'rgba(99, 102, 241, 0.1)',
-              fill: true,
-              tension: 0.3,
-              pointRadius: 2
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { 
-              legend: { display: false },
-              tooltip: {
-                backgroundColor: 'rgba(15, 17, 23, 0.9)',
-                titleColor: '#f3f4f6',
-                bodyColor: '#818cf8',
-                borderColor: 'rgba(99, 102, 241, 0.3)',
-                borderWidth: 1,
-                padding: 10,
-                displayColors: false
-              }
-            },
-            scales: {
-              x: { 
-                display: true,
-                grid: { display: false },
-                ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 6 }
-              },
-              y: { 
-                min: Math.max(0, Number((minDeg - 0.5).toFixed(1))), 
-                max: Math.min(100, Number((maxDeg + 0.5).toFixed(1))), 
-                grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
-                ticks: { color: '#9ca3af' }
-              }
-            }
-          }
-        });
-      }
-
-      // 2. 주행거리 차트 렌더링 (최근 30개 기준)
-      if (chartRangeRec) chartRangeRec.destroy();
-      const ctxRange = document.getElementById('chartRangeRecent')?.getContext('2d');
-      if (ctxRange) {
-        const validRanges = rangeData.filter(v => !isNaN(v));
-        const minRange = validRanges.length > 0 ? Math.min(...validRanges) : 350;
-        const maxRange = validRanges.length > 0 ? Math.max(...validRanges) : 450;
-
-        chartRangeRec = new Chart(ctxRange, {
-          type: 'line',
-          data: {
-            labels: labels,
-            datasets: [{
-              label: '100% 주행거리 (km)',
-              data: rangeData,
-              borderColor: '#10b981',
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              fill: true,
-              tension: 0.3,
-              pointRadius: 2
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { 
-              legend: { display: false },
-              tooltip: {
-                backgroundColor: 'rgba(15, 17, 23, 0.9)',
-                titleColor: '#f3f4f6',
-                bodyColor: '#34d399',
-                borderColor: 'rgba(16, 185, 129, 0.3)',
-                borderWidth: 1,
-                padding: 10,
-                displayColors: false
-              }
-            },
-            scales: {
-              x: { 
-                display: true,
-                grid: { display: false },
-                ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 6 }
-              },
-              y: { 
-                min: Math.floor(minRange - 10),
-                max: Math.ceil(maxRange + 10),
-                grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
-                ticks: { color: '#9ca3af' }
-              }
-            }
-          }
-        });
-      }
+    // charging 테이블의 데이터로 정확히 계산
+    if (rangeAdded > 0 && levelAdded > 0) {
+      return Math.round((rangeAdded / levelAdded) * 100);
     }
+    
+    // 폴백: vehicle 테이블 데이터인 경우
+    const bat = Number(v.battery_level) || 0;
+    const range = Number(v.battery_range) || 0;
+    if (bat > 0 && range > 0) {
+      return Math.round((range / bat) * 100);
+    }
+
+    return 400; // 기본 디폴트
+  });
+
+  // 2. 충전된 전력량 (kWh)
+  const addedkWhData = recentData.map(v => Math.round((Number(v.added_charging) || 0) * 10) / 10);
+
+  // 상단 요약 카드 값 업데이트
+  if (recentData.length > 0) {
+    const rangeEl = document.getElementById('b-est-range-val');
+    const addedEl = document.getElementById('b-added-val');
+    
+    if (rangeEl) rangeEl.innerText = `${rangeData[rangeData.length - 1]} km`;
+    if (addedEl) addedEl.innerText = `${addedkWhData[addedkWhData.length - 1]} kWh`;
+  }
+
+  // -------------------------------------------------------------
+  // 차트 1: 100% 환산 주행거리 추이 (chartRangeRecent)
+  // -------------------------------------------------------------
+  if (chartRangeRec) chartRangeRec.destroy();
+  const ctxRange = document.getElementById('chartRangeRecent')?.getContext('2d');
+  if (ctxRange) {
+    const validRanges = rangeData.filter(v => !isNaN(v) && v > 0);
+    const minRange = validRanges.length > 0 ? Math.min(...validRanges) : 350;
+    const maxRange = validRanges.length > 0 ? Math.max(...validRanges) : 500;
+
+    chartRangeRec = new Chart(ctxRange, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '100% 환산 거리 (km)',
+          data: rangeData,
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99, 102, 241, 0.12)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointHoverRadius: 5
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(15, 17, 23, 0.9)',
+            titleColor: '#f3f4f6',
+            bodyColor: '#818cf8',
+            borderColor: 'rgba(99, 102, 241, 0.3)',
+            borderWidth: 1,
+            padding: 10,
+            displayColors: false,
+            callbacks: {
+              label: (ctx) => `100% 환산 주행거리: ${ctx.raw} km`
+            }
+          }
+        },
+        scales: {
+          x: {
+            display: true,
+            grid: { display: false },
+            ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 6 }
+          },
+          y: {
+            min: Math.floor(minRange - 10),
+            max: Math.ceil(maxRange + 10),
+            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+            ticks: { color: '#9ca3af' }
+          }
+        }
+      }
+    });
+  }
+
+  // -------------------------------------------------------------
+  // 차트 2: 회당 충전량 추이 (chartDegradationRecent 재활용)
+  // -------------------------------------------------------------
+  if (chartDegRec) chartDegRec.destroy();
+  const ctxDeg = document.getElementById('chartDegradationRecent')?.getContext('2d');
+  if (ctxDeg) {
+    const validkWh = addedkWhData.filter(v => !isNaN(v));
+    const maxkWh = validkWh.length > 0 ? Math.max(...validkWh) : 50;
+
+    chartDegRec = new Chart(ctxDeg, {
+      type: 'bar', // 충전량은 막대그래프가 직관적입니다
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '충전량 (kWh)',
+          data: addedkWhData,
+          backgroundColor: 'rgba(16, 185, 129, 0.6)',
+          borderColor: '#10b981',
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(15, 17, 23, 0.9)',
+            titleColor: '#f3f4f6',
+            bodyColor: '#34d399',
+            borderColor: 'rgba(16, 185, 129, 0.3)',
+            borderWidth: 1,
+            padding: 10,
+            displayColors: false,
+            callbacks: {
+              label: (ctx) => `충전량: ${ctx.raw} kWh`
+            }
+          }
+        },
+        scales: {
+          x: {
+            display: true,
+            grid: { display: false },
+            ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 6 }
+          },
+          y: {
+            min: 0,
+            max: Math.ceil(maxkWh + 5),
+            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+            ticks: { color: '#9ca3af' }
+          }
+        }
+      }
+    });
+  }
+}
+
 
 
     // ✅ 브라우저 뒤로가기(←) 버튼 감지 리스너는 스크립트 하단 전역에 배치
@@ -2491,4 +2496,4 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
 
   </script>
 </body>
-</html>
+              </html>
