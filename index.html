@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.25</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -924,7 +924,7 @@ function startTeslaLogin() {
     const scopes = encodeURIComponent("openid offline_access vehicle_device_data vehicle_cmds");
 
     const authUrl = `https://tesla.com{clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scopes}`; 
-    console.log("이동할 테슬라 주소:",authUrl);
+    console.log("이동할 테슬라 주소:", authUrl);
     window.location.href = authUrl;
 }
 
