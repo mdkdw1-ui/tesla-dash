@@ -522,6 +522,29 @@
   </div>
 
   <script>
+
+  // 강제로 화면 디버그 박스에 로그를 남기는 헬퍼 함수
+  function forceLog(text, isErr = false) {
+    const box = document.getElementById('mobileDebugLogs');
+    if (!box) return;
+    const d = document.createElement('div');
+    d.style.color = isErr ? '#ff5252' : '#00ffcc';
+    d.style.margin = '2px 0';
+    d.innerText = text;
+    box.appendChild(d);
+  }
+
+  // 1단계: 스크립트 실행 시작 확인
+  window.addEventListener('DOMContentLoaded', () => {
+    forceLog("🟢 1단계: DOMContentLoaded 이벤트 발생 완료");
+  });
+
+  window.addEventListener('load', () => {
+    forceLog("🟢 2단계: 페이지 완전 로드 (Load 이벤트 완료)");
+  });
+</script>
+
+
   
  // 자바스크립트 전역 에러 및 콘솔 가로채기
 (function() {
@@ -2545,4 +2568,4 @@ function renderBatteryCharts() {
 
   </script>
 </body>
-  </html>
+</html>
