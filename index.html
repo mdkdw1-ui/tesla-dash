@@ -914,19 +914,24 @@ if (isValidToken) {
     }
 
 function startTeslaLogin() {
-    addLog('🔐 테슬라 공식 OAuth 페이지로 이동합니다...');
+    addLog("🔐 테슬라 공식 OAuth 페이지로 이동합니다...");
 
-    // 전역 변수로 선언된 진짜 디벨로퍼 정보를 활용
-    const clientId = CLIENT_ID;
-    const redirectUri = encodeURIComponent(REDIRECT_URI);
+    // 테슬라 OAuth 2.0 설정 값
+    const CLIENT_ID = "YOUR_TESLA_CLIENT_ID"; // 테슬라 디벨로퍼 콘솔의 Client ID
+    const REDIRECT_URI = encodeURIComponent("https://mdkdw1-ui.github.io/tesla-dash/"); 
+    const SCOPE = encodeURIComponent("openid offline_access vehicle_device_data vehicle_cmds vehicle_charging_cmds");
+    const STATE = Math.random().toString(36).substring(2, 15);
+    
+    // 테슬라 공식 OAuth 인증 URL 직접 생성
+    const teslaAuthUrl = `https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=${SCOPE}&state=${STATE}`;
 
-    // 테슬라 플릿(Fleet) API 표준 필수 스코프 설정
-    const scopes = encodeURIComponent("openid offline_access vehicle_device_data vehicle_cmds");
-
-    const authUrl = `https://tesla.com{clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scopes}`; 
-    console.log("이동할 테슬라 주소:", authUrl);
-    window.location.href = authUrl;
+    // 로그 출력 후 0.5초 뒤 페이지 이동
+    setTimeout(() => {
+        window.location.href = teslaAuthUrl;
+    }, 500);
 }
+
+    
 
 
 
