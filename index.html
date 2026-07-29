@@ -956,8 +956,8 @@ async function exchangeTeslaToken(code) {
           localStorage.setItem('tesla_access_token', accessToken);
           addLog('✅ 테슬라 Access Token 발급 성공!');
           
-          document.getElementByIdSection').classList.add('hidden');
-          document.getElementById('tokenInfoSection').classList.remove('hidden');
+          document.getElementById('loginSection').classList.add('hidden');
+                 document.getElementById('tokenInfoSection').classList.remove('hidden');
           renderAccessTokenUI(accessToken);
           
           await fetchTeslaVehicles(accessToken, true);
