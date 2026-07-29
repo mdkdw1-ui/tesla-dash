@@ -84,6 +84,20 @@
         <i class="fa-solid fa-arrows-rotate"></i> <span class="hidden sm:inline">동기화 & 갱신</span>
       </button>
 
+<!-- 스마트폰 화면용 실시간 디버그 박스 -->
+<div id="mobileDebugOverlay" style="position: fixed; bottom: 0; left: 0; width: 100%; max-height: 150px; background: rgba(0, 0, 0, 0.85); color: #00ffcc; font-size: 11px; font-family: monospace; padding: 8px; z-index: 99999; overflow-y: auto; border-top: 1px solid #444; box-sizing: border-box;">
+  <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #555; padding-bottom: 3px; margin-bottom: 4px;">
+    <span style="font-weight: bold; color: #ffeb3b;">📱 모바일 디버그 로그</span>
+    <button onclick="document.getElementById('mobileDebugOverlay').style.display='none'" style="background: #e91e63; color: white; border: none; font-size: 10px; padding: 1px 6px; border-radius: 3px;">닫기</button>
+  </div>
+  <div id="mobileDebugLogs"></div>
+</div>
+
+
+
+
+
+
       <!-- 설정 버튼 -->
       <button onclick="openConfigModal()" title="설정" class="p-2 sm:px-3 sm:py-1.5 text-xs font-bold rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-200 border border-gray-700 transition active:scale-95 flex items-center gap-1.5 shadow-md">
         <i class="fa-solid fa-gear text-gray-400"></i> <span class="hidden sm:inline">설정</span>
@@ -508,6 +522,41 @@
   </div>
 
   <script>
+  
+ // 자바스크립트 전역 에러 및 콘솔 가로채기
+(function() {
+  function appendDebugLog(message, isError = false) {
+    const logContainer = document.getElementById('mobileDebugLogs');
+    if (!logContainer) return;
+    const div = document.createElement('div');
+    div.style.color = isError ? '#ff5252' : '#00ffcc';
+    div.style.margin = '2px 0';
+    div.innerText = `[${new Date().toLocaleTimeString()}] ${message}`;
+    logContainer.appendChild(div);
+    logContainer.scrollTop = logContainer.scrollHeight;
+  }
+
+  // 기본 콘솔 log 가로채기
+  const originalLog = console.log;
+  console.log = function(...args) {
+    originalLog.apply(console, args);
+    appendDebugLog(args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '));
+  };
+
+  // 치명적 에러(SyntaxError, ReferenceError 등) 가로채기
+  window.onerror = function(msg, url, lineNo, columnNo, error) {
+    appendDebugLog(`❌ 에러: ${msg} (Line: ${lineNo})`, true);
+    return false;
+  };
+
+  window.addEventListener('unhandledrejection', function(event) {
+    appendDebugLog(`❌ 비동기 에러: ${event.reason}`, true);
+  });
+})();
+ 
+  
+  
+  
     const SECRET_SALT = "Tesla_Supabase_Dashboard_2026";
     let configObj = { 
       kakaoKey: '159c5d7588efc5939d431f005912f9f3', 
