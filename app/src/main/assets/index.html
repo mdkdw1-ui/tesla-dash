@@ -10,6 +10,11 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
+  /* 모바일에서 브라우저 기본 제스처와 터치 이벤트 충돌 방지 */
+  body {
+    touch-action: manipulation;
+  }
+  
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     
     body {
@@ -66,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -328,28 +333,40 @@
         </div>
       </div>
 
-      <!-- 1-4. 배터리 서브 탭 (최근 50개 데이터 동기화) -->
+            <!-- 1-4. 배터리 서브 탭 (최근 50개 데이터 동기화) -->
       <div id="sub-panel-battery" class="hidden space-y-4">
         <div class="grid grid-cols-2 gap-3">
-          <div class="glass-card p-4 rounded-2xl shadow-lg">
+          <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-indigo-500/60">
+            <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl"></div>
             <span class="text-[11px] text-gray-400 block mb-1 font-medium">최근 열화율 (SOH)</span>
             <span id="b-degradation-val" class="text-2xl font-black text-indigo-400">100.0%</span>
           </div>
-          <div class="glass-card p-4 rounded-2xl shadow-lg">
+          <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-emerald-500/60">
+            <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl"></div>
             <span class="text-[11px] text-gray-400 block mb-1 font-medium">100% 충전 시 주행 가능 거리 추정</span>
             <span id="b-est-range-val" class="text-2xl font-black text-green-400">- km</span>
           </div>
         </div>
 
-        <div class="glass-card p-4 rounded-2xl space-y-2 shadow-lg">
-          <h3 class="text-xs font-bold text-gray-300">최근 열화율 추이 (최근 50개 기록)</h3>
+        <div class="glass-card p-4 rounded-2xl space-y-2 shadow-lg relative overflow-hidden border-l-2 border-indigo-500/50">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-indigo-500 inline-block"></span> 최근 열화율 추이 (최근 50개 기록)
+            </h3>
+          </div>
           <div class="w-full h-40"><canvas id="chartDegradationRecent"></canvas></div>
         </div>
-        <div class="glass-card p-4 rounded-2xl space-y-2 shadow-lg">
-          <h3 class="text-xs font-bold text-gray-300">최근 100% 환산 주행거리 (최근 50개 기록)</h3>
+        
+        <div class="glass-card p-4 rounded-2xl space-y-2 shadow-lg relative overflow-hidden border-l-2 border-emerald-500/50">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> 최근 100% 환산 주행거리 (최근 50개 기록)
+            </h3>
+          </div>
           <div class="w-full h-40"><canvas id="chartRangeRecent"></canvas></div>
         </div>
       </div>
+
 
     </div>
 
@@ -386,14 +403,14 @@
 
         <div id="loginSection" class="space-y-2">
           <label class="block text-xs text-gray-400 font-medium">Tesla OAuth 계정 연동</label>
-          <button onclick="requestTeslaLogin()" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold py-3 rounded-xl text-xs transition shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2">
+          <button onclick="startTeslaLogin()" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold py-3 rounded-xl text-xs transition shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2">
             🔐 테슬라 계정 로그인
           </button>
         </div>
 
         <div id="tokenInfoSection" class="hidden space-y-3">
           <div class="p-3 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-emerald-400 text-xs font-bold flex items-center justify-between shadow-inner">
-            <span class="flex items-center gap-1.5">✅ 테슬라 OAuth 로그인 완료</span>
+            <span class="flex items-center gap-1.5">✅ 테슬라 OAuth </span>
             <button onclick="fetchTeslaVehicles(accessToken)" class="text-[10px] underline text-emerald-300 hover:text-emerald-200">VIN/ID 동기화</button>
           </div>
           
@@ -405,12 +422,15 @@
 
           <!-- Tesla Access Token 표시 영역 및 복사 버튼 -->
           <div class="p-3 bg-gray-950 border border-gray-800 rounded-xl space-y-2">
-            <div class="flex justify-between items-center text-xs">
-              <span class="text-gray-300 font-bold text-[11px]">🔑 Tesla Access Token</span>
-              <button onclick="copyAccessToken()" class="text-[10px] text-blue-400 hover:text-blue-300 font-bold border border-blue-500/40 px-2.5 py-1 rounded-lg bg-blue-500/10 transition active:scale-95">
-                📋 토큰 복사
-              </button>
-            </div>
+            <div class="flex justify-between items-center text-xs gap-1">
+  <span class="text-gray-300 font-bold text-[11px]">🔑 Tesla Access Token</span>
+  <div class="flex gap-1">
+    <button onclick="copyAccessToken()" class="...">📋 복사</button>
+    <!-- 💡 클릭 시 토큰을 지우고 새로고침 시키는 벼락 로그아웃 버튼 -->
+    <button onclick="localStorage.removeItem('tesla_access_token'); location.reload();" class="text-[10px] text-red-400 hover:text-red-300 font-bold border border-red-500/40 px-2.5 py-1 rounded-lg bg-red-500/10 transition active:scale-95">⚠️ 재로그인</button>
+  </div>
+</div>
+
             <div id="displayAccessToken" class="p-2.5 bg-black/80 border border-gray-800 rounded-lg font-mono text-[10px] text-emerald-400 break-all select-all max-h-20 overflow-y-auto leading-relaxed shadow-inner">
               -
             </div>
@@ -527,33 +547,29 @@
     let chartDegRec = null, chartRangeRec = null;
 
     window.addEventListener('DOMContentLoaded', () => {
-      document.addEventListener('visibilitychange', handleAppVisibilityChange);
+            document.addEventListener('visibilitychange', handleAppVisibilityChange);
 
-// 페이지 로드 시 테슬라 로그인 상태 확인
-function checkTeslaAuth() {
-  const token = localStorage.getItem('tesla_access_token'); // 저장된 토큰 확인
-  const guardianPanel = document.getElementById('guardianContent'); // 감시 가디언 패널 ID
-  const loginModal = document.getElementById('teslaLoginModal'); // 로그인 모달 ID
+      // 테슬라 공식 토큰 규격(보통 60자 이상 혹은 qts_로 시작)을 검증하여 가짜 값 진입 차단
+const isValidToken = accessToken &&
+                     accessToken.trim() !== '' &&
+                     accessToken !== 'dummy_token' &&
+                     accessToken !== 'undefined' &&
+                     accessToken.length > 40;
 
-  if (!token) {
-    // 로그인이 안 되어 있는 경우: 로그인 안내 모달 표시 및 주요 기능 가리기
-    if (loginModal) loginModal.classList.remove('hidden');
-    showNotification('테슬라 계정 로그인이 필요합니다.', 'warning');
-  } else {
-    // 로그인 되어 있는 경우
-    if (loginModal) loginModal.classList.add('hidden');
-  }
+
+if (isValidToken) {
+  // 진짜 로그인된 상태일 때만 실행
+  document.getElementById('loginSection')?.classList.add('hidden');
+  document.getElementById('tokenInfoSection')?.classList.remove('hidden');
+  renderAccessTokenUI(accessToken);
+  fetchTeslaVehicles(accessToken, true);
+} else {
+  // ❌ 가짜 토큰이거나 없으면 찌꺼기 데이터를 지우고 로그인 화면을 강제로 노출
+  localStorage.removeItem('tesla_access_token'); // 저장소의 가짜 토큰 청소
+  document.getElementById('loginSection')?.classList.remove('hidden');
+  document.getElementById('tokenInfoSection')?.classList.add('hidden');
 }
 
-// 초기화 시 실행
-checkTeslaAuth();
-
-      if (accessToken) {
-        document.getElementById('loginSection')?.classList.add('hidden');
-        document.getElementById('tokenInfoSection')?.classList.remove('hidden');
-        renderAccessTokenUI(accessToken);
-        fetchTeslaVehicles(accessToken, true);
-      }
 
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
@@ -576,6 +592,48 @@ checkTeslaAuth();
     function initSupabaseClient() {
       if (configObj.url && configObj.key && window.supabase) {
         supabaseClient = supabase.createClient(configObj.url, configObj.key);
+      }
+    }
+    // 백엔드(Vercel)를 통해 인증 코드(code)를 Access Token으로 교환하는 함수
+    async function exchangeCodeWithBackend(code) {
+      addLog('🔄 Vercel 백엔드로 인증 코드 전송 중...');
+      try {
+        const response = await fetch(VERCEL_BACKEND_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ 
+            code: code,
+            redirect_uri: REDIRECT_URI
+          })
+        });
+
+        const data = await response.json();
+        
+        if (response.ok && (data.access_token || data.token)) {
+          accessToken = data.access_token || data.token;
+          localStorage.setItem('tesla_access_token', accessToken);
+          
+          // UI 업데이트
+          renderAccessTokenUI(accessToken);
+          document.getElementById('loginSection')?.classList.add('hidden');
+          document.getElementById('tokenInfoSection')?.classList.remove('hidden');
+          
+          addLog('✅ 테슬라 Access Token 교환 성공!');
+          
+          // URL의 ?code= 파라미터 정리
+          window.history.replaceState({}, document.title, window.location.pathname);
+          
+          // 차량 정보 동기화 실행
+          fetchTeslaVehicles(accessToken, true);
+        } else {
+          addLog(`❌ 토큰 교환 실패: ${data.error || JSON.stringify(data)}`);
+          alert('테슬라 인증 토큰 교환 중 오류가 발생했습니다. 로그를 확인해 주세요.');
+        }
+      } catch (err) {
+        addLog(`⚠️ 토큰 교환 요청 예외 발생: ${err.message}`);
+        console.error(err);
       }
     }
 
@@ -639,13 +697,18 @@ checkTeslaAuth();
       document.getElementById('modal-config').classList.remove('hidden');
     }
 
-    function closeConfigModal() {
+        function closeConfigModal() {
       document.getElementById('modal-config').classList.add('hidden');
     }
 
-    function switchMainTab(mainTab) {
+    function switchMainTab(mainTab, pushHistory = true) {
       currentMainTab = mainTab;
       localStorage.setItem('tesla_main_tab', mainTab);
+
+      // 사용자가 직접 탭을 눌러서 이동한 경우에만 히스토리 기록
+      if (pushHistory) {
+        history.pushState({ tab: mainTab, sub: currentSubTab }, '', '');
+      }
 
       document.getElementById('main-panel-monitor').classList.toggle('hidden', mainTab !== 'monitor');
       document.getElementById('main-panel-guardian').classList.toggle('hidden', mainTab !== 'guardian');
@@ -659,13 +722,17 @@ checkTeslaAuth();
         : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
 
       if (mainTab === 'monitor') {
-        switchSubTab(currentSubTab);
+        switchSubTab(currentSubTab, false); // 서브탭 이동 시에도 히스토리 중복 방지
       }
     }
 
-    function switchSubTab(subTab) {
+    function switchSubTab(subTab, pushHistory = true) {
       currentSubTab = subTab;
       localStorage.setItem('tesla_sub_tab', subTab);
+
+      if (pushHistory) {
+        history.pushState({ tab: currentMainTab, sub: subTab }, '', '');
+      }
 
       ['vehicle', 'driving', 'monthly', 'battery'].forEach(t => {
         const panel = document.getElementById(`sub-panel-${t}`);
@@ -679,15 +746,33 @@ checkTeslaAuth();
         }
       });
 
+      // ✅ 서브탭별 추가 실행 로직은 반드시 함수 내부 맨 아래에 위치해야 합니다!
       if (subTab === 'driving' && map) {
         setTimeout(() => {
           map.relayout();
           renderDrivingData();
         }, 100);
       }
-      if (subTab === 'monthly') { initMonthlyDropdowns(); renderMonthlyTop5(); }
-      if (subTab === 'battery') renderBatteryCharts();
+      if (subTab === 'monthly') { 
+        initMonthlyDropdowns(); 
+        renderMonthlyTop5(); 
+      }
+      if (subTab === 'battery') {
+        renderBatteryCharts();
+      }
     }
+
+    // ✅ 뒤로가기(←) 버튼 감지 리스너는 함수 바깥(전역)에 독립적으로 위치
+    window.addEventListener('popstate', function(event) {
+      if (event.state && event.state.tab) {
+        switchMainTab(event.state.tab, false);
+        if (event.state.sub && typeof switchSubTab === 'function') {
+          switchSubTab(event.state.sub, false);
+        }
+      } else {
+        switchMainTab('monitor', false);
+      }
+    });
 
     // 날짜 클릭 시 해당 일간 주행 기록으로 이동
     function jumpToDrivingDate(dateStr) {
@@ -828,19 +913,42 @@ checkTeslaAuth();
       if (timeText) timeText.innerText = `마지막 확인: ${new Date().toLocaleTimeString()}`;
     }
 
-    function requestTeslaLogin() {
-      addLog('🔐 테슬라 OAuth 로그인 페이지로 이동합니다.');
-      const scope = "openid offline_access vehicle_device_data vehicle_cmds";
-      const authUrl = `https://auth.tesla.com/oauth2/v3/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scope)}&state=sentry_app`;
-      window.location.href = authUrl;
+function startTeslaLogin() {
+    addLog('🔐 테슬라 공식 OAuth 페이지로 이동합니다...');
+
+    // 전역 변수로 선언된 진짜 디벨로퍼 정보를 활용
+    const clientId = CLIENT_ID;
+    const redirectUri = encodeURIComponent(REDIRECT_URI);
+
+    // 테슬라 플릿(Fleet) API 표준 필수 스코프 설정
+    const scopes = encodeURIComponent("openid offline_access vehicle_device_data vehicle_cmds");
+
+    const authUrl = `https://tesla.com{clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scopes}`; 
+    console.log("이동할 테슬라 주소:",authUrl);
+    window.location.href = authUrl;
+}
+
+
+
+async function exchangeTeslaToken(code) {
+    // 가짜 경고창을 띄우지 않고, 7~8번 조각에 정의된 Vercel 연동 함수를 직접 실행하도록 토스합니다.
+    if (typeof exchangeCodeWithBackend === 'function') {
+        exchangeCodeWithBackend(code);
+    } else {
+        addLog('⚠️ 토큰 교환 실행 함수를 찾을 수 없습니다.');
     }
+}
+
+
 
     async function exchangeCodeWithBackend(code) {
       try {
         const res = await fetch(VERCEL_BACKEND_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code })
+          body: JSON.stringify({ 
+code: code, 
+redirect_uri: REDIRECT_URI})
         });
         const data = await res.json();
         if (data.access_token) {
@@ -927,11 +1035,25 @@ checkTeslaAuth();
           }
           addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언 서비스를 시작합니다.');
 
-          if (window.AndroidBridge) {
-            const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
-            const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
-            window.AndroidBridge.startGuardianService(accessToken || 'dummy_token', configObj.vehicleId || '3744141651867089', interval, topic);
-          }
+     if (window.AndroidBridge) {
+  const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
+  const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
+  
+  // 💡 진짜 유효한 토큰인지 체크 (dummy_token이거나 비어있으면 차단)
+  const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '';
+
+  if (validToken) {
+    window.AndroidBridge.startGuardianService(
+      accessToken, 
+      configObj.vehicleId || '3744141651867089', 
+      interval, 
+      topic
+    );
+  } else {
+    console.warn('⚠️ 유효한 테슬라 Access Token이 없어 가디언 서비스를 시작할 수 없습니다. 로그인이 필요합니다.');
+    alert('테슬라 로그인이 먼저 필요합니다.');
+  }
+}
 
           startMonitoring();
         } else {
@@ -1105,11 +1227,25 @@ checkTeslaAuth();
     function testNtfy() { sendNtfyNotification('Tesla Guardian Test', 'This is a test notification.'); }
 
     function initDashboard() {
-      loadKakaoSdk(configObj.kakaoKey, () => {
+  try {
+    if (typeof configObj === 'undefined' || !configObj.kakaoKey) {
+      console.warn("⚠️ configObj 또는 카카오 키가 설정되지 않았습니다.");
+      return;
+    }
+    
+    loadKakaoSdk(configObj.kakaoKey, () => {
+      try {
         initMap();
         handleRefresh(false);
-      });
-    }
+      } catch (err) {
+        console.error("지도 초기화 또는 데이터 갱신 중 에러 발생:", err);
+      }
+    });
+  } catch (err) {
+    console.error("대시보드 초기화 예외:", err);
+  }
+}
+
 
     function loadKakaoSdk(appKey, callback) {
       if (window.kakao && window.kakao.maps) { kakao.maps.load(() => { geocoder = new kakao.maps.services.Geocoder(); callback(); }); return; }
@@ -1677,33 +1813,85 @@ checkTeslaAuth();
       if (currentInfoWindow) currentInfoWindow.close();
     }
 
-    // 단일 주행 지도 연동 및 강조
-    function highlightSingleTripOnMap(tripId) {
-      const trip = allTrips.find(t => t.id === tripId);
-      if (!trip || !trip.path || trip.path.length === 0 || !map) return;
+function highlightSingleTripOnMap(tripId) {
+  // 1. 데이터와 지도 객체 존재 여부 방어 코드
+  if (!allTrips || allTrips.length === 0) return;
+  
+  const targetTrip = allTrips.find(t => t.id === tripId);
+  if (!targetTrip || !targetTrip.path || targetTrip.path.length === 0) {
+    console.warn("⚠️ 해당 운행 기록의 경로 좌표가 없습니다.");
+    return;
+  }
+  
+  if (typeof map === 'undefined' || !map) {
+    console.warn("⚠️ 카카오맵이 아직 초기화되지 않았습니다.");
+    return;
+  }
 
-      clearMapPolylines();
-      const bounds = new kakao.maps.LatLngBounds();
-      const pathPoints = trip.path.map(pt => {
-        const lat = pt.lat || pt.latitude || pt[0];
-        const lng = pt.lng || pt.longitude || pt[1];
-        const loc = new kakao.maps.LatLng(lat, lng);
-        bounds.extend(loc);
-        return loc;
+  clearMapPolylines();
+  const bounds = new kakao.maps.LatLngBounds();
+  const pathPoints = targetTrip.path.map(pt => {
+    const lat = pt.lat || pt.latitude || pt[0];
+    const lng = pt.lng || pt.longitude || pt[1];
+    const loc = new kakao.maps.LatLng(lat, lng);
+    bounds.extend(loc);
+    return loc;
+  });
+
+  const polyline = new kakao.maps.Polyline({
+    path: pathPoints,
+    strokeWeight: 6,
+    strokeColor: '#ef4444',
+    strokeOpacity: 0.95,
+    strokeStyle: 'solid'
+  });
+
+  polyline.setMap(map);
+  currentPolylines.push(polyline);
+
+  // 2. IIFE 클로저를 통한 스코프 오염 방지
+  (function(currentTrip) {
+    kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
+      if (typeof currentInfoWindow !== 'undefined' && currentInfoWindow) {
+        currentInfoWindow.close();
+      }
+
+      let rawT = currentTrip.raw_data;
+      if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
+      let resolvedTemp = currentTrip.outside_temp ?? currentTrip.outsideTemp ?? rawT?.climate_state?.outside_temp ?? rawT?.outside_temp;
+      
+      const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp)) ? `${Math.round(Number(resolvedTemp))}°C` : '-';
+      const timeStr = new Date(currentTrip.timestamp).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const kwh = ((currentTrip.useBattery / 100) * 60);
+      const eff = kwh > 0 ? (currentTrip.moveKM / kwh).toFixed(2) : "0.00";
+
+      const content = `
+        <div style="padding:12px; background:#0f1117; color:#f3f4f6; border:1px solid #374151; border-radius:12px; font-size:12px; width:220px; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
+          <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; border-bottom:1px solid #1f2937; padding-bottom:4px;">🚗 주행 상세 정보</div>
+          <div style="margin-bottom:3px;"><b>시각:</b> ${timeStr}</div>
+          <div style="margin-bottom:3px;"><b>출발:</b> ${currentTrip.startDong || '출발지'}</div>
+          <div style="margin-bottom:3px;"><b>도착:</b> ${currentTrip.endDong || '도착지'}</div>
+          <div style="margin-bottom:3px;"><b>거리/시간:</b> ${currentTrip.moveKM.toFixed(1)}km / ${currentTrip.durationMin}분</div>
+          <div style="margin-bottom:3px;"><b>배터리 소모:</b> ${currentTrip.useBattery.toFixed(1)}%</div>
+          <div style="margin-bottom:3px;"><b>외기 온도:</b> 🌡️ ${tempStr}</div>
+          <div><b>전비:</b> ⚡ ${eff} km/kWh</div>
+        </div>
+      `;
+
+      currentInfoWindow = new kakao.maps.InfoWindow({
+        content: content,
+        position: mouseEvent.latLng,
+        removable: true
       });
 
-      const polyline = new kakao.maps.Polyline({
-        path: pathPoints,
-        strokeWeight: 6,
-        strokeColor: '#ef4444',
-        strokeOpacity: 0.95,
-        strokeStyle: 'solid'
-      });
+      currentInfoWindow.open(map);
+    });
+  })(targetTrip);
 
-      polyline.setMap(map);
-      currentPolylines.push(polyline);
-      map.setBounds(bounds);
-    }
+  map.setBounds(bounds);
+}
+
+
 
     function renderDrivingData() {
       clearMapPolylines();
@@ -1767,7 +1955,42 @@ checkTeslaAuth();
             const timeStr = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
             const kwh = ((t.useBattery / 100) * 60);
             const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
-            const tempStr = t.outsideTemp !== undefined && t.outsideTemp !== null ? `${Math.round(t.outsideTemp)}°C` : '-';
+   // [수정 후] driving과 vehicle 양쪽 모두에서 외기 온도 탐색
+let rawT = t.raw_data;
+if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
+
+// 1차: driving 테이블 자체의 외기 온도 컬럼 및 raw_data 탐색
+let resolvedTemp = 
+  t.outside_temp ?? 
+  t.outsideTemp ?? 
+  rawT?.climate_state?.outside_temp ?? 
+  rawT?.outside_temp;
+
+// 2차: driving에 온도가 없다면, 기존 방식대로 vehicleRows에서 가장 가까운 시점의 온도 매칭
+if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
+  const tripTime = new Date(t.timestamp).getTime();
+  if (!isNaN(tripTime)) {
+    let validVehicles = vehicleRows.filter(v => v.outside_temp !== null && v.outside_temp !== undefined);
+    if (validVehicles.length > 0) {
+      let closestVehicle = validVehicles.reduce((prev, curr) => {
+        const prevDiff = Math.abs(new Date(prev.updated_at).getTime() - tripTime);
+        const currDiff = Math.abs(new Date(curr.updated_at).getTime() - tripTime);
+        return currDiff < prevDiff ? curr : prev;
+      });
+
+      if (closestVehicle) {
+        resolvedTemp = closestVehicle.outside_temp;
+      }
+    }
+  }
+}
+
+const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp) && Number(resolvedTemp) !== 0) 
+  ? `${Math.round(Number(resolvedTemp))}°C` 
+  : '-';
+
+
+
             
             let batText = `${t.useBattery.toFixed(1)}%`;
             if (t.startBat !== undefined && t.endBat !== undefined) {
@@ -1852,7 +2075,7 @@ checkTeslaAuth();
       document.getElementById('stat-energy').innerText = `-${totalBat.toFixed(1)}% (${totalKwh.toFixed(1)}kWh)`;
       document.getElementById('stat-efficiency').innerText = `${avgEff} km/kWh`;
 
-      if (matched.length > 0 && map && window.kakao && kakao.maps) {
+            if (matched.length > 0 && map && window.kakao && kakao.maps) {
         const bounds = new kakao.maps.LatLngBounds();
         let pointCount = 0;
 
@@ -1877,6 +2100,59 @@ checkTeslaAuth();
 
             polyline.setMap(map);
             currentPolylines.push(polyline);
+
+            // [추가 기능] 주행 경로 클릭 시 팝업(인포윈도우) 표시
+            kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
+              // 기존에 열려 있는 인포윈도우가 있다면 닫기
+              if (currentInfoWindow) {
+                currentInfoWindow.close();
+              }
+
+              // 날짜 포맷 정리
+              const tripDate = new Date(t.timestamp).toLocaleString();
+              const startText = cleanAddress(t.startDong || '출발지');
+              const endText = cleanAddress(t.endDong || '도착지');
+              const distText = t.moveKM ? `${t.moveKM.toFixed(1)} km` : '-';
+              const timeText = t.durationMin ? `${t.durationMin}분` : '-';
+              const batText = t.useBattery ? `-${t.useBattery.toFixed(1)}%` : '-';
+
+              // 팝업 내부 HTML 디자인 (다크 모드 감성)
+                            const content = `
+                <div style="padding:14px; background:#0f172a; color:#f3f4f6; border:1px solid rgba(59,130,246,0.5); border-radius:12px; font-size:12px; min-width:240px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.5);">
+                  <div style="font-weight:bold; color:#60a5fa; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+                    <span>🚗 주행 상세 정보</span>
+                    <span style="font-size:10px; color:#9ca3af;">${tripDate}</span>
+                  </div>
+                  <div style="margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><b>출발:</b> ${startText}</div>
+                  <div style="margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><b>도착:</b> ${endText}</div>
+                  <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; background:rgba(255,255,255,0.05); padding:8px; border-radius:8px; text-align:center;">
+                    <div>
+                      <div style="font-size:10px; color:#9ca3af; margin-bottom:2px;">거리</div>
+                      <div style="font-weight:bold; font-size:11px; white-space:nowrap;">${distText}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:#9ca3af; margin-bottom:2px;">시간</div>
+                      <div style="font-weight:bold; font-size:11px; white-space:nowrap;">${timeText}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:#9ca3af; margin-bottom:2px;">소모량</div>
+                      <div style="font-weight:bold; font-size:11px; color:#f87171; white-space:nowrap;">${batText}</div>
+                    </div>
+                  </div>
+                </div>
+              `;
+
+
+              // 클릭한 지점(또는 경로 중간 지점)에 인포윈도우 생성
+              currentInfoWindow = new kakao.maps.InfoWindow({
+                content: content,
+                removable: true
+              });
+
+              // 클릭한 마우스 위치 좌표에 팝업 띄우기
+              currentInfoWindow.setPosition(mouseEvent.latLng);
+              currentInfoWindow.open(map);
+            });
           }
         });
 
@@ -1884,6 +2160,7 @@ checkTeslaAuth();
           map.setBounds(bounds);
         }
       }
+
     }
 
     // 1-3. 월간 리포트 기능군
@@ -1988,7 +2265,9 @@ checkTeslaAuth();
       const avgTripKm = matchedTrips.length > 0 ? (totalDist / matchedTrips.length).toFixed(1) : "0.0";
 
       const chargeStats = calculateMonthlyChargingStats(selY, selM);
-      const estimatedCost = Math.round((chargeStats.kwh > 0 ? chargeStats.kwh : totalKwh) * 340); // kWh당 340원 기준
+      const effectiveKwh = chargeStats.kwh > 0 ? chargeStats.kwh : totalKwh;
+const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 적용
+
       const co2Saved = Math.round(totalDist * 0.12); // km당 0.12kg 절감
 
       document.getElementById('m-stat-distance').innerText = `${totalDist.toFixed(1)} km`;
@@ -2027,35 +2306,51 @@ checkTeslaAuth();
       `).join('') || `<span class="text-gray-500">데이터가 없습니다.</span>`;
     }
 
-    // 1-4. 배터리 차트 (최근 50개 데이터 동기화 시각화)
+        // 1-4. 배터리 차트 (최근 30개 데이터로 축소 및 열화율/주행거리 시각화)
     function renderBatteryCharts() {
       if (!vehicleRows || vehicleRows.length === 0) return;
 
-      const recent50 = vehicleRows.slice(0, 50).reverse();
-      const labels = recent50.map(v => {
+      // 전체 데이터를 최신순으로 정렬한 뒤 '최근 30개'만 가져오도록 수정
+      const sortedRows = [...vehicleRows].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+      const recentData = sortedRows.slice(0, 30).reverse(); // 시간순 정렬로 복원
+
+      const labels = recentData.map(v => {
         const d = new Date(v.updated_at);
-        return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
       });
 
-      const degData = recent50.map(v => {
+      // 열화율 데이터 추출
+      const degData = recentData.map(v => {
         let raw = v.raw_data;
         if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
         return v.soh || raw?.charge_state?.battery_soh || 98.5;
       });
 
-      const rangeData = recent50.map(v => {
-        const bat = v.battery_level || 100;
-        let raw = v.raw_data;
-        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e){} }
-        const range = raw?.charge_state?.battery_range || (bat * 4.2);
-        return Math.round((range / bat) * 100);
+      // 100% 환산 주행거리 데이터 추출 (Supabase 컬럼 직접 연동)
+      const rangeData = recentData.map(v => {
+        const bat = Number(v.battery_level) || 0;
+        const range = Number(v.battery_range) || 0;
+        
+        let fullRange = 400;
+        if (bat > 0 && range > 0) {
+          fullRange = Math.round((range / bat) * 100);
+        }
+        return fullRange;
       });
 
       if (degData.length > 0) {
-        document.getElementById('b-degradation-val').innerText = `${degData[degData.length - 1]}%`;
-        document.getElementById('b-est-range-val').innerText = `${rangeData[rangeData.length - 1]} km`;
+        const degEl = document.getElementById('b-degradation-val');
+        const rangeEl = document.getElementById('b-est-range-val');
+        if (degEl) degEl.innerText = `${degData[degData.length - 1]}%`;
+        if (rangeEl) rangeEl.innerText = `${rangeData[rangeData.length - 1]} km`;
       }
 
+      // 유효한 열화율 값들의 min/max를 계산하여 Y축을 타이트하게 설정 (일자 느낌 완화)
+      const validDegs = degData.filter(v => !isNaN(v));
+      const minDeg = validDegs.length > 0 ? Math.min(...validDegs) : 97;
+      const maxDeg = validDegs.length > 0 ? Math.max(...validDegs) : 100;
+
+      // 1. 열화율 차트 렌더링
       if (chartDegRec) chartDegRec.destroy();
       const ctxDeg = document.getElementById('chartDegradationRecent')?.getContext('2d');
       if (ctxDeg) {
@@ -2076,24 +2371,43 @@ checkTeslaAuth();
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: { 
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: 'rgba(15, 17, 23, 0.9)',
+                titleColor: '#f3f4f6',
+                bodyColor: '#818cf8',
+                borderColor: 'rgba(99, 102, 241, 0.3)',
+                borderWidth: 1,
+                padding: 10,
+                displayColors: false
+              }
+            },
             scales: {
-              x: { display: false },
-              // 기존 2082줄의 y: { ... } 전체를 아래처럼 변경합니다.
-y: { 
-  min: Math.floor(Math.min(...degData) - 1), 
-  max: 100, 
-  grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
-  ticks: { color: '#9ca3af', stepSize: 1 } 
-}
-}
+              x: { 
+                display: true,
+                grid: { display: false },
+                ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 6 }
+              },
+              y: { 
+                min: Math.max(0, Number((minDeg - 0.5).toFixed(1))), 
+                max: Math.min(100, Number((maxDeg + 0.5).toFixed(1))), 
+                grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
+                ticks: { color: '#9ca3af' }
+              }
+            }
           }
         });
       }
 
+      // 2. 주행거리 차트 렌더링 (최근 30개 기준)
       if (chartRangeRec) chartRangeRec.destroy();
       const ctxRange = document.getElementById('chartRangeRecent')?.getContext('2d');
       if (ctxRange) {
+        const validRanges = rangeData.filter(v => !isNaN(v));
+        const minRange = validRanges.length > 0 ? Math.min(...validRanges) : 350;
+        const maxRange = validRanges.length > 0 ? Math.max(...validRanges) : 450;
+
         chartRangeRec = new Chart(ctxRange, {
           type: 'line',
           data: {
@@ -2111,26 +2425,49 @@ y: {
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-scales: {
-  x: { display: false },
-// 두 번째 차트의 y: { ... } 부분 변경
-y: { 
-  min: Math.floor(Math.min(...rangeData) - 20),
-  max: Math.ceil(Math.max(...rangeData) + 20),
-  grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
-  ticks: { color: '#9ca3af' } 
-}
-
-    // 데이터 변동폭이 잘 보이도록 자동 스케일링 설정
-    grace: '10%' // 데이터 최저/최고값 대비 위아래 10% 여백만 두고 Y축을 확대
-  }
-}
-
+            plugins: { 
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: 'rgba(15, 17, 23, 0.9)',
+                titleColor: '#f3f4f6',
+                bodyColor: '#34d399',
+                borderColor: 'rgba(16, 185, 129, 0.3)',
+                borderWidth: 1,
+                padding: 10,
+                displayColors: false
+              }
+            },
+            scales: {
+              x: { 
+                display: true,
+                grid: { display: false },
+                ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 6 }
+              },
+              y: { 
+                min: Math.floor(minRange - 10),
+                max: Math.ceil(maxRange + 10),
+                grid: { color: 'rgba(255, 255, 255, 0.04)' }, 
+                ticks: { color: '#9ca3af' }
+              }
+            }
           }
         });
       }
     }
+
+
+    // ✅ 브라우저 뒤로가기(←) 버튼 감지 리스너는 스크립트 하단 전역에 배치
+    window.addEventListener('popstate', function(event) {
+      if (event.state && event.state.tab) {
+        // 기록된 이전 상태가 있다면 그 탭/서브탭으로 복원
+        // 주의: 기존 코드에서 서브탭 인자가 subTab이 아니라 다른 변수명(예: subTabName 등)이라면 맞추어 쓰세요.
+        switchMainTab(event.state.tab, event.state.sub);
+      } else {
+        // 기록이 없다면 기본 대시보드나 첫 화면으로
+        switchMainTab('dashboard', 'driving');
+      }
+    });
+
   </script>
 </body>
-    </html>
+  </html>
