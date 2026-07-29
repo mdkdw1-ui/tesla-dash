@@ -403,7 +403,7 @@
 
         <div id="loginSection" class="space-y-2">
           <label class="block text-xs text-gray-400 font-medium">Tesla OAuth 계정 연동</label>
-          <button onclick="requestTeslaLogin()" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold py-3 rounded-xl text-xs transition shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2">
+          <button onclick="startTeslaLogin()" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold py-3 rounded-xl text-xs transition shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2">
             🔐 테슬라 계정 로그인
           </button>
         </div>
@@ -546,11 +546,13 @@
     window.addEventListener('DOMContentLoaded', () => {
             document.addEventListener('visibilitychange', handleAppVisibilityChange);
 
-      // 💡 유효한 토큰인지, 그리고 'dummy_token'이 아닌지 철저하게 검증
-const isValidToken = accessToken && 
-                     accessToken !== 'dummy_token' && 
-                     accessToken.trim() !== '' && 
-                     accessToken !== 'undefined';
+      // 테슬라 공식 토큰 규격(보통 60자 이상 혹은 qts_로 시작)을 검증하여 가짜 값 진입 차단
+const isValidToken = accessToken &&
+                     accessToken.trim() !== '' &&
+                     accessToken !== 'dummy_token' &&
+                     accessToken !== 'undefined' &&
+                     accessToken.length > 40;
+
 
 if (isValidToken) {
   // 진짜 로그인된 상태일 때만 실행
@@ -908,39 +910,31 @@ if (isValidToken) {
       if (timeText) timeText.innerText = `마지막 확인: ${new Date().toLocaleTimeString()}`;
     }
 
-    // 변경 후 (실제 테슬라 공식 웹 인증 및 콜백 처리 로직)
 function startTeslaLogin() {
-    // 테슬라 공식 OAuth 인증 페이지로 리다이렉트 (Client ID 및 Redirect URI 설정 필요)
-    const clientId = "YOUR_TESLA_CLIENT_ID"; // 본인의 Tesla Developer Client ID 입력
-    const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
-    const authUrl = `https://auth.tesla.com/oauth2/v3/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid%20email%20offline_access%20vehicle_device_data`;
-    
+    addLog('🔐 테슬라 공식 OAuth 페이지로 이동합니다...');
+
+    // 전역 변수로 선언된 진짜 디벨로퍼 정보를 활용
+    const clientId = CLIENT_ID;
+    const redirectUri = encodeURIComponent(REDIRECT_URI);
+
+    // 테슬라 플릿(Fleet) API 표준 필수 스코프 설정
+    const scopes = encodeURIComponent("openid offline_access vehicle_device_data vehicle_cmds");
+
+    const authUrl = `https://tesla.com{clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scopes}`;
     window.location.href = authUrl;
 }
 
-// 페이지 로드 시 URL에 code가 포함되어 있는지 확인하여 콜백 처리 (초기화 함수 내에 추가)
-window.addEventListener('DOMContentLoaded', () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const authCode = urlParams.get('code');
-    if (authCode) {
-        // 주소창 깔끔하게 정리
-        window.history.replaceState({}, document.title, window.location.pathname);
-        // 받은 authCode를 백엔드나 토큰 교환 함수로 전달
-        exchangeTeslaToken(authCode);
-    }
-});
+}
 
 async function exchangeTeslaToken(code) {
-    try {
-        console.log("인증 코드 획득 성공, 토큰 교환 진행:", code);
-        // TODO: 백엔드 서버 또는 테슬라 API 서버로 code를 보내 Access/Refresh Token 발급 요청
-        alert("테슬라 계정 연동이 성공적으로 완료되었습니다!");
-        // 이후 가디언 대시보드 활성화 함수 호출
-    } catch (error) {
-        console.error("토큰 교환 실패:", error);
-        alert("로그인 연동 중 오류가 발생했습니다.");
+    // 가짜 경고창을 띄우지 않고, 7~8번 조각에 정의된 Vercel 연동 함수를 직접 실행하도록 토스합니다.
+    if (typeof exchangeCodeWithBackend === 'function') {
+        exchangeCodeWithBackend(code);
+    } else {
+        addLog('⚠️ 토큰 교환 실행 함수를 찾을 수 없습니다.');
     }
 }
+
 
 
     async function exchangeCodeWithBackend(code) {
@@ -948,7 +942,9 @@ async function exchangeTeslaToken(code) {
         const res = await fetch(VERCEL_BACKEND_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code })
+          body: JSON.stringify({ 
+code: code, 
+redirect_uri: REDIRECT_URI})
         });
         const data = await res.json();
         if (data.access_token) {
@@ -957,7 +953,7 @@ async function exchangeTeslaToken(code) {
           addLog('✅ 테슬라 Access Token 발급 성공!');
           
           document.getElementById('loginSection').classList.add('hidden');
-                 document.getElementById('tokenInfoSection').classList.remove('hidden');
+          document.getElementById('tokenInfoSection').classList.remove('hidden');
           renderAccessTokenUI(accessToken);
           
           await fetchTeslaVehicles(accessToken, true);
