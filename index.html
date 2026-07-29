@@ -84,14 +84,6 @@
         <i class="fa-solid fa-arrows-rotate"></i> <span class="hidden sm:inline">동기화 & 갱신</span>
       </button>
 
-<!-- 스마트폰 화면용 실시간 디버그 박스 -->
-<div id="mobileDebugOverlay" style="position: fixed; bottom: 0; left: 0; width: 100%; max-height: 150px; background: rgba(0, 0, 0, 0.85); color: #00ffcc; font-size: 11px; font-family: monospace; padding: 8px; z-index: 99999; overflow-y: auto; border-top: 1px solid #444; box-sizing: border-box;">
-  <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #555; padding-bottom: 3px; margin-bottom: 4px;">
-    <span style="font-weight: bold; color: #ffeb3b;">📱 모바일 디버그 로그</span>
-    <button onclick="document.getElementById('mobileDebugOverlay').style.display='none'" style="background: #e91e63; color: white; border: none; font-size: 10px; padding: 1px 6px; border-radius: 3px;">닫기</button>
-  </div>
-  <div id="mobileDebugLogs"></div>
-</div>
 
 
 
@@ -523,60 +515,6 @@
 
   <script>
 
-  // 강제로 화면 디버그 박스에 로그를 남기는 헬퍼 함수
-  function forceLog(text, isErr = false) {
-    const box = document.getElementById('mobileDebugLogs');
-    if (!box) return;
-    const d = document.createElement('div');
-    d.style.color = isErr ? '#ff5252' : '#00ffcc';
-    d.style.margin = '2px 0';
-    d.innerText = text;
-    box.appendChild(d);
-  }
-
-  // 1단계: 스크립트 실행 시작 확인
-  window.addEventListener('DOMContentLoaded', () => {
-    forceLog("🟢 1단계: DOMContentLoaded 이벤트 발생 완료");
-  });
-
-  window.addEventListener('load', () => {
-    forceLog("🟢 2단계: 페이지 완전 로드 (Load 이벤트 완료)");
-  });
-</script>
-
-
-  
- // 자바스크립트 전역 에러 및 콘솔 가로채기
-(function() {
-  function appendDebugLog(message, isError = false) {
-    const logContainer = document.getElementById('mobileDebugLogs');
-    if (!logContainer) return;
-    const div = document.createElement('div');
-    div.style.color = isError ? '#ff5252' : '#00ffcc';
-    div.style.margin = '2px 0';
-    div.innerText = `[${new Date().toLocaleTimeString()}] ${message}`;
-    logContainer.appendChild(div);
-    logContainer.scrollTop = logContainer.scrollHeight;
-  }
-
-  // 기본 콘솔 log 가로채기
-  const originalLog = console.log;
-  console.log = function(...args) {
-    originalLog.apply(console, args);
-    appendDebugLog(args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '));
-  };
-
-  // 치명적 에러(SyntaxError, ReferenceError 등) 가로채기
-  window.onerror = function(msg, url, lineNo, columnNo, error) {
-    appendDebugLog(`❌ 에러: ${msg} (Line: ${lineNo})`, true);
-    return false;
-  };
-
-  window.addEventListener('unhandledrejection', function(event) {
-    appendDebugLog(`❌ 비동기 에러: ${event.reason}`, true);
-  });
-})();
- 
   
   
   
@@ -641,23 +579,46 @@
         document.getElementById('tokenInfoSection')?.classList.add('hidden');
       }
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const code = urlParams.get('code');
-      if (code) {
-        switchMainTab('guardian');
-        addLog('🔄 OAuth 인증 코드 감지! 토큰 교환 중...');
+          const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    if (code) {
+      switchMainTab('guardian');
+      addLog('🔄 OAuth 인증 코드 감지! 토큰 교환 중...');
+      
+      // 토큰 교환이 무한 대기에 빠지거나 에러가 나도 대시보드가 죽지 않도록 안전장치 추가
+      try {
         exchangeCodeWithBackend(code);
+      } catch (err) {
+        console.error("토큰 교환 호출 중 예외:", err);
       }
+      
+      // 만약 토큰 교환 후 4초가 지나도 initDashboard가 안 불렸다면 강제 실행
+      setTimeout(() => {
+        if (!window.dashboardInitialized) {
+          window.dashboardInitialized = true;
+          addLog('⚠️ 인증 처리 지연으로 대시보드를 강제 시작합니다.');
+          initSupabaseClient();
+          loadCachedDataFirst();
+          initDashboard();
+        }
+      }, 4000);
+    }
 
-      const isConfigLoaded = loadConfig();
-      if (!isConfigLoaded) {
-        openConfigModal();
-      } else {
+
+          const isConfigLoaded = loadConfig();
+    if (!isConfigLoaded) {
+      openConfigModal();
+    } else {
+      // 중복 실행 방어 코드 추가
+      if (!window.dashboardInitialized) {
+        window.dashboardInitialized = true;
         initSupabaseClient();
         loadCachedDataFirst();
         initDashboard();
       }
-    });
+    }
+  });
+
 
     function initSupabaseClient() {
       if (configObj.url && configObj.key && window.supabase) {
@@ -1307,34 +1268,7 @@ redirect_uri: getRedirectUri()}) // REDIRECT_URI 대신 getRedirectUri() 로 변
   try {
   
   
-      function initDashboard() {
-  try {
-    forceLog("🔍 3단계: initDashboard 진입 성공"); // 추가
-
-    if (typeof configObj === 'undefined' || !configObj.kakaoKey) {
-      forceLog("⚠️ configObj 또는 카카오 키가 설정되지 않았습니다.", true); // 추가
-      console.warn("⚠️ configObj 또는 카카오 키가 설정되지 않았습니다.");
-      return;
-    }
-    
-    forceLog("🗺️ 4단계: 카카오 SDK 로드 시작"); // 추가
-    loadKakaoSdk(configObj.kakaoKey, () => {
-      try {
-        forceLog("🗺️ 5단계: 지도 초기화 및 데이터 갱신 시도"); // 추가
-        initMap();
-        handleRefresh(false);
-        forceLog("✅ 6단계: 대시보드 초기화 완전 성공"); // 추가
-      } catch (err) {
-        forceLog(`❌ 지도/데이터 에러: ${err.message}`, true); // 추가
-        console.error("지도 초기화 또는 데이터 갱신 중 에러 발생:", err);
-      }
-    });
-  } catch (err) {
-    forceLog(`❌ initDashboard 예외: ${err.message}`, true); // 추가
-    console.error("대시보드 초기화 예외:", err);
-  }
-}
-
+      
 
 
   
