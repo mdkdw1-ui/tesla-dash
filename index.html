@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.545</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -906,14 +906,19 @@ function switchSubTab(subTab, pushHistory = true) {
     }
   });
 
-  // 지도 또는 차트 재렌더링 트리거
+  // 지도 또는 차트/데이터 재렌더링 트리거
   if (subTab === 'driving' && typeof map !== 'undefined' && map) {
     setTimeout(() => map.relayout(), 100);
   }
   if (subTab === 'battery' && typeof renderBatteryCharts === 'function') {
     renderBatteryCharts();
   }
+  // ★ 여기에 추가
+  if (subTab === 'monthly' && typeof initMonthlyDropdowns === 'function') {
+    initMonthlyDropdowns();
+  }
 }
+
 
 
     // 뒤로가기(←) 버튼 감지 리스너
@@ -2750,4 +2755,4 @@ function renderBatteryCharts() {
 
   </script>
 </body>
-  </html>
+</html>
