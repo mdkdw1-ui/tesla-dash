@@ -2323,148 +2323,196 @@ const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(r
 
     }
 
-    // 1-3. 월간 리포트 기능군
-    function initMonthlyDropdowns() {
-      const yearSel = document.getElementById('m-select-year');
-      const monthSel = document.getElementById('m-select-month');
-      if (!yearSel || !monthSel) return;
+// 1-3. 월간 리포트 기능군 (원본 보장 + Supabase chargingRows 완벽 연동)
+function initMonthlyDropdowns() {
+  const yearSel = document.getElementById('m-select-year');
+  const monthSel = document.getElementById('m-select-month');
+  if (!yearSel || !monthSel) return;
 
-      const years = [...new Set(allTrips.map(t => new Date(t.timestamp).getFullYear()))].sort().reverse();
-      if (years.length === 0) years.push(2026, 2025);
+  // 1. allTrips 및 chargingRows에서 연도 데이터 추출
+  const yearsSet = new Set();
+  
+  if (typeof allTrips !== 'undefined' && allTrips.length > 0) {
+    allTrips.forEach(t => { if (t.timestamp) yearsSet.add(new Date(t.timestamp).getFullYear()); });
+  }
+  if (typeof chargingRows !== 'undefined' && chargingRows.length > 0) {
+    chargingRows.forEach(c => { if (c.date) yearsSet.add(new Date(c.date).getFullYear()); });
+  }
 
-      yearSel.innerHTML = years.map(y => `<option value="${y}">${y}년</option>`).join('');
-      monthSel.innerHTML = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
+  let years = Array.from(yearsSet).sort((a, b) => b - a);
+  const currentYear = new Date().getFullYear();
+  if (years.length === 0) years = [currentYear, currentYear - 1];
 
-      if (allTrips.length > 0) {
-        const latestDate = new Date(allTrips[0].timestamp);
-        yearSel.value = latestDate.getFullYear();
-        monthSel.value = latestDate.getMonth() + 1;
+  // 2. 드롭다운 옵션 생성
+  yearSel.innerHTML = years.map(y => `<option value="${y}">${y}년</option>`).join('');
+  monthSel.innerHTML = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
+
+  // 3. 기본 선택값 설정 (최신 데이터 날짜 기준)
+  const now = new Date();
+  if (typeof allTrips !== 'undefined' && allTrips.length > 0) {
+    const latestDate = new Date(allTrips[0].timestamp || allTrips[0].date);
+    yearSel.value = latestDate.getFullYear();
+    monthSel.value = latestDate.getMonth() + 1;
+  } else {
+    yearSel.value = now.getFullYear();
+    monthSel.value = now.getMonth() + 1;
+  }
+
+  // ★ 필수: 초기화 완료 후 첫 화면 렌더링 자동 실행
+  renderMonthlyTop5();
+}
+
+function onMonthlyDropdownChange() {
+  renderMonthlyTop5();
+}
+
+function shiftMonthlyDropdown(offset) {
+  const ySel = document.getElementById('m-select-year');
+  const mSel = document.getElementById('m-select-month');
+  if (!ySel || !mSel) return;
+
+  let y = Number(ySel.value), m = Number(mSel.value) + offset;
+  if (m < 1) { m = 12; y -= 1; }
+  else if (m > 12) { m = 1; y += 1; }
+
+  // 연도 존재 여부 확인 후 적용
+  const exists = Array.from(ySel.options).some(opt => Number(opt.value) === y);
+  if (exists) {
+    ySel.value = y;
+    mSel.value = m;
+    renderMonthlyTop5();
+  }
+}
+
+function selectPrevMonth() {
+  shiftMonthlyDropdown(-1);
+}
+
+// 차량 수집 로그 및 Supabase charging 테이블 기반 충전 연산
+function calculateMonthlyChargingStats(selY, selM) {
+  // ① 1순위: Supabase charging 테이블 데이터 활용 (가장 정확함)
+  if (typeof chargingRows !== 'undefined' && chargingRows.length > 0) {
+    const monthCharges = chargingRows.filter(c => {
+      const d = new Date(c.date || c.created_at);
+      return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
+    });
+
+    if (monthCharges.length > 0) {
+      const count = monthCharges.length;
+      const kwh = monthCharges.reduce((sum, c) => sum + (Number(c.added_charging) || 0), 0);
+      return { count, kwh };
+    }
+  }
+
+  // ② 2순위 (폴백): 기존 vehicleRows 로그 기반 추정 로직
+  if (!vehicleRows || vehicleRows.length === 0) return { count: 0, kwh: 0 };
+
+  const monthLogs = vehicleRows.filter(v => {
+    const d = new Date(v.updated_at || v.date);
+    return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
+  }).sort((a, b) => new Date(a.updated_at || a.date) - new Date(b.updated_at || b.date));
+
+  let chargeCount = 0;
+  let totalChargedPct = 0;
+  let inChargingSession = false;
+
+  for (let i = 1; i < monthLogs.length; i++) {
+    const prev = monthLogs[i - 1];
+    const cur = monthLogs[i];
+    const pBat = prev.battery_level ?? 0;
+    const cBat = cur.battery_level ?? 0;
+
+    let rawObj = cur.raw_data;
+    if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
+    const isChargingState = rawObj?.charge_state?.charging_state === 'Charging' || (rawObj?.charge_state?.charger_power || 0) > 0;
+
+    if (cBat > pBat || isChargingState) {
+      if (!inChargingSession) {
+        inChargingSession = true;
+        chargeCount++;
       }
-    }
-
-    function onMonthlyDropdownChange() {
-      renderMonthlyTop5();
-    }
-
-    function shiftMonthlyDropdown(offset) {
-      const ySel = document.getElementById('m-select-year');
-      const mSel = document.getElementById('m-select-month');
-      if (!ySel || !mSel) return;
-
-      let y = Number(ySel.value), m = Number(mSel.value) + offset;
-      if (m < 1) { m = 12; y -= 1; }
-      else if (m > 12) { m = 1; y += 1; }
-
-      ySel.value = y;
-      mSel.value = m;
-      renderMonthlyTop5();
-    }
-
-    function selectPrevMonth() {
-      shiftMonthlyDropdown(-1);
-    }
-
-    // 차량 수집 로그 기반 실제 충전 횟수 및 총 충전량(kWh) 연산
-    function calculateMonthlyChargingStats(selY, selM) {
-      if (!vehicleRows || vehicleRows.length === 0) return { count: 0, kwh: 0 };
-
-      const monthLogs = vehicleRows.filter(v => {
-        const d = new Date(v.updated_at);
-        return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
-      }).sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at));
-
-      let chargeCount = 0;
-      let totalChargedPct = 0;
-      let inChargingSession = false;
-
-      for (let i = 1; i < monthLogs.length; i++) {
-        const prev = monthLogs[i - 1];
-        const cur = monthLogs[i];
-        const pBat = prev.battery_level ?? 0;
-        const cBat = cur.battery_level ?? 0;
-
-        let rawObj = cur.raw_data;
-        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
-        const isChargingState = rawObj?.charge_state?.charging_state === 'Charging' || (rawObj?.charge_state?.charger_power || 0) > 0;
-
-        if (cBat > pBat || isChargingState) {
-          if (!inChargingSession) {
-            inChargingSession = true;
-            chargeCount++;
-          }
-          if (cBat > pBat) {
-            totalChargedPct += (cBat - pBat);
-          }
-        } else if (cBat < pBat && !isChargingState) {
-          inChargingSession = false;
-        }
+      if (cBat > pBat) {
+        totalChargedPct += (cBat - pBat);
       }
-
-      const totalChargedKwh = (totalChargedPct / 100) * 60;
-      return { count: chargeCount, kwh: totalChargedKwh };
+    } else if (cBat < pBat && !isChargingState) {
+      inChargingSession = false;
     }
+  }
 
-    function renderMonthlyTop5() {
-      const ySel = document.getElementById('m-select-year');
-      const mSel = document.getElementById('m-select-month');
-      if (!ySel || !mSel) return;
+  const totalChargedKwh = (totalChargedPct / 100) * 60;
+  return { count: chargeCount, kwh: totalChargedKwh };
+}
 
-      const selY = Number(ySel.value);
-      const selM = Number(mSel.value);
+function renderMonthlyTop5() {
+  const ySel = document.getElementById('m-select-year');
+  const mSel = document.getElementById('m-select-month');
+  if (!ySel || !mSel) return;
 
-      const matchedTrips = allTrips.filter(t => {
-        const d = new Date(t.timestamp);
-        return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
-      });
+  const selY = Number(ySel.value);
+  const selM = Number(mSel.value);
 
-      const totalDist = matchedTrips.reduce((s, t) => s + t.moveKM, 0);
-      const activeDays = new Set(matchedTrips.map(t => new Date(t.timestamp).toDateString())).size;
-      const totalBat = matchedTrips.reduce((s, t) => s + t.useBattery, 0);
-      const totalKwh = (totalBat / 100) * 60;
-      const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
-      const avgTripKm = matchedTrips.length > 0 ? (totalDist / matchedTrips.length).toFixed(1) : "0.0";
+  const trips = (typeof allTrips !== 'undefined') ? allTrips : [];
 
-      const chargeStats = calculateMonthlyChargingStats(selY, selM);
-      const effectiveKwh = chargeStats.kwh > 0 ? chargeStats.kwh : totalKwh;
-const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 적용
+  const matchedTrips = trips.filter(t => {
+    const d = new Date(t.timestamp || t.date || t.start_time);
+    return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
+  });
 
-      const co2Saved = Math.round(totalDist * 0.12); // km당 0.12kg 절감
+  const totalDist = matchedTrips.reduce((s, t) => s + (Number(t.moveKM || t.distance || t.km) || 0), 0);
+  const activeDays = new Set(matchedTrips.map(t => new Date(t.timestamp || t.date || t.start_time).toDateString())).size;
+  const totalBat = matchedTrips.reduce((s, t) => s + (Number(t.useBattery) || 0), 0);
+  const totalKwh = (totalBat / 100) * 60;
+  const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
+  const avgTripKm = matchedTrips.length > 0 ? (totalDist / matchedTrips.length).toFixed(1) : "0.0";
 
-      document.getElementById('m-stat-distance').innerText = `${totalDist.toFixed(1)} km`;
-      document.getElementById('m-stat-days').innerText = `${activeDays} 일`;
-      document.getElementById('m-stat-charge-count').innerText = `${chargeStats.count} 회`;
-      document.getElementById('m-stat-charge-kwh').innerText = `${chargeStats.kwh.toFixed(1)} kWh`;
-      document.getElementById('m-stat-cost').innerText = `₩${estimatedCost.toLocaleString()}`;
-      document.getElementById('m-stat-co2').innerText = `${co2Saved.toLocaleString()} kg`;
-      document.getElementById('m-stat-avg-eff').innerText = `${avgEff} km/kWh`;
-      document.getElementById('m-stat-avg-trip-km').innerText = `${avgTripKm}km`;
+  const chargeStats = calculateMonthlyChargingStats(selY, selM);
+  const effectiveKwh = chargeStats.kwh > 0 ? chargeStats.kwh : totalKwh;
+  const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 적용
+  const co2Saved = Math.round(totalDist * 0.12); // km당 0.12kg 절감
 
-      // 최장 운행 시간 TOP 5
-      const topTimeTrips = [...matchedTrips].sort((a,b) => b.durationMin - a.durationMin).slice(0, 5);
-      const timeListEl = document.getElementById('m-top5-time-list');
-      timeListEl.innerHTML = topTimeTrips.map((t, idx) => `
-        <div onclick="jumpToSingleTrip('${t.id}')" class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-blue-500/50 transition">
-          <div>
-            <span class="font-bold text-gray-200">#${idx+1} ${new Date(t.timestamp).toLocaleDateString()}</span>
-            <span class="text-[10px] text-gray-400 block">${cleanAddress(t.startDong)} → ${cleanAddress(t.endDong)}</span>
-          </div>
-          <span class="font-extrabold text-blue-400">${t.durationMin}분 (${t.moveKM.toFixed(1)}km)</span>
+  // UI 데이터 출력
+  document.getElementById('m-stat-distance').innerText = `${totalDist.toFixed(1)} km`;
+  document.getElementById('m-stat-days').innerText = `${activeDays} 일`;
+  document.getElementById('m-stat-charge-count').innerText = `${chargeStats.count} 회`;
+  document.getElementById('m-stat-charge-kwh').innerText = `${chargeStats.kwh.toFixed(1)} kWh`;
+  document.getElementById('m-stat-cost').innerText = `₩${estimatedCost.toLocaleString()}`;
+  document.getElementById('m-stat-co2').innerText = `${co2Saved.toLocaleString()} kg`;
+  document.getElementById('m-stat-avg-eff').innerText = `${avgEff} km/kWh`;
+  document.getElementById('m-stat-avg-trip-km').innerText = `${avgTripKm}km`;
+
+  const safeCleanAddress = typeof cleanAddress === 'function' ? cleanAddress : (addr => addr || '-');
+
+  // 최장 운행 시간 TOP 5
+  const topTimeTrips = [...matchedTrips].sort((a,b) => (b.durationMin || 0) - (a.durationMin || 0)).slice(0, 5);
+  const timeListEl = document.getElementById('m-top5-time-list');
+  if (timeListEl) {
+    timeListEl.innerHTML = topTimeTrips.map((t, idx) => `
+      <div onclick="${typeof jumpToSingleTrip === 'function' ? `jumpToSingleTrip('${t.id}')` : ''}" class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-blue-500/50 transition">
+        <div>
+          <span class="font-bold text-gray-200">#${idx+1} ${new Date(t.timestamp || t.date).toLocaleDateString()}</span>
+          <span class="text-[10px] text-gray-400 block">${safeCleanAddress(t.startDong)} → ${safeCleanAddress(t.endDong)}</span>
         </div>
-      `).join('') || `<span class="text-gray-500">데이터가 없습니다.</span>`;
+        <span class="font-extrabold text-blue-400">${t.durationMin || 0}분 (${(t.moveKM || 0).toFixed(1)}km)</span>
+      </div>
+    `).join('') || `<span class="text-gray-500">데이터가 없습니다.</span>`;
+  }
 
-      // 최장 운행 거리 TOP 5
-      const topDistTrips = [...matchedTrips].sort((a,b) => b.moveKM - a.moveKM).slice(0, 5);
-      const distListEl = document.getElementById('m-top5-dist-list');
-      distListEl.innerHTML = topDistTrips.map((t, idx) => `
-        <div onclick="jumpToSingleTrip('${t.id}')" class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-green-500/50 transition">
-          <div>
-            <span class="font-bold text-gray-200">#${idx+1} ${new Date(t.timestamp).toLocaleDateString()}</span>
-            <span class="text-[10px] text-gray-400 block">${cleanAddress(t.startDong)} → ${cleanAddress(t.endDong)}</span>
-          </div>
-          <span class="font-extrabold text-green-400">${t.moveKM.toFixed(1)} km</span>
+  // 최장 운행 거리 TOP 5
+  const topDistTrips = [...matchedTrips].sort((a,b) => (a.moveKM || 0) < (b.moveKM || 0) ? 1 : -1).slice(0, 5);
+  const distListEl = document.getElementById('m-top5-dist-list');
+  if (distListEl) {
+    distListEl.innerHTML = topDistTrips.map((t, idx) => `
+      <div onclick="${typeof jumpToSingleTrip === 'function' ? `jumpToSingleTrip('${t.id}')` : ''}" class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-green-500/50 transition">
+        <div>
+          <span class="font-bold text-gray-200">#${idx+1} ${new Date(t.timestamp || t.date).toLocaleDateString()}</span>
+          <span class="text-[10px] text-gray-400 block">${safeCleanAddress(t.startDong)} → ${safeCleanAddress(t.endDong)}</span>
         </div>
-      `).join('') || `<span class="text-gray-500">데이터가 없습니다.</span>`;
-    }
+        <span class="font-extrabold text-green-400">${(t.moveKM || 0).toFixed(1)} km</span>
+      </div>
+    `).join('') || `<span class="text-gray-500">데이터가 없습니다.</span>`;
+  }
+}
+
 
 // 1-4. 프리미엄 배터리 차트 & KPI 렌더링 (chargingRows 정밀 연동 버전)
 function renderBatteryCharts() {
@@ -2702,4 +2750,4 @@ function renderBatteryCharts() {
 
   </script>
 </body>
-</html>
+  </html>
