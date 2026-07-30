@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.43</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -1050,7 +1050,7 @@ async function exchangeTeslaToken(code) {
       }
     }
 
-    async function handleToggleChange(checkbox) {
+     async function handleToggleChange(checkbox) {
   const labelText = document.getElementById('toggleLabelText');
 
   if (checkbox.checked) {
@@ -1064,11 +1064,13 @@ async function exchangeTeslaToken(code) {
       }
       addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언 서비스를 시작합니다.');
 
+      // 💡 일반 브라우저와 안드로이드 앱 공통으로 첫 화면을 즉시 렌더링합니다.
+      checkGuardianVehicleState();
+
       if (window.AndroidBridge) {
         const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
         const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
        
-        // 💡 진짜 유효한 토큰이 존재할 때만 네이티브 가디언 서비스를 구동합니다.
         const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '';
 
         if (validToken) {
@@ -1084,7 +1086,7 @@ async function exchangeTeslaToken(code) {
           alert('테슬라 로그인이 먼저 필요합니다.');
         }
       } else {
-        // 일반 브라우저 환경일 때의 웹 폴링 구동
+        // 💡 일반 PC/모바일 웹 브라우저 환경에서도 실시간 감시 타이머를 시작합니다.
         startMonitoring();
       }
     } else {
@@ -1103,7 +1105,6 @@ async function exchangeTeslaToken(code) {
       alert(`차량 감시 모드를 활성화할 수 없습니다.\n${sentryResult.errorMessage}`);
     }
   } else {
-    // 💡 스위치를 끌 때 작동하는 완벽한 보안 분기 영역
     if (labelText) {
       labelText.innerText = '기능 OFF';
       labelText.style.color = '#aaa';
@@ -1114,6 +1115,9 @@ async function exchangeTeslaToken(code) {
     }
 
     stopMonitoring();
+   
+    // 💡 스위치를 끌 때 UI 배지도 대기 상태로 깔끔하게 리셋합니다.
+    updateGuardianStatusUI('sleep', '❓ 로그인/데이터 필요');
   }
 }
 
