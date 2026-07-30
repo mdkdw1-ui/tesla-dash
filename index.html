@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.145</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -2872,15 +2872,12 @@ function initIcalSettingInput() {
 // 4. iCal 데이터 불러오기 및 파싱 (무한 루프 방지 및 즉시 반영)
 async function loadGoogleCalendarEvents() {
   const icalUrl = getIcalUrl();
-  
-  // 저장된 URL이 없으면 초기화 후 중단
   if (!icalUrl) {
     calendarEventsMap = {};
     return;
   }
 
   try {
-    // CORS 에러 방지 프록시 경유
     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(icalUrl)}`;
     const res = await fetch(proxyUrl);
     const icsText = await res.text();
@@ -2888,17 +2885,18 @@ async function loadGoogleCalendarEvents() {
     calendarEventsMap = parseIcsToMap(icsText);
     console.log('📅 캘린더 일정 로드 완료:', calendarEventsMap);
 
-    // ① 월간 리포트 및 주행 지도 화면 갱신
+    // 1. 월간 리포트 & 지도 갱신
     if (typeof renderMonthlyTop5 === 'function') renderMonthlyTop5();
     if (typeof renderDrivingData === 'function') renderDrivingData();
 
-    // ② 메인 차량 카드의 캘린더 뱃지만 핀포인트 직접 갱신 (무한 루프 없이 안전하게 반영)
-    const elCal = document.getElementById('v-latest-trip-calendar');
-    if (elCal && typeof getCalendarBadgeHtml === 'function' && typeof allTrips !== 'undefined' && allTrips.length > 0) {
-      const dayDate = new Date(allTrips[0].timestamp);
-      elCal.innerHTML = getCalendarBadgeHtml(dayDate);
+    // 2. 메인 카드 일정 뱃지 즉시 갱신 (allTrips 존재 여부 유연하게 처리)
+    if (typeof allTrips !== 'undefined' && allTrips.length > 0) {
+      const elCal = document.getElementById('v-latest-trip-calendar');
+      if (elCal) {
+        const dayDate = new Date(allTrips[0].timestamp);
+        elCal.innerHTML = getCalendarBadgeHtml(dayDate);
+      }
     }
-
   } catch (err) {
     console.warn('캘린더 일정을 가져오는 데 실패했습니다:', err);
   }
@@ -2972,4 +2970,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
   </script>
 </body>
-  </html>
+</html>
