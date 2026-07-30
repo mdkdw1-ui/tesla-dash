@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.41</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.25</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -376,97 +376,91 @@
 </div>
 
 
-    <!-- [메인 영역 2] 감시 가디언 -->
-    <div id="main-panel-guardian" class="hidden space-y-4">
-      <div class="glass-card p-5 rounded-2xl border border-red-500/30 space-y-4 shadow-2xl">
-        
-        <div class="flex justify-between items-center border-b border-gray-800/80 pb-3">
-          <div class="flex items-center gap-2.5">
-            <span class="text-2xl">🛡️</span>
-            <div>
-              <h2 class="text-base font-extrabold text-red-500">감시 모드 가디언</h2>
-              <p class="text-[10px] text-gray-400">Tesla Guardian Service</p>
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-bold text-gray-400" id="toggleLabelText">기능 OFF</span>
-            <label class="switch">
-              <input type="checkbox" id="appMainToggle" onchange="handleToggleChange(this)">
-              <span class="slider"></span>
-            </label>
-          </div>
+    
+<!-- [메인 영역 2] 감시 가디언 패널 전체 초기화 -->
+<div id="main-panel-guardian" class="hidden space-y-4">
+  <div class="glass-card p-5 rounded-2xl border border-red-500/30 space-y-4 shadow-2xl">
+   
+    <div class="flex justify-between items-center border-b border-gray-800/80 pb-3">
+      <div class="flex items-center gap-2.5">
+        <span class="text-2xl">🛡️</span>
+        <div>
+          <h2 class="text-base font-extrabold text-red-500">감시 모드 가디언</h2>
+          <p class="text-[10px] text-gray-400">Tesla Guardian Service</p>
         </div>
-
-        <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-800 flex justify-between items-center">
-          <div class="flex flex-col gap-1">
-            <span class="text-[11px] text-gray-400 font-medium">가디언 감시 상태</span>
-            <span class="text-[10px] text-gray-500 font-mono" id="guardianLastCheck">마지막 확인: -</span>
-          </div>
-          <div id="vehicleStatusBadge" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-800 text-gray-400 border border-gray-700">
-            ❓ 로그인/데이터 필요
-          </div>
-        </div>
-
-        <div id="loginSection" class="space-y-2">
-          <label class="block text-xs text-gray-400 font-medium">Tesla OAuth 계정 연동</label>
-          <button onclick="startTeslaLogin()" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold py-3 rounded-xl text-xs transition shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2">
-            🔐 테슬라 계정 로그인
-          </button>
-        </div>
-
-        <div id="tokenInfoSection" class="hidden space-y-3">
-          <div class="p-3 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-emerald-400 text-xs font-bold flex items-center justify-between shadow-inner">
-            <span class="flex items-center gap-1.5">✅ 테슬라 OAuth </span>
-            <button onclick="fetchTeslaVehicles(accessToken)" class="text-[10px] underline text-emerald-300 hover:text-emerald-200">VIN/ID 동기화</button>
-          </div>
-          
-          <div id="vehicleInfoDisplay" class="p-3 bg-gray-900/80 border border-gray-800 rounded-xl text-xs space-y-1">
-            <div class="text-gray-400 text-[10px] font-medium">연동된 차량 정보</div>
-            <div class="font-mono text-gray-200" id="displayVin">VIN: -</div>
-            <div class="font-mono text-blue-400 font-bold" id="displayVehicleId">Vehicle ID: -</div>
-          </div>
-
-          <!-- Tesla Access Token 표시 영역 및 복사 버튼 -->
-          <div class="p-3 bg-gray-950 border border-gray-800 rounded-xl space-y-2">
-            <div class="flex justify-between items-center text-xs gap-1">
-  <span class="text-gray-300 font-bold text-[11px]">🔑 Tesla Access Token</span>
-  <div class="flex gap-1">
-    <button onclick="copyAccessToken()" class="...">📋 복사</button>
-    <!-- 💡 클릭 시 토큰을 지우고 새로고침 시키는 벼락 로그아웃 버튼 -->
-    <button onclick="localStorage.removeItem('tesla_access_token'); location.reload();" class="text-[10px] text-red-400 hover:text-red-300 font-bold border border-red-500/40 px-2.5 py-1 rounded-lg bg-red-500/10 transition active:scale-95">⚠️ 재로그인</button>
-  </div>
-</div>
-
-            <div id="displayAccessToken" class="p-2.5 bg-black/80 border border-gray-800 rounded-lg font-mono text-[10px] text-emerald-400 break-all select-all max-h-20 overflow-y-auto leading-relaxed shadow-inner">
-              -
-            </div>
-          </div>
-        </div>
-
-        <div class="space-y-1.5 text-xs">
-          <label class="block text-gray-400 font-medium">모니터링 주기 (초)</label>
-          <input type="number" id="guardianPollInterval" value="5" min="2" class="w-full bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-white font-mono focus:border-blue-500 outline-none">
-        </div>
-
-        <div class="flex gap-2 text-xs pt-1">
-          <button onclick="testFlashLights()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2.5 rounded-xl transition shadow-md">⚡ 전조등 테스트</button>
-          <button onclick="testNtfy()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2.5 rounded-xl transition shadow-md">📱 ntfy 테스트</button>
-        </div>
-
-        <!-- 실시간 네트워크 및 테슬라 모니터 통합 작업 로그 -->
-        <div class="space-y-1.5">
-          <div class="flex justify-between items-center">
-            <span class="text-[10px] font-extrabold text-gray-400">실시간 시스템 및 테슬라 작업 디버깅 로그</span>
-            <button onclick="clearLogBox()" class="text-[10px] text-gray-500 hover:text-gray-300 underline">로그 지우기</button>
-          </div>
-          <div id="tmLogBox" class="bg-black/90 border border-gray-800 rounded-xl p-3 h-48 overflow-y-auto font-mono text-[11px] text-emerald-400 leading-relaxed shadow-inner">
-            <div class="tm-log-entry">[시스템] 통합 로그 준비 완료</div>
-          </div>
-        </div>
-
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-bold text-gray-400" id="toggleLabelText">기능 OFF</span>
+        <label class="switch">
+          <input type="checkbox" id="appMainToggle" onchange="handleToggleChange(this)">
+          <span class="slider"></span>
+        </label>
       </div>
     </div>
 
+    <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-800 flex justify-between items-center">
+      <div class="flex flex-col gap-1">
+        <span class="text-[11px] text-gray-400 font-medium">가디언 감시 상태</span>
+        <span class="text-[10px] text-gray-500 font-mono" id="guardianLastCheck">마지막 확인: -</span>
+      </div>
+      <div id="vehicleStatusBadge" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-800 text-gray-400 border border-gray-700">
+        ❓ 로그인/데이터 필요
+      </div>
+    </div>
+
+    <div id="loginSection" class="space-y-2">
+      <label class="block text-xs text-gray-400 font-medium">Tesla OAuth 계정 연동</label>
+      <button type="button" onclick="startTeslaLogin()" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold py-3 rounded-xl text-xs transition shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2">
+        🔐 테슬라 계정 로그인
+      </button>
+    </div>
+
+    <div id="tokenInfoSection" class="hidden space-y-3">
+      <div class="p-3 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-emerald-400 text-xs font-bold flex items-center justify-between shadow-inner">
+        <span class="flex items-center gap-1.5">✅ 테슬라 OAuth </span>
+        <button type="button" onclick="fetchTeslaVehicles(accessToken, true)" class="text-[10px] underline text-emerald-300 hover:text-emerald-200">VIN/ID 동기화</button>
+      </div>
+     
+      <div id="vehicleInfoDisplay" class="p-3 bg-gray-900/80 border border-gray-800 rounded-xl text-xs space-y-1">
+        <div class="text-gray-400 text-[10px] font-medium">연동된 차량 정보</div>
+        <div class="font-mono text-gray-200" id="displayVin">VIN: -</div>
+        <div class="font-mono text-blue-400 font-bold" id="displayVehicleId">Vehicle ID: -</div>
+      </div>
+
+      <div class="p-3 bg-gray-950 border border-gray-800 rounded-xl space-y-2">
+        <div class="flex justify-between items-center text-xs gap-1">
+          <span class="text-gray-300 font-bold text-[11px]">🔑 Tesla Access Token</span>
+          <div class="flex gap-1">
+            <button type="button" onclick="copyAccessToken()" class="text-[10px] text-gray-300 border border-gray-700 px-2 py-1 rounded bg-gray-800">📋 복사</button>
+            <button type="button" onclick="localStorage.removeItem('tesla_access_token'); location.reload();" class="text-[10px] text-red-400 hover:text-red-300 font-bold border border-red-500/40 px-2.5 py-1 rounded-lg bg-red-500/10 transition active:scale-95">⚠️ 재로그인</button>
+          </div>
+        </div>
+        <div id="displayAccessToken" class="p-2.5 bg-black/80 border border-gray-800 rounded-lg font-mono text-[10px] text-emerald-400 break-all select-all max-h-20 overflow-y-auto leading-relaxed shadow-inner">-</div>
+      </div>
+    </div>
+
+    <div class="space-y-1.5 text-xs">
+      <label class="block text-gray-400 font-medium">모니터링 주기 (초)</label>
+      <input type="number" id="guardianPollInterval" value="5" min="2" class="w-full bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-white font-mono focus:border-blue-500 outline-none">
+    </div>
+
+    <div class="flex gap-2 text-xs pt-1">
+      <button type="button" onclick="testFlashLights()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2.5 rounded-xl transition shadow-md">⚡ 전조등 테스트</button>
+      <button type="button" onclick="testNtfy()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2.5 rounded-xl transition shadow-md">📱 ntfy 테스트</button>
+    </div>
+
+    <div class="space-y-1.5">
+      <div class="flex justify-between items-center">
+        <span class="text-[10px] font-extrabold text-gray-400">실시간 시스템 및 테슬라 작업 디버깅 로그</span>
+        <button type="button" onclick="clearLogBox()" class="text-[10px] text-gray-500 hover:text-gray-300 underline">로그 지우기</button>
+      </div>
+      <div id="tmLogBox" class="bg-black/90 border border-gray-800 rounded-xl p-3 h-48 overflow-y-auto font-mono text-[11px] text-emerald-400 leading-relaxed shadow-inner">
+        <div class="tm-log-entry">[시스템] 통합 로그 준비 완료</div>
+      </div>
+    </div>
+
+  </div>
+</div>
   </main>
 
   <!-- 설정 모달 -->
@@ -748,29 +742,61 @@
     }
 
     function switchMainTab(mainTab, pushHistory = true) {
-      currentMainTab = mainTab;
-      localStorage.setItem('tesla_main_tab', mainTab);
+  currentMainTab = mainTab;
+  localStorage.setItem('tesla_main_tab', mainTab);
 
-      // 사용자가 직접 탭을 눌러서 이동한 경우에만 히스토리 기록
-      if (pushHistory) {
-        history.pushState({ tab: mainTab, sub: currentSubTab }, '', '');
-      }
+  if (pushHistory) {
+    history.pushState({ tab: mainTab, sub: currentSubTab }, '', '');
+  }
 
-      document.getElementById('main-panel-monitor').classList.toggle('hidden', mainTab !== 'monitor');
-      document.getElementById('main-panel-guardian').classList.toggle('hidden', mainTab !== 'guardian');
+  // 💡 1. 패널 보이기/숨기기 철저하게 제어
+  const monitorPanel = document.getElementById('main-panel-monitor');
+  const guardianPanel = document.getElementById('main-panel-guardian');
+ 
+  if (monitorPanel) monitorPanel.classList.toggle('hidden', mainTab !== 'monitor');
+  if (guardianPanel) guardianPanel.classList.toggle('hidden', mainTab !== 'guardian');
 
-      document.getElementById('btn-main-monitor').className = mainTab === 'monitor'
-        ? "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
-        : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
-
-      document.getElementById('btn-main-guardian').className = mainTab === 'guardian'
-        ? "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-red-600 to-rose-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-red-900/20"
-        : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
-
-      if (mainTab === 'monitor') {
-        switchSubTab(currentSubTab, false); // 서브탭 이동 시에도 히스토리 중복 방지
-      }
+  // 💡 2. 복잡한 클래스 문자열 대신 안정적인 가독성 위주로 테슬라 모니터 버튼 스타일 스위칭
+  const btnMonitor = document.getElementById('btn-main-monitor');
+  if (btnMonitor) {
+    if (mainTab === 'monitor') {
+      btnMonitor.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20";
+    } else {
+      btnMonitor.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
     }
+  }
+
+  // 💡 3. 감시 가디언 버튼 스타일 스위칭 (따옴표 버그 완전 차단)
+  const btnGuardian = document.getElementById('btn-main-guardian');
+  if (btnGuardian) {
+    if (mainTab === 'guardian') {
+      btnGuardian.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-red-600 to-rose-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-red-900/20";
+    } else {
+      btnGuardian.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
+    }
+  }
+
+  // 💡 4. 하위 탭 컴포넌트 렌더링 동기화 및 깨우기
+  if (mainTab === 'monitor') {
+    switchSubTab(currentSubTab, false);
+  }
+ 
+  if (mainTab === 'guardian') {
+    const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '' && accessToken.length > 40;
+    const loginSec = document.getElementById('loginSection');
+    const tokenSec = document.getElementById('tokenInfoSection');
+   
+    if (validToken) {
+      if (loginSec) loginSec.classList.add('hidden');
+      if (tokenSec) tokenSec.classList.remove('hidden');
+      if (typeof renderAccessTokenUI === 'function') renderAccessTokenUI(accessToken);
+    } else {
+      if (loginSec) loginSec.classList.remove('hidden');
+      if (tokenSec) tokenSec.classList.add('hidden');
+    }
+  }
+}
+
 
     function switchSubTab(subTab, pushHistory = true) {
       currentSubTab = subTab;
