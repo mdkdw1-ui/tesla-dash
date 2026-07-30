@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.25</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -553,75 +553,7 @@
     window.addEventListener('DOMContentLoaded', () => {
       document.addEventListener('visibilitychange', handleAppVisibilityChange);
 
-      // 테슬라 공식 토큰 규격(보통 60자 이상 혹은 qts_로 시작)을 검증하여 가짜 값 진입 차단
-      const isValidToken = accessToken &&
-                           accessToken.trim() !== '' &&
-                           accessToken !== 'dummy_token' &&
-                           accessToken !== 'undefined' &&
-                           accessToken.length > 40;
-
-      if (isValidToken) {
-        // 진짜 로그인된 상태일 때만 실행
-        document.getElementById('loginSection')?.classList.add('hidden');
-        document.getElementById('tokenInfoSection')?.classList.remove('hidden');
-       
-        // 💡 함수가 아직 로드되지 않았을 경우를 대비해 안전하게 호출합니다.
-        if (typeof renderAccessTokenUI === 'function') {
-          renderAccessTokenUI(accessToken);
-        } else {
-          const el = document.getElementById('displayAccessToken');
-          if (el) el.innerText = accessToken;
-        }
-       
-        fetchTeslaVehicles(accessToken, true);
-      } else {
-        // ❌ 가짜 토큰이거나 없으면 찌꺼기 데이터를 지우고 로그인 화면을 강제로 노출
-        localStorage.removeItem('tesla_access_token'); // 저장소의 가짜 토큰 청소
-        document.getElementById('loginSection')?.classList.remove('hidden');
-        document.getElementById('tokenInfoSection')?.classList.add('hidden');
-      }
-
-          const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    if (code) {
-      switchMainTab('guardian');
-      addLog('🔄 OAuth 인증 코드 감지! 토큰 교환 중...');
-      
-      // 토큰 교환이 무한 대기에 빠지거나 에러가 나도 대시보드가 죽지 않도록 안전장치 추가
-      try {
-        exchangeCodeWithBackend(code);
-      } catch (err) {
-        console.error("토큰 교환 호출 중 예외:", err);
-      }
-      
-      // 만약 토큰 교환 후 4초가 지나도 initDashboard가 안 불렸다면 강제 실행
-      setTimeout(() => {
-        if (!window.dashboardInitialized) {
-          window.dashboardInitialized = true;
-          addLog('⚠️ 인증 처리 지연으로 대시보드를 강제 시작합니다.');
-          initSupabaseClient();
-          loadCachedDataFirst();
-          initDashboard();
-        }
-      }, 4000);
-    }
-
-
-          const isConfigLoaded = loadConfig();
-    if (!isConfigLoaded) {
-      openConfigModal();
-    } else {
-      // 중복 실행 방어 코드 추가
-      if (!window.dashboardInitialized) {
-        window.dashboardInitialized = true;
-        initSupabaseClient();
-        loadCachedDataFirst();
-        initDashboard();
-      }
-    }
-  });
-
-
+// 💡 [정답본] 함수 선언부를 위로 올려 브라우저가 언제든 참조할 수 있게 호이스팅을 보장합니다.
     function initSupabaseClient() {
       if (configObj.url && configObj.key && window.supabase) {
         supabaseClient = supabase.createClient(configObj.url, configObj.key);
@@ -630,59 +562,122 @@
 
     // 백엔드(Vercel)를 통해 인증 코드(code)를 Access Token으로 교환하는 함수 (안전성 강화)
     async function exchangeCodeWithBackend(code) {
-      addLog('🔄 Vercel 백엔드로 인증 코드 전송 중...');
+      if (typeof addLog === 'function') addLog('🔄 Vercel 백엔드로 인증 코드 전송 중...');
       try {
         const response = await fetch(VERCEL_BACKEND_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             code: code,
             redirect_uri: REDIRECT_URI
           })
         });
 
         const data = await response.json();
-        
-        // 무조건 URL의 ?code= 파라미터를 먼저 정리 (새로고침 시 중복 요청/에러 방지)
+       
         window.history.replaceState({}, document.title, window.location.pathname);
 
         if (response.ok && (data.access_token || data.token)) {
           accessToken = data.access_token || data.token;
           localStorage.setItem('tesla_access_token', accessToken);
-          
-          // UI 업데이트
-          renderAccessTokenUI(accessToken);
+         
+          if (typeof renderAccessTokenUI === 'function') {
+            renderAccessTokenUI(accessToken);
+          } else {
+            const el = document.getElementById('displayAccessToken');
+            if (el) el.innerText = accessToken;
+          }
+         
           document.getElementById('loginSection')?.classList.add('hidden');
           document.getElementById('tokenInfoSection')?.classList.remove('hidden');
-          
-          addLog('✅ 테슬라 Access Token 교환 성공!');
-          
-          // 차량 정보 동기화 실행
-          fetchTeslaVehicles(accessToken, true);
+         
+          if (typeof addLog === 'function') addLog('✅ 테슬라 Access Token 교환 성공!');
+          if (typeof fetchTeslaVehicles === 'function') fetchTeslaVehicles(accessToken, true);
         } else {
-          // 이미 만료되었거나 잘못된 코드인 경우 무리한 alert 대신 로그만 명확히 남김
-          addLog(`⚠️ 토큰 교환 실패 (만료되었거나 이미 사용된 코드일 수 있습니다): ${data.error || JSON.stringify(data)}`);
+          if (typeof addLog === 'function') addLog(`⚠️ 토큰 교환 실패 (만료되었거나 이미 사용된 코드일 수 있습니다): ${data.error || JSON.stringify(data)}`);
         }
       } catch (err) {
         window.history.replaceState({}, document.title, window.location.pathname);
-        addLog(`⚠️ 토큰 교환 요청 예외 발생: ${err.message}`);
+        if (typeof addLog === 'function') addLog(`⚠️ 토큰 교환 요청 예외 발생: ${err.message}`);
         console.error(err);
       }
     }
+
+    // 💡 6번 조각에서 시작된 DOMContentLoaded 리스너 내부 로직을 안전한 순서로 배치합니다.
+      const isValidToken = accessToken &&
+                           accessToken.trim() !== '' &&
+                           accessToken !== 'dummy_token' &&
+                           accessToken !== 'undefined' &&
+                           accessToken.length > 40;
+
+      if (isValidToken) {
+        document.getElementById('loginSection')?.classList.add('hidden');
+        document.getElementById('tokenInfoSection')?.classList.remove('hidden');
+       
+        if (typeof renderAccessTokenUI === 'function') {
+          renderAccessTokenUI(accessToken);
+        } else {
+          const el = document.getElementById('displayAccessToken');
+          if (el) el.innerText = accessToken;
+        }
+       
+        if (typeof fetchTeslaVehicles === 'function') fetchTeslaVehicles(accessToken, true);
+      } else {
+        localStorage.removeItem('tesla_access_token');
+        document.getElementById('loginSection')?.classList.remove('hidden');
+        document.getElementById('tokenInfoSection')?.classList.add('hidden');
+      }
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      if (code) {
+        if (typeof switchMainTab === 'function') switchMainTab('guardian');
+        if (typeof addLog === 'function') addLog('🔄 OAuth 인증 코드 감지! 토큰 교환 중...');
+       
+        try {
+          exchangeCodeWithBackend(code);
+        } catch (err) {
+          console.error("토큰 교환 호출 중 예외:", err);
+        }
+       
+        setTimeout(() => {
+          if (!window.dashboardInitialized) {
+            window.dashboardInitialized = true;
+            if (typeof addLog === 'function') addLog('⚠️ 인증 처리 지연으로 대시보드를 강제 시작합니다.');
+            initSupabaseClient();
+            if (typeof loadCachedDataFirst === 'function') loadCachedDataFirst();
+            if (typeof initDashboard === 'function') initDashboard();
+          }
+        }, 4000);
+      }
+
+      const isConfigLoaded = (typeof loadConfig === 'function') ? loadConfig() : false;
+      if (!isConfigLoaded) {
+        if (typeof openConfigModal === 'function') openConfigModal();
+      } else {
+        if (!window.dashboardInitialized) {
+          window.dashboardInitialized = true;
+          initSupabaseClient();
+          if (typeof loadCachedDataFirst === 'function') loadCachedDataFirst();
+          if (typeof initDashboard === 'function') initDashboard();
+        }
+      }
+    }); // 👈 ⚠️ 중간에 끊겼던 이 기호를 맨 뒤로 보내 리스너 전체를 안전하게 닫아줍니다!
+    
 
     function handleAppVisibilityChange() {
       const indicator = document.getElementById('sync-status-indicator');
       if (document.hidden) {
         isAppInForeground = false;
-        stopDrivingSyncLoop(); 
+        stopDrivingSyncLoop();
       } else {
         isAppInForeground = true;
         if (indicator) {
           indicator.innerText = "🅿️ 대기";
         }
-        handleRefresh(true); 
+        handleRefresh(true);
       }
     }
 
@@ -708,24 +703,23 @@
     }
 
     function saveConfig(e) {
-  if (e) e.preventDefault();
-  configObj = {
-    kakaoKey: document.getElementById('input-kakao-key').value.trim(),
-    url: document.getElementById('input-supabase-url').value.trim().replace(/\/$/, ""),
-    key: document.getElementById('input-supabase-key').value.trim(),
-    ghToken: document.getElementById('input-gh-token').value.trim(),
-    vehicleId: document.getElementById('input-vehicle-id').value.trim(),
-    ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
-  };
-  localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
-  closeConfigModal();
- 
-  // 💡 강제 리로드 대신 코어 인프라만 안전하게 재부팅합니다.
-  initSupabaseClient();
-  loadCachedDataFirst();
-  initDashboard();
-}
-
+      if (e) e.preventDefault();
+      configObj = {
+        kakaoKey: document.getElementById('input-kakao-key').value.trim(),
+        url: document.getElementById('input-supabase-url').value.trim().replace(/\/$/, ""),
+        key: document.getElementById('input-supabase-key').value.trim(),
+        ghToken: document.getElementById('input-gh-token').value.trim(),
+        vehicleId: document.getElementById('input-vehicle-id').value.trim(),
+        ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
+      };
+      localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
+      closeConfigModal();
+     
+      // 💡 강제 리로드 대신 코어 인프라만 안전하게 재부팅합니다.
+      if (typeof initSupabaseClient === 'function') initSupabaseClient();
+      if (typeof loadCachedDataFirst === 'function') loadCachedDataFirst();
+      if (typeof initDashboard === 'function') initDashboard();
+    }
 
     function openConfigModal() {
       if (configObj.kakaoKey) document.getElementById('input-kakao-key').value = configObj.kakaoKey;
@@ -737,66 +731,64 @@
       document.getElementById('modal-config').classList.remove('hidden');
     }
 
-        function closeConfigModal() {
+    function closeConfigModal() {
       document.getElementById('modal-config').classList.add('hidden');
     }
 
     function switchMainTab(mainTab, pushHistory = true) {
-  currentMainTab = mainTab;
-  localStorage.setItem('tesla_main_tab', mainTab);
+      currentMainTab = mainTab;
+      localStorage.setItem('tesla_main_tab', mainTab);
 
-  if (pushHistory) {
-    history.pushState({ tab: mainTab, sub: currentSubTab }, '', '');
-  }
+      if (pushHistory) {
+        history.pushState({ tab: mainTab, sub: currentSubTab }, '', '');
+      }
 
-  // 💡 1. 패널 보이기/숨기기 철저하게 제어
-  const monitorPanel = document.getElementById('main-panel-monitor');
-  const guardianPanel = document.getElementById('main-panel-guardian');
- 
-  if (monitorPanel) monitorPanel.classList.toggle('hidden', mainTab !== 'monitor');
-  if (guardianPanel) guardianPanel.classList.toggle('hidden', mainTab !== 'guardian');
+      // 💡 패널 보이기/숨기기 철저하게 제어
+      const monitorPanel = document.getElementById('main-panel-monitor');
+      const guardianPanel = document.getElementById('main-panel-guardian');
+     
+      if (monitorPanel) monitorPanel.classList.toggle('hidden', mainTab !== 'monitor');
+      if (guardianPanel) guardianPanel.classList.toggle('hidden', mainTab !== 'guardian');
 
-  // 💡 2. 복잡한 클래스 문자열 대신 안정적인 가독성 위주로 테슬라 모니터 버튼 스타일 스위칭
-  const btnMonitor = document.getElementById('btn-main-monitor');
-  if (btnMonitor) {
-    if (mainTab === 'monitor') {
-      btnMonitor.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20";
-    } else {
-      btnMonitor.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
+      // 💡 테슬라 모니터 버튼 스타일 스위칭
+      const btnMonitor = document.getElementById('btn-main-monitor');
+      if (btnMonitor) {
+        if (mainTab === 'monitor') {
+          btnMonitor.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20";
+        } else {
+          btnMonitor.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
+        }
+      }
+
+      // 💡 감시 가디언 버튼 스타일 스위칭
+      const btnGuardian = document.getElementById('btn-main-guardian');
+      if (btnGuardian) {
+        if (mainTab === 'guardian') {
+          btnGuardian.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-red-600 to-rose-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-red-900/20";
+        } else {
+          btnGuardian.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
+        }
+      }
+
+      if (mainTab === 'monitor') {
+        switchSubTab(currentSubTab, false);
+      }
+     
+      if (mainTab === 'guardian') {
+        const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '' && accessToken.length > 40;
+        const loginSec = document.getElementById('loginSection');
+        const tokenSec = document.getElementById('tokenInfoSection');
+       
+        if (validToken) {
+          if (loginSec) loginSec.classList.add('hidden');
+          if (tokenSec) tokenSec.classList.remove('hidden');
+          if (typeof renderAccessTokenUI === 'function') renderAccessTokenUI(accessToken);
+        } else {
+          if (loginSec) loginSec.classList.remove('hidden');
+          if (tokenSec) tokenSec.classList.add('hidden');
+        }
+      }
     }
-  }
-
-  // 💡 3. 감시 가디언 버튼 스타일 스위칭 (따옴표 버그 완전 차단)
-  const btnGuardian = document.getElementById('btn-main-guardian');
-  if (btnGuardian) {
-    if (mainTab === 'guardian') {
-      btnGuardian.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-red-600 to-rose-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-red-900/20";
-    } else {
-      btnGuardian.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
-    }
-  }
-
-  // 💡 4. 하위 탭 컴포넌트 렌더링 동기화 및 깨우기
-  if (mainTab === 'monitor') {
-    switchSubTab(currentSubTab, false);
-  }
- 
-  if (mainTab === 'guardian') {
-    const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '' && accessToken.length > 40;
-    const loginSec = document.getElementById('loginSection');
-    const tokenSec = document.getElementById('tokenInfoSection');
-   
-    if (validToken) {
-      if (loginSec) loginSec.classList.add('hidden');
-      if (tokenSec) tokenSec.classList.remove('hidden');
-      if (typeof renderAccessTokenUI === 'function') renderAccessTokenUI(accessToken);
-    } else {
-      if (loginSec) loginSec.classList.remove('hidden');
-      if (tokenSec) tokenSec.classList.add('hidden');
-    }
-  }
-}
-
 
     function switchSubTab(subTab, pushHistory = true) {
       currentSubTab = subTab;
@@ -818,6 +810,21 @@
         }
       });
 
+      // 💡 [안전 봉합] 누락되었던 switchSubTab 함수의 하단 후속 처리 로직과 닫는 괄호를 완벽히 정렬합니다.
+      if (subTab === 'driving' && map) {
+        setTimeout(() => {
+          if (typeof map.relayout === 'function') map.relayout();
+          if (typeof renderDrivingData === 'function') renderDrivingData();
+        }, 100);
+      }
+      if (subTab === 'monthly') {
+        if (typeof initMonthlyDropdowns === 'function') initMonthlyDropdowns();
+        if (typeof renderMonthlyTop5 === 'function') renderMonthlyTop5();
+      }
+      if (subTab === 'battery') {
+        if (typeof renderBatteryCharts === 'function') renderBatteryCharts();
+      }
+    } // 👈 ⚠️ 공중에 떠 있던 switchSubTab 함수 본문을 완전히 닫아 안전핀을 채웁니다!
       // ✅ 서브탭별 추가 실행 로직은 반드시 함수 내부 맨 아래에 위치해야 합니다!
       if (subTab === 'driving' && map) {
         setTimeout(() => {
@@ -832,7 +839,7 @@
       if (subTab === 'battery') {
         renderBatteryCharts();
       }
-    }
+    
 
     // ✅ 뒤로가기(←) 버튼 감지 리스너는 함수 바깥(전역)에 독립적으로 위치
     window.addEventListener('popstate', function(event) {
