@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.43</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -706,19 +706,24 @@
     }
 
     function saveConfig(e) {
-      if (e) e.preventDefault();
-      configObj = {
-        kakaoKey: document.getElementById('input-kakao-key').value.trim(),
-        url: document.getElementById('input-supabase-url').value.trim().replace(/\/$/, ""),
-        key: document.getElementById('input-supabase-key').value.trim(),
-        ghToken: document.getElementById('input-gh-token').value.trim(),
-        vehicleId: document.getElementById('input-vehicle-id').value.trim(),
-        ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
-      };
-      localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
-      closeConfigModal();
-      location.reload();
-    }
+  if (e) e.preventDefault();
+  configObj = {
+    kakaoKey: document.getElementById('input-kakao-key').value.trim(),
+    url: document.getElementById('input-supabase-url').value.trim().replace(/\/$/, ""),
+    key: document.getElementById('input-supabase-key').value.trim(),
+    ghToken: document.getElementById('input-gh-token').value.trim(),
+    vehicleId: document.getElementById('input-vehicle-id').value.trim(),
+    ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
+  };
+  localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
+  closeConfigModal();
+ 
+  // 💡 강제 리로드 대신 코어 인프라만 안전하게 재부팅합니다.
+  initSupabaseClient();
+  loadCachedDataFirst();
+  initDashboard();
+}
+
 
     function openConfigModal() {
       if (configObj.kakaoKey) document.getElementById('input-kakao-key').value = configObj.kakaoKey;
@@ -991,21 +996,7 @@ async function exchangeTeslaToken(code) {
         addLog('⚠️ 토큰 교환 실행 함수를 찾을 수 없습니다.');
     }
 }
-
-
-
-    async function exchangeCodeWithBackend(code) {
-      try {
-        const res = await fetch(VERCEL_BACKEND_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-code: code,
-redirect_uri: getRedirectUri()}) // REDIRECT_URI 대신 getRedirectUri() 로 변경
-
-        });
-        const data = await res.json();
-        
+    
 
     async function fetchTeslaVehicles(token, isSilent = false) {
       if (!isSilent) addLog('📡 차량 목록 및 VIN/ID 동기화 중...');
@@ -1060,39 +1051,28 @@ redirect_uri: getRedirectUri()}) // REDIRECT_URI 대신 getRedirectUri() 로 변
     }
 
     async function handleToggleChange(checkbox) {
-      const labelText = document.getElementById('toggleLabelText');
+  const labelText = document.getElementById('toggleLabelText');
 
-      if (checkbox.checked) {
-        addLog('🔍 차량 감시 모드(Sentry Mode) 상태 진단 중...');
-        const sentryResult = await checkIsVehicleSentryActiveWithDebug();
+  if (checkbox.checked) {
+    addLog('🔍 차량 감시 모드(Sentry Mode) 상태 진단 중...');
+    const sentryResult = await checkIsVehicleSentryActiveWithDebug();
 
-        if (sentryResult.isActive) {
-          if (labelText) {
-            labelText.innerText = '기능 ON';
-            labelText.style.color = '#10b981';
-          }
-          addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언 서비스를 시작합니다.');
+    if (sentryResult.isActive) {
+      if (labelText) {
+        labelText.innerText = '기능 ON';
+        labelText.style.color = '#10b981';
+      }
+      addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언 서비스를 시작합니다.');
 
-     if (window.AndroidBridge) {
-  const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
-  const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
-  
-  // 💡 진짜 유효한 토큰인지 체크 (dummy_token이거나 비어있으면 차단)
-  const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '';
+      if (window.AndroidBridge) {
+        const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
+        const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
+       
+        // 💡 진짜 유효한 토큰이 존재할 때만 네이티브 가디언 서비스를 구동합니다.
+        const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '';
 
-  if (validToken) {
-    window.AndroidBridge.startGuardianService(
-      accessToken, 
-      configObj.vehicleId || '3744141651867089', 
-      interval, 
-      topic
-    );
-  } else {
-    console.warn('⚠️ 유효한 테슬라 Access Token이 없어 가디언 서비스를 시작할 수 없습니다. 로그인이 필요합니다.');
-    alert('테슬라 로그인이 먼저 필요합니다.');
-  }
-}
-
+        if (validToken) {
+          window.AndroidBridge.startGuardianService(accessToken, configObj.vehicleId || '3744141651867089', interval, topic);
           startMonitoring();
         } else {
           checkbox.checked = false;
@@ -1100,28 +1080,42 @@ redirect_uri: getRedirectUri()}) // REDIRECT_URI 대신 getRedirectUri() 로 변
             labelText.innerText = '기능 OFF';
             labelText.style.color = '#aaa';
           }
-          stopMonitoring();
-
-          if (window.AndroidBridge) {
-            window.AndroidBridge.stopGuardianService();
-          }
-
-          addLog(`🛑 [감시모드 중단] 사유: ${sentryResult.errorMessage}`);
-          alert(`차량 감시 모드를 활성화할 수 없습니다.\n${sentryResult.errorMessage}`);
+          console.warn('⚠️ 유효한 테슬라 Access Token이 없어 가디언 서비스를 시작할 수 없습니다.');
+          alert('테슬라 로그인이 먼저 필요합니다.');
         }
       } else {
-        if (labelText) {
-          labelText.innerText = '기능 OFF';
-          labelText.style.color = '#aaa';
-        }
-
-        if (window.AndroidBridge) {
-          window.AndroidBridge.stopGuardianService();
-        }
-
-        stopMonitoring();
+        // 일반 브라우저 환경일 때의 웹 폴링 구동
+        startMonitoring();
       }
+    } else {
+      checkbox.checked = false;
+      if (labelText) {
+        labelText.innerText = '기능 OFF';
+        labelText.style.color = '#aaa';
+      }
+      stopMonitoring();
+
+      if (window.AndroidBridge) {
+        window.AndroidBridge.stopGuardianService();
+      }
+
+      addLog(`🛑 [감시모드 중단] 사유: ${sentryResult.errorMessage}`);
+      alert(`차량 감시 모드를 활성화할 수 없습니다.\n${sentryResult.errorMessage}`);
     }
+  } else {
+    // 💡 스위치를 끌 때 작동하는 완벽한 보안 분기 영역
+    if (labelText) {
+      labelText.innerText = '기능 OFF';
+      labelText.style.color = '#aaa';
+    }
+
+    if (window.AndroidBridge) {
+      window.AndroidBridge.stopGuardianService();
+    }
+
+    stopMonitoring();
+  }
+}
 
     async function checkIsVehicleSentryActiveWithDebug() {
       try {
@@ -2525,16 +2519,20 @@ function renderBatteryCharts() {
     // ✅ 브라우저 뒤로가기(←) 버튼 감지 리스너는 스크립트 하단 전역에 배치
     window.addEventListener('popstate', function(event) {
       if (event.state && event.state.tab) {
-        // 기록된 이전 상태가 있다면 그 탭/서브탭으로 복원
-        // 주의: 기존 코드에서 서브탭 인자가 subTab이 아니라 다른 변수명(예: subTabName 등)이라면 맞추어 쓰세요.
-        switchMainTab(event.state.tab, event.state.sub);
+        // 💡 두 번째 인자에 false를 주어 히스토리 중복 적체를 막고, 서브탭은 전역 변수를 거쳐 스위칭합니다.
+        if (event.state.sub) {
+          currentSubTab = event.state.sub;
+        }
+        switchMainTab(event.state.tab, false);
       } else {
-        // 기록이 없다면 기본 대시보드나 첫 화면으로
-        switchMainTab('dashboard', 'driving');
+        currentSubTab = 'vehicle';
+        switchMainTab('monitor', false);
       }
     });
+
+
+
 
   </script>
 </body>
 </html>
-}
