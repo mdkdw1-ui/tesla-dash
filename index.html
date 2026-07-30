@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 15</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -735,91 +735,87 @@
       document.getElementById('modal-config').classList.add('hidden');
     }
 
-        // 메인 탭 전환
-    function switchMainTab(mainTab, pushHistory = true) {
-      currentMainTab = mainTab;
-      localStorage.setItem('tesla_main_tab', mainTab);
+        function switchMainTab(mainTab, pushHistory = true) {
+  currentMainTab = mainTab;
+  localStorage.setItem('tesla_main_tab', mainTab);
 
-      if (pushHistory) {
-        history.pushState({ tab: mainTab, sub: currentSubTab }, '', '');
-      }
+  if (pushHistory) {
+    history.pushState({ tab: mainTab, sub: currentSubTab }, '', '');
+  }
 
-      const monitorPanel = document.getElementById('main-panel-monitor');
-      const guardianPanel = document.getElementById('main-panel-guardian');
-     
-      if (monitorPanel) monitorPanel.classList.toggle('hidden', mainTab !== 'monitor');
-      if (guardianPanel) guardianPanel.classList.toggle('hidden', mainTab !== 'guardian');
+  const monitorPanel = document.getElementById('main-panel-monitor');
+  const guardianPanel = document.getElementById('main-panel-guardian');
+ 
+  if (monitorPanel) monitorPanel.classList.toggle('hidden', mainTab !== 'monitor');
+  if (guardianPanel) guardianPanel.classList.toggle('hidden', mainTab !== 'guardian');
 
-      const btnMonitor = document.getElementById('btn-main-monitor');
-      if (btnMonitor) {
-        btnMonitor.className = mainTab === 'monitor'
-          ? "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
-          : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
-      }
+  const btnMonitor = document.getElementById('btn-main-monitor');
+  if (btnMonitor) {
+    btnMonitor.className = mainTab === 'monitor'
+      ? "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
+      : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
+  }
 
-      const btnGuardian = document.getElementById('btn-main-guardian');
-      if (btnGuardian) {
-        btnGuardian.className = mainTab === 'guardian'
-          ? "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-red-600 to-rose-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-red-900/20"
-          : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
-      }
+  const btnGuardian = document.getElementById('btn-main-guardian');
+  if (btnGuardian) {
+    btnGuardian.className = mainTab === 'guardian'
+      ? "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-red-600 to-rose-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-red-900/20"
+      : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
+  }
 
-      if (mainTab === 'monitor') {
-        switchSubTab(currentSubTab, false);
-      }
-     
-      if (mainTab === 'guardian') {
-        const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '' && accessToken.length > 40;
-        const loginSec = document.getElementById('loginSection');
-        const tokenSec = document.getElementById('tokenInfoSection');
-       
-        if (validToken) {
-          if (loginSec) loginSec.classList.add('hidden');
-          if (tokenSec) tokenSec.classList.remove('hidden');
-          if (typeof renderAccessTokenUI === 'function') renderAccessTokenUI(accessToken);
-        } else {
-          if (loginSec) loginSec.classList.remove('hidden');
-          if (tokenSec) tokenSec.classList.add('hidden');
-        }
-      }
+  if (mainTab === 'monitor') {
+    switchSubTab(currentSubTab, false);
+  }
+ 
+  if (mainTab === 'guardian') {
+    // typeof 구문을 추가하여 accessToken 미선언 시 참조 에러 방지
+    const currentToken = (typeof accessToken !== 'undefined') ? accessToken : null;
+    const validToken = currentToken && currentToken !== 'dummy_token' && currentToken.trim() !== '' && currentToken.length > 40;
+    
+    const loginSec = document.getElementById('loginSection');
+    const tokenSec = document.getElementById('tokenInfoSection');
+   
+    if (validToken) {
+      if (loginSec) loginSec.classList.add('hidden');
+      if (tokenSec) tokenSec.classList.remove('hidden');
+      if (typeof renderAccessTokenUI === 'function') renderAccessTokenUI(currentToken);
+    } else {
+      if (loginSec) loginSec.classList.remove('hidden');
+      if (tokenSec) tokenSec.classList.add('hidden');
     }
+  }
+}
 
-    // 서브 탭 전환 (안전 통합 버전)
-    function switchSubTab(subTab, pushHistory = true) {
-      currentSubTab = subTab;
-      localStorage.setItem('tesla_sub_tab', subTab);
+// 서브 탭 전환 (안전 통합 버전)
+function switchSubTab(subTab, pushHistory = true) {
+  currentSubTab = subTab;
+  localStorage.setItem('tesla_sub_tab', subTab);
 
-      if (pushHistory) {
-        history.pushState({ tab: currentMainTab, sub: subTab }, '', '');
-      }
+  if (pushHistory) {
+    history.pushState({ tab: currentMainTab, sub: subTab }, '', '');
+  }
 
-      ['vehicle', 'driving', 'monthly', 'battery'].forEach(t => {
-        const panel = document.getElementById(`sub-panel-${t}`);
-        if (panel) panel.classList.toggle('hidden', t !== subTab);
+  ['vehicle', 'driving', 'monthly', 'battery'].forEach(t => {
+    const panel = document.getElementById(`sub-panel-${t}`);
+    if (panel) panel.classList.toggle('hidden', t !== subTab);
 
-        const btn = document.getElementById(`btn-sub-${t}`);
-        if (btn) {
-          btn.className = t === subTab
-            ? "py-2.5 rounded-xl bg-blue-600 text-white font-bold transition shadow-md"
-            : "py-2.5 rounded-xl text-gray-400 hover:text-white transition";
-        }
-      });
-
-      // 서브탭별 후속 처리 로직
-      if (subTab === 'driving' && map) {
-        setTimeout(() => {
-          if (typeof map.relayout === 'function') map.relayout();
-          if (typeof renderDrivingData === 'function') renderDrivingData();
-        }, 100);
-      }
-      if (subTab === 'monthly') {
-        if (typeof initMonthlyDropdowns === 'function') initMonthlyDropdowns();
-        if (typeof renderMonthlyTop5 === 'function') renderMonthlyTop5();
-      }
-      if (subTab === 'battery') {
-        if (typeof renderBatteryCharts === 'function') renderBatteryCharts();
-      }
+    const btn = document.getElementById(`btn-sub-${t}`);
+    if (btn) {
+      btn.className = t === subTab
+        ? "py-2.5 rounded-xl bg-blue-600 text-white font-bold transition shadow-md"
+        : "py-2.5 rounded-xl text-gray-400 hover:text-white transition";
     }
+  });
+
+  // 지도 또는 차트 재렌더링 트리거
+  if (subTab === 'driving' && typeof map !== 'undefined' && map) {
+    setTimeout(() => map.relayout(), 100);
+  }
+  if (subTab === 'battery' && typeof renderBatteryCharts === 'function') {
+    renderBatteryCharts();
+  }
+}
+
 
     // 뒤로가기(←) 버튼 감지 리스너
     window.addEventListener('popstate', function(event) {
