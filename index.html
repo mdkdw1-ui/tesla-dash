@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.15</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.145</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -1655,127 +1655,142 @@ async function exchangeTeslaToken(code) {
     }
 
     function loadVehicleData() {
-      if (!vehicleRows || vehicleRows.length === 0) return;
+  if (!vehicleRows || vehicleRows.length === 0) return;
 
-      const latest = vehicleRows[0];
-      const batVal = latest.battery_level ?? 0;
-      const odoVal = Math.round(latest.odometer ?? 0);
-      const updateDate = new Date(latest.updated_at || Date.now());
+  const latest = vehicleRows[0];
+  const batVal = latest.battery_level ?? 0;
+  const odoVal = Math.round(latest.odometer ?? 0);
+  const updateDate = new Date(latest.updated_at || Date.now());
 
-      document.getElementById('v-last-time').innerText = `${String(updateDate.getHours()).padStart(2,'0')}:${String(updateDate.getMinutes()).padStart(2,'0')} 기준 🔄`;
-      document.getElementById('v-battery-val').innerText = `${batVal}%`;
-      document.getElementById('v-odometer-val').innerText = `${odoVal.toLocaleString()} km`;
+  const timeEl = document.getElementById('v-last-time');
+  const batEl = document.getElementById('v-battery-val');
+  const odoEl = document.getElementById('v-odometer-val');
 
-      let rawObj = latest.raw_data;
-      if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){ rawObj = {}; } } else { rawObj = rawObj || {}; }
+  if (timeEl) timeEl.innerText = `${String(updateDate.getHours()).padStart(2,'0')}:${String(updateDate.getMinutes()).padStart(2,'0')} 기준 🔄`;
+  if (batEl) batEl.innerText = `${batVal}%`;
+  if (odoEl) odoEl.innerText = `${odoVal.toLocaleString()} km`;
 
-      // 외기 온도 소수점 절삭 적용
-      const outsideTemp = latest.outside_temp ?? rawObj?.climate_state?.outside_temp;
-      if (outsideTemp !== undefined && outsideTemp !== null) {
-        document.getElementById('v-outside-temp').innerText = `🌡️ 외기: ${Math.round(outsideTemp)}°C`;
+  let rawObj = latest.raw_data;
+  if (typeof rawObj === 'string') { 
+    try { rawObj = JSON.parse(rawObj); } catch(e){ rawObj = {}; } 
+  } else { 
+    rawObj = rawObj || {}; 
+  }
+
+  // 외기 온도 소수점 절삭 적용
+  const outsideTemp = latest.outside_temp ?? rawObj?.climate_state?.outside_temp;
+  if (outsideTemp !== undefined && outsideTemp !== null) {
+    const tempEl = document.getElementById('v-outside-temp');
+    if (tempEl) tempEl.innerText = `🌡️ 외기: ${Math.round(outsideTemp)}°C`;
+  }
+
+  // TPMS 공기압
+  let fl = latest.tpms_fl || rawObj?.vehicle_state?.tpms_pressure_fl || rawObj?.tpms?.fl || rawObj?.tpms_pressure_fl || 42;
+  let fr = latest.tpms_fr || rawObj?.vehicle_state?.tpms_pressure_fr || rawObj?.tpms?.fr || rawObj?.tpms_pressure_fr || 42;
+  let rl = latest.tpms_rl || rawObj?.vehicle_state?.tpms_pressure_rl || rawObj?.tpms?.rl || rawObj?.tpms_pressure_rl || 41;
+  let rr = latest.tpms_rr || rawObj?.vehicle_state?.tpms_pressure_rr || rawObj?.tpms?.rr || rawObj?.tpms_pressure_rr || 41;
+
+  const toPsi = (v) => (v > 0 && v < 10) ? Math.round(v * 14.5038) : Math.round(v);
+
+  if (document.getElementById('tpms-fl')) document.getElementById('tpms-fl').innerText = `${toPsi(fl)} psi`;
+  if (document.getElementById('tpms-fr')) document.getElementById('tpms-fr').innerText = `${toPsi(fr)} psi`;
+  if (document.getElementById('tpms-rl')) document.getElementById('tpms-rl').innerText = `${toPsi(rl)} psi`;
+  if (document.getElementById('tpms-rr')) document.getElementById('tpms-rr').innerText = `${toPsi(rr)} psi`;
+
+  // 차량 동적 상태 카드 업데이트
+  const isRecentDriving = (allTrips.length > 0 && (Date.now() - allTrips[0].timestamp < 5 * 60 * 1000));
+  const isCharging = rawObj?.charge_state?.charging_state === 'Charging' || (rawObj?.charge_state?.charger_power || 0) > 0;
+  const isSentry = latest.sentry_mode === true || latest.is_sentry === true || rawObj?.vehicle_state?.sentry_mode === true;
+  const currentSpeed = rawObj?.drive_state?.speed || 0;
+
+  if (isRecentDriving || currentSpeed > 0) {
+    updateDynamicVehicleCard({ isDriving: true, speed: currentSpeed });
+  } else if (isCharging) {
+    updateDynamicVehicleCard({ isCharging: true, chargePower: rawObj?.charge_state?.charger_power, batteryLevel: batVal });
+  } else if (isSentry) {
+    updateDynamicVehicleCard({ isSentry: true });
+  } else {
+    let lastTripEndMs = allTrips.length > 0 ? allTrips[0].timestamp : updateDate.getTime();
+    let parkingBaseMs = Math.max(lastTripEndMs, updateDate.getTime());
+    const parkDiffMs = Math.max(0, Date.now() - parkingBaseMs);
+    const pHours = Math.floor(parkDiffMs / 3600000);
+    const pMins = Math.floor((parkDiffMs % 3600000) / 60000);
+
+    updateDynamicVehicleCard({ isDriving: false, isCharging: false, isSentry: false });
+    const durTitle = document.getElementById('v-state-duration-title');
+    const startTime = document.getElementById('v-state-start-time');
+    if (durTitle) durTitle.innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
+    if (startTime) startTime.innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
+  }
+
+  // 당일 주행 요약 및 캘린더 뱃지 바인딩
+  if (allTrips.length > 0) {
+    const lastTripDateStr = new Date(allTrips[0].timestamp).toDateString();
+    const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr).sort((a, b) => a.timestamp - b.timestamp);
+    const dayDate = new Date(allTrips[0].timestamp);
+
+    const totalDist = sameDayTrips.reduce((a,c)=>a+c.moveKM, 0);
+    const totalBat = sameDayTrips.reduce((a,c)=>a+c.useBattery, 0);
+    const totalTime = sameDayTrips.reduce((a,c)=>a+c.durationMin, 0);
+    const totalKwh = (totalBat / 100) * 60;
+    const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
+
+    const tripDateEl = document.getElementById('v-latest-trip-date');
+    if (tripDateEl) tripDateEl.innerText = `${dayDate.getMonth()+1}월 ${dayDate.getDate()}일 (총 ${sameDayTrips.length}건)`;
+    
+    // 📅 최근 운행 카드 구글 캘린더 뱃지 바인딩
+    const elCal = document.getElementById('v-latest-trip-calendar');
+    if (elCal && typeof getCalendarBadgeHtml === 'function') {
+      elCal.innerHTML = getCalendarBadgeHtml(dayDate);
+    }
+
+    if (document.getElementById('v-day-efficiency')) document.getElementById('v-day-efficiency').innerText = avgEff;
+    if (document.getElementById('v-day-dist')) document.getElementById('v-day-dist').innerText = `${totalDist.toFixed(1)} km`;
+    if (document.getElementById('v-day-bat')) document.getElementById('v-day-bat').innerText = `-${totalBat.toFixed(1)}%`;
+    if (document.getElementById('v-day-time')) document.getElementById('v-day-time').innerText = `${totalTime} 분`;
+    if (document.getElementById('v-day-kwh')) document.getElementById('v-day-kwh').innerText = `-${totalKwh.toFixed(1)} kWh`;
+
+    const listContainer = document.getElementById('v-day-trips-list');
+    if (listContainer) {
+      listContainer.innerHTML = '';
+      const fullDayRoute = typeof buildSequentialRouteHtml === 'function' ? buildSequentialRouteHtml(sameDayTrips) : '';
+      if (fullDayRoute) {
+        listContainer.insertAdjacentHTML('beforeend', `
+          <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-800 text-[11px] mb-2 shadow-inner">
+            <span class="text-indigo-400 font-bold block mb-1">🌐 당일 이동 경로</span>
+            <div class="text-gray-200 leading-normal break-keep">${fullDayRoute}</div>
+          </div>
+        `);
       }
 
-      let fl = latest.tpms_fl || rawObj?.vehicle_state?.tpms_pressure_fl || rawObj?.tpms?.fl || rawObj?.tpms_pressure_fl || 42;
-      let fr = latest.tpms_fr || rawObj?.vehicle_state?.tpms_pressure_fr || rawObj?.tpms?.fr || rawObj?.tpms_pressure_fr || 42;
-      let rl = latest.tpms_rl || rawObj?.vehicle_state?.tpms_pressure_rl || rawObj?.tpms?.rl || rawObj?.tpms_pressure_rl || 41;
-      let rr = latest.tpms_rr || rawObj?.vehicle_state?.tpms_pressure_rr || rawObj?.tpms?.rr || rawObj?.tpms_pressure_rr || 41;
-
-      const toPsi = (v) => (v > 0 && v < 10) ? Math.round(v * 14.5038) : Math.round(v);
-
-      document.getElementById('tpms-fl').innerText = `${toPsi(fl)} psi`;
-      document.getElementById('tpms-fr').innerText = `${toPsi(fr)} psi`;
-      document.getElementById('tpms-rl').innerText = `${toPsi(rl)} psi`;
-      document.getElementById('tpms-rr').innerText = `${toPsi(rr)} psi`;
-
-      const isRecentDriving = (allTrips.length > 0 && (Date.now() - allTrips[0].timestamp < 5 * 60 * 1000));
-      const isCharging = rawObj?.charge_state?.charging_state === 'Charging' || (rawObj?.charge_state?.charger_power || 0) > 0;
-      const isSentry = latest.sentry_mode === true || latest.is_sentry === true || rawObj?.vehicle_state?.sentry_mode === true;
-      const currentSpeed = rawObj?.drive_state?.speed || 0;
-
-      if (isRecentDriving || currentSpeed > 0) {
-        updateDynamicVehicleCard({ isDriving: true, speed: currentSpeed });
-      } else if (isCharging) {
-        updateDynamicVehicleCard({ isCharging: true, chargePower: rawObj?.charge_state?.charger_power, batteryLevel: batVal });
-      } else if (isSentry) {
-        updateDynamicVehicleCard({ isSentry: true });
-      } else {
-        let lastTripEndMs = allTrips.length > 0 ? allTrips[0].timestamp : updateDate.getTime();
-        let parkingBaseMs = Math.max(lastTripEndMs, updateDate.getTime());
-        const parkDiffMs = Math.max(0, Date.now() - parkingBaseMs);
-        const pHours = Math.floor(parkDiffMs / 3600000);
-        const pMins = Math.floor((parkDiffMs % 3600000) / 60000);
-
-        updateDynamicVehicleCard({ isDriving: false, isCharging: false, isSentry: false });
-        document.getElementById('v-state-duration-title').innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
-        document.getElementById('v-state-start-time').innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
-      }
-
-      if (allTrips.length > 0) {
-        const lastTripDateStr = new Date(allTrips[0].timestamp).toDateString();
-        const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr).sort((a, b) => a.timestamp - b.timestamp);
-        const dayDate = new Date(allTrips[0].timestamp);
-
-        const totalDist = sameDayTrips.reduce((a,c)=>a+c.moveKM, 0);
-        const totalBat = sameDayTrips.reduce((a,c)=>a+c.useBattery, 0);
-        const totalTime = sameDayTrips.reduce((a,c)=>a+c.durationMin, 0);
-        const totalKwh = (totalBat / 100) * 60;
-        const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
-
-                document.getElementById('v-latest-trip-date').innerText = `${dayDate.getMonth()+1}월 ${dayDate.getDate()}일 (총 ${sameDayTrips.length}건)`;
+      sameDayTrips.forEach(t => {
+        const startLoc = typeof cleanAddress === 'function' ? cleanAddress(t.startDong) : (t.startDong || '-');
+        const endLoc = typeof cleanAddress === 'function' ? cleanAddress(t.endDong) : (t.endDong || '-');
+        const moveKmStr = t.moveKM.toFixed(1);
+        const batUsageStr = t.useBattery.toFixed(1);
+        const odoStr = t.odometer ? Math.round(t.odometer).toLocaleString() : odoVal.toLocaleString();
+        const tempStr = t.outsideTemp !== undefined && t.outsideTemp !== null ? `${Math.round(t.outsideTemp)}°C` : '-';
         
-        // ★ 여기에 이 한 줄(또는 안전하게 2줄)을 추가합니다!
-        const elCal = document.getElementById('v-latest-trip-calendar');
-        if (elCal) elCal.innerHTML = getCalendarBadgeHtml(dayDate);
+        let batDetail = `${batUsageStr}%`;
+        if (t.startBat && t.endBat) batDetail += ` (${t.startBat}% → ${t.endBat}%)`;
 
-        document.getElementById('v-day-efficiency').innerText = avgEff;
-        document.getElementById('v-day-dist').innerText = `${totalDist.toFixed(1)} km`;
-        document.getElementById('v-day-bat').innerText = `-${totalBat.toFixed(1)}%`;
-        document.getElementById('v-day-time').innerText = `${totalTime} 분`;
-        document.getElementById('v-day-kwh').innerText = `-${totalKwh.toFixed(1)} kWh`;
-
-
-        const listContainer = document.getElementById('v-day-trips-list');
-        listContainer.innerHTML = '';
-
-        const fullDayRoute = buildSequentialRouteHtml(sameDayTrips);
-        if (fullDayRoute) {
-          listContainer.insertAdjacentHTML('beforeend', `
-            <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-800 text-[11px] mb-2 shadow-inner">
-              <span class="text-indigo-400 font-bold block mb-1">🌐 당일 이동 경로</span>
-              <div class="text-gray-200 leading-normal break-keep">${fullDayRoute}</div>
+        listContainer.insertAdjacentHTML('beforeend', `
+          <div onclick="jumpToSingleTrip('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99]">
+            <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
+              <span class="address-tag text-blue-300 font-bold">${startLoc}</span>
+              <span class="text-indigo-400 font-extrabold">→</span>
+              <span class="address-tag text-emerald-300 font-bold">${endLoc}</span>
             </div>
-          `);
-        }
-
-        // 클릭 시 해당 주행 지도로 연결되도록 jumpToSingleTrip 적용
-        sameDayTrips.forEach(t => {
-          const startLoc = cleanAddress(t.startDong);
-          const endLoc = cleanAddress(t.endDong);
-          const moveKmStr = t.moveKM.toFixed(1);
-          const batUsageStr = t.useBattery.toFixed(1);
-          const odoStr = t.odometer ? Math.round(t.odometer).toLocaleString() : odoVal.toLocaleString();
-          const tempStr = t.outsideTemp !== undefined && t.outsideTemp !== null ? `${Math.round(t.outsideTemp)}°C` : '-';
-          
-          let batDetail = `${batUsageStr}%`;
-          if (t.startBat && t.endBat) {
-            batDetail += ` (${t.startBat}% → ${t.endBat}%)`;
-          }
-
-          listContainer.insertAdjacentHTML('beforeend', `
-            <div onclick="jumpToSingleTrip('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99]">
-              <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
-                <span class="address-tag text-blue-300 font-bold">${startLoc}</span>
-                <span class="text-indigo-400 font-extrabold">→</span>
-                <span class="address-tag text-emerald-300 font-bold">${endLoc}</span>
-              </div>
-              <div class="text-gray-400 text-[11px] leading-relaxed flex flex-wrap gap-2 justify-between items-center">
-                <span>주행 ${moveKmStr}km (${t.durationMin}분) | 🔋 ${batDetail} | 📍 ${odoStr}km</span>
-                <span class="text-amber-400 font-bold">🌡️ ${tempStr}</span>
-              </div>
+            <div class="text-gray-400 text-[11px] leading-relaxed flex flex-wrap gap-2 justify-between items-center">
+              <span>주행 ${moveKmStr}km (${t.durationMin}분) | 🔋 ${batDetail} | 📍 ${odoStr}km</span>
+              <span class="text-amber-400 font-bold">🌡️ ${tempStr}</span>
             </div>
-          `);
-        });
-      }
+          </div>
+        `);
+      });
+    }
+  }
+}
 
       const timelineBox = document.getElementById('timeline-container');
       timelineBox.innerHTML = '';
@@ -1874,7 +1889,7 @@ async function exchangeTeslaToken(code) {
         groupHtml += `</div></div>`;
         timelineBox.insertAdjacentHTML('beforeend', groupHtml);
       });
-    }
+    
 
     function setFilterMode(mode) {
       currentFilterMode = mode;
@@ -2788,8 +2803,42 @@ function renderBatteryCharts() {
       }
     });
 
+// 1. 단일 운행 클릭 시 주행 지도 탭 이동 및 해당 경로 강조
+function jumpToSingleTrip(tripId) {
+  if (!tripId) return;
+  if (typeof switchMainTab === 'function') switchMainTab('tab-driving');
+  if (typeof setFilterMode === 'function') setFilterMode('single');
+  
+  const sel = document.getElementById('ctrl-select');
+  if (sel) sel.value = tripId;
+  
+  if (typeof highlightSingleTripOnMap === 'function') {
+    highlightSingleTripOnMap(tripId);
+  }
+}
+
+// 2. 날짜 클릭 시 해당 일자의 전체 주행 지도로 이동
+function jumpToDrivingDate(dateStr) {
+  if (!dateStr) return;
+  if (typeof switchMainTab === 'function') switchMainTab('tab-driving');
+  if (typeof setFilterMode === 'function') setFilterMode('daily');
+  
+  const sel = document.getElementById('ctrl-sub-select');
+  if (sel) {
+    sel.value = dateStr;
+    if (typeof renderDrivingData === 'function') renderDrivingData();
+  }
+}
+
+// 3. 월간 리포트 다음달 이동 버튼
+function selectNextMonth() {
+  if (typeof shiftMonthlyDropdown === 'function') shiftMonthlyDropdown(1);
+}
+
+
+
 // ==========================================
-// 구글 캘린더 iCal 설정 및 연동 모듈
+// [8] 구글 캘린더 iCal 설정 및 연동 모듈 (최종 통합본)
 // ==========================================
 
 let calendarEventsMap = {};
@@ -2820,11 +2869,11 @@ function initIcalSettingInput() {
   }
 }
 
-// 4. iCal 데이터 불러오기 및 파싱
+// 4. iCal 데이터 불러오기 및 파싱 (무한 루프 방지 및 즉시 반영)
 async function loadGoogleCalendarEvents() {
   const icalUrl = getIcalUrl();
   
-  // 저장된 URL이 없으면 중단
+  // 저장된 URL이 없으면 초기화 후 중단
   if (!icalUrl) {
     calendarEventsMap = {};
     return;
@@ -2839,8 +2888,17 @@ async function loadGoogleCalendarEvents() {
     calendarEventsMap = parseIcsToMap(icsText);
     console.log('📅 캘린더 일정 로드 완료:', calendarEventsMap);
 
-    // 저장 후 화면을 즉시 갱신하기 위한 트리거 호출
+    // ① 월간 리포트 및 주행 지도 화면 갱신
     if (typeof renderMonthlyTop5 === 'function') renderMonthlyTop5();
+    if (typeof renderDrivingData === 'function') renderDrivingData();
+
+    // ② 메인 차량 카드의 캘린더 뱃지만 핀포인트 직접 갱신 (무한 루프 없이 안전하게 반영)
+    const elCal = document.getElementById('v-latest-trip-calendar');
+    if (elCal && typeof getCalendarBadgeHtml === 'function' && typeof allTrips !== 'undefined' && allTrips.length > 0) {
+      const dayDate = new Date(allTrips[0].timestamp);
+      elCal.innerHTML = getCalendarBadgeHtml(dayDate);
+    }
+
   } catch (err) {
     console.warn('캘린더 일정을 가져오는 데 실패했습니다:', err);
   }
@@ -2849,6 +2907,8 @@ async function loadGoogleCalendarEvents() {
 // 5. ICS 파일 텍스트 파싱
 function parseIcsToMap(icsText) {
   const map = {};
+  if (!icsText) return map; // 예외 안전 처리
+
   const blocks = icsText.split('BEGIN:VEVENT');
 
   for (let i = 1; i < blocks.length; i++) {
@@ -2907,7 +2967,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initIcalSettingInput();
   loadGoogleCalendarEvents();
 });
-
 
 
 
