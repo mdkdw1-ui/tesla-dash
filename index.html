@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.41</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -570,7 +570,15 @@
         // 진짜 로그인된 상태일 때만 실행
         document.getElementById('loginSection')?.classList.add('hidden');
         document.getElementById('tokenInfoSection')?.classList.remove('hidden');
-        renderAccessTokenUI(accessToken);
+       
+        // 💡 함수가 아직 로드되지 않았을 경우를 대비해 안전하게 호출합니다.
+        if (typeof renderAccessTokenUI === 'function') {
+          renderAccessTokenUI(accessToken);
+        } else {
+          const el = document.getElementById('displayAccessToken');
+          if (el) el.innerText = accessToken;
+        }
+       
         fetchTeslaVehicles(accessToken, true);
       } else {
         // ❌ 가짜 토큰이거나 없으면 찌꺼기 데이터를 지우고 로그인 화면을 강제로 노출
