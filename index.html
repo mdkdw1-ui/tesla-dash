@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 15</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -735,6 +735,7 @@
       document.getElementById('modal-config').classList.add('hidden');
     }
 
+        // 메인 탭 전환
     function switchMainTab(mainTab, pushHistory = true) {
       currentMainTab = mainTab;
       localStorage.setItem('tesla_main_tab', mainTab);
@@ -743,31 +744,24 @@
         history.pushState({ tab: mainTab, sub: currentSubTab }, '', '');
       }
 
-      // 💡 패널 보이기/숨기기 철저하게 제어
       const monitorPanel = document.getElementById('main-panel-monitor');
       const guardianPanel = document.getElementById('main-panel-guardian');
      
       if (monitorPanel) monitorPanel.classList.toggle('hidden', mainTab !== 'monitor');
       if (guardianPanel) guardianPanel.classList.toggle('hidden', mainTab !== 'guardian');
 
-      // 💡 테슬라 모니터 버튼 스타일 스위칭
       const btnMonitor = document.getElementById('btn-main-monitor');
       if (btnMonitor) {
-        if (mainTab === 'monitor') {
-          btnMonitor.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20";
-        } else {
-          btnMonitor.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
-        }
+        btnMonitor.className = mainTab === 'monitor'
+          ? "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
+          : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
       }
 
-      // 💡 감시 가디언 버튼 스타일 스위칭
       const btnGuardian = document.getElementById('btn-main-guardian');
       if (btnGuardian) {
-        if (mainTab === 'guardian') {
-          btnGuardian.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-red-600 to-rose-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-red-900/20";
-        } else {
-          btnGuardian.className = "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
-        }
+        btnGuardian.className = mainTab === 'guardian'
+          ? "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-red-600 to-rose-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-red-900/20"
+          : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
       }
 
       if (mainTab === 'monitor') {
@@ -790,6 +784,7 @@
       }
     }
 
+    // 서브 탭 전환 (안전 통합 버전)
     function switchSubTab(subTab, pushHistory = true) {
       currentSubTab = subTab;
       localStorage.setItem('tesla_sub_tab', subTab);
@@ -810,7 +805,7 @@
         }
       });
 
-      // 💡 [안전 봉합] 누락되었던 switchSubTab 함수의 하단 후속 처리 로직과 닫는 괄호를 완벽히 정렬합니다.
+      // 서브탭별 후속 처리 로직
       if (subTab === 'driving' && map) {
         setTimeout(() => {
           if (typeof map.relayout === 'function') map.relayout();
@@ -824,24 +819,9 @@
       if (subTab === 'battery') {
         if (typeof renderBatteryCharts === 'function') renderBatteryCharts();
       }
-    } // 👈 ⚠️ 공중에 떠 있던 switchSubTab 함수 본문을 완전히 닫아 안전핀을 채웁니다!
-      // ✅ 서브탭별 추가 실행 로직은 반드시 함수 내부 맨 아래에 위치해야 합니다!
-      if (subTab === 'driving' && map) {
-        setTimeout(() => {
-          map.relayout();
-          renderDrivingData();
-        }, 100);
-      }
-      if (subTab === 'monthly') { 
-        initMonthlyDropdowns(); 
-        renderMonthlyTop5(); 
-      }
-      if (subTab === 'battery') {
-        renderBatteryCharts();
-      }
-    
+    }
 
-    // ✅ 뒤로가기(←) 버튼 감지 리스너는 함수 바깥(전역)에 독립적으로 위치
+    // 뒤로가기(←) 버튼 감지 리스너
     window.addEventListener('popstate', function(event) {
       if (event.state && event.state.tab) {
         switchMainTab(event.state.tab, false);
@@ -852,6 +832,7 @@
         switchMainTab('monitor', false);
       }
     });
+
 
     // 날짜 클릭 시 해당 일간 주행 기록으로 이동
     function jumpToDrivingDate(dateStr) {
