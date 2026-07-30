@@ -375,6 +375,7 @@
   </div>
 </div>
 
+    </div> <!-- ⭐⭐ [여기 추가] main-panel-monitor 닫기 태그가 필요합니다! ⭐⭐ -->
 
     
 <!-- [메인 영역 2] 감시 가디언 패널 전체 초기화 -->
@@ -739,8 +740,8 @@
   currentMainTab = mainTab;
   localStorage.setItem('tesla_main_tab', mainTab);
 
-  if (pushHistory) {
-    history.pushState({ tab: mainTab, sub: currentSubTab }, '', '');
+  if (pushHistory && history.pushState) {
+    history.pushState({ tab: mainTab, sub: typeof currentSubTab !== 'undefined' ? currentSubTab : 'vehicle' }, '', '');
   }
 
   const monitorPanel = document.getElementById('main-panel-monitor');
@@ -764,27 +765,31 @@
   }
 
   if (mainTab === 'monitor') {
-    switchSubTab(currentSubTab, false);
+    if (typeof switchSubTab === 'function') {
+      switchSubTab(currentSubTab || 'vehicle', false);
+    }
   }
  
   if (mainTab === 'guardian') {
-    // typeof 구문을 추가하여 accessToken 미선언 시 참조 에러 방지
-    const currentToken = (typeof accessToken !== 'undefined') ? accessToken : null;
-    const validToken = currentToken && currentToken !== 'dummy_token' && currentToken.trim() !== '' && currentToken.length > 40;
-    
+    // ReferenceError 방지를 위해 typeof 안전 검사 적용
+    const token = (typeof accessToken !== 'undefined') ? accessToken : null;
+    const validToken = token && token !== 'dummy_token' && token.trim() !== '' && token.length > 40;
+   
     const loginSec = document.getElementById('loginSection');
     const tokenSec = document.getElementById('tokenInfoSection');
    
     if (validToken) {
       if (loginSec) loginSec.classList.add('hidden');
       if (tokenSec) tokenSec.classList.remove('hidden');
-      if (typeof renderAccessTokenUI === 'function') renderAccessTokenUI(currentToken);
+      if (typeof renderAccessTokenUI === 'function') renderAccessTokenUI(token);
     } else {
       if (loginSec) loginSec.classList.remove('hidden');
       if (tokenSec) tokenSec.classList.add('hidden');
     }
   }
 }
+
+
 
 // 서브 탭 전환 (안전 통합 버전)
 function switchSubTab(subTab, pushHistory = true) {
@@ -2367,111 +2372,137 @@ const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 �
       `).join('') || `<span class="text-gray-500">데이터가 없습니다.</span>`;
     }
 
-// 1-4. 배터리 차트 렌더링 (chargingRows 데이터 연동)
+// 1-4. 프리미엄 배터리 차트 & KPI 렌더링 (chargingRows 정밀 연동 버전)
 function renderBatteryCharts() {
-  // chargingRows가 없으면 vehicleRows를 폴백으로 사용하도록 처리
+  // 1. chargingRows 우선 사용, 없으면 vehicleRows 폴백
   const sourceRows = (typeof chargingRows !== 'undefined' && chargingRows.length > 0) 
     ? chargingRows 
-    : (vehicleRows || []);
+    : (typeof vehicleRows !== 'undefined' ? vehicleRows : []);
 
   if (!sourceRows || sourceRows.length === 0) return;
 
-  // 날짜 기준 내림차순 정렬 후 최근 30개만 잘라 시간순(오래된 순) 정렬
-  const sortedRows = [...sourceRows].sort((a, b) => new Date(b.date || b.updated_at) - new Date(a.date || a.updated_at));
-  const recentData = sortedRows.slice(0, 30).reverse();
+  // 차량 초기 기준 스펙값 (기본값: 62.5 kWh / 400 km)
+  const initKwh = parseFloat(document.getElementById('input-init-kwh')?.value || 62.5);
+  const certRange = parseFloat(document.getElementById('input-cert-range')?.value || 400);
 
-  // X축 라벨 (MM/DD HH:mm)
-  const labels = recentData.map(v => {
+  // 날짜 오름차순(오래된 순) 정렬 후 최근 30개 산출
+  const sortedRows = [...sourceRows].sort((a, b) => new Date(a.date || a.updated_at) - new Date(b.date || b.updated_at));
+  const recentData = sortedRows.slice(-30);
+
+  const labels = [];
+  const sohData = [];
+  const maxRangeData = [];
+  const capacityData = [];
+  let acCount = 0;
+  let dcCount = 0;
+
+  recentData.forEach(v => {
     const d = new Date(v.date || v.updated_at);
-    return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  });
+    const dateStr = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
 
-  // 1. 100% 환산 주행거리 계산 (added_battery_range / added_battery_level * 100)
-  const rangeData = recentData.map(v => {
     const rangeAdded = Number(v.added_battery_range) || 0;
     const levelAdded = Number(v.added_battery_level) || 0;
+    const chargingAdded = Number(v.added_charging) || 0;
 
-    // charging 테이블의 데이터로 정확히 계산
-    if (rangeAdded > 0 && levelAdded > 0) {
-      return Math.round((rangeAdded / levelAdded) * 100);
-    }
-    
-    // 폴백: vehicle 테이블 데이터인 경우
-    const bat = Number(v.battery_level) || 0;
-    const range = Number(v.battery_range) || 0;
-    if (bat > 0 && range > 0) {
-      return Math.round((range / bat) * 100);
+    let maxRange = 0;
+    let usableCap = 0;
+
+    // ① charging 테이블 정밀 연산
+    if (rangeAdded > 0 && levelAdded >= 3) { // 3% 이상 충전 데이터만 필터링 (오차 방지)
+      maxRange = Math.round((rangeAdded / levelAdded) * 100);
+      usableCap = parseFloat(((chargingAdded / levelAdded) * 100).toFixed(1));
+    } 
+    // ② vehicle 테이블 폴백 연산
+    else {
+      const bat = Number(v.battery_level) || 0;
+      const range = Number(v.battery_range) || 0;
+      if (bat > 0 && range > 0) {
+        maxRange = Math.round((range / bat) * 100);
+        usableCap = parseFloat(((maxRange / certRange) * initKwh).toFixed(1));
+      }
     }
 
-    return 400; // 기본 디폴트
+    if (maxRange > 0 && usableCap > 0) {
+      // SoH (%) 역산 (최대 100% 캡핑)
+      let soh = parseFloat(((usableCap / initKwh) * 100).toFixed(1));
+      if (soh > 100) soh = 100.0;
+
+      labels.push(dateStr);
+      maxRangeData.push(maxRange);
+      capacityData.push(usableCap);
+      sohData.push(soh);
+
+      // 완속(AC) vs 급속(DC) 충전 카운트 (20kWh 이상 급속 간주)
+      if (chargingAdded > 20) {
+        dcCount++;
+      } else {
+        acCount++;
+      }
+    }
   });
 
-  // 2. 충전된 전력량 (kWh)
-  const addedkWhData = recentData.map(v => Math.round((Number(v.added_charging) || 0) * 10) / 10);
+  if (labels.length === 0) return;
 
-  // 상단 요약 카드 값 업데이트
-  if (recentData.length > 0) {
-    const rangeEl = document.getElementById('b-est-range-val');
-    const addedEl = document.getElementById('b-added-val');
-    
-    if (rangeEl) rangeEl.innerText = `${rangeData[rangeData.length - 1]} km`;
-    if (addedEl) addedEl.innerText = `${addedkWhData[addedkWhData.length - 1]} kWh`;
+  // 2. 상단 KPI 요약 카드 수치 실시간 업데이트
+  const lastSoh = sohData[sohData.length - 1];
+  const lastMaxRange = maxRangeData[maxRangeData.length - 1];
+  const lastCap = capacityData[capacityData.length - 1];
+  const degradation = (100 - lastSoh).toFixed(1);
+
+  if (document.getElementById('b-soh-val')) document.getElementById('b-soh-val').innerText = lastSoh;
+  if (document.getElementById('b-degradation-val')) document.getElementById('b-degradation-val').innerText = `-${degradation}%`;
+  if (document.getElementById('b-max-range-val')) document.getElementById('b-max-range-val').innerText = lastMaxRange;
+  if (document.getElementById('b-range-diff-val')) {
+    const diff = lastMaxRange - certRange;
+    document.getElementById('b-range-diff-val').innerText = `${diff >= 0 ? '+' : ''}${diff} km`;
   }
+  if (document.getElementById('b-capacity-val')) document.getElementById('b-capacity-val').innerText = lastCap;
+  if (document.getElementById('b-init-cap-text')) document.getElementById('b-init-cap-text').innerText = `${initKwh} kWh`;
+
+  const totalChargeCount = acCount + dcCount || 1;
+  const acRatio = Math.round((acCount / totalChargeCount) * 100);
+  const dcRatio = 100 - acRatio;
+  if (document.getElementById('b-ac-ratio-val')) document.getElementById('b-ac-ratio-val').innerText = `${acRatio}:${dcRatio}`;
 
   // -------------------------------------------------------------
-  // 차트 1: 100% 환산 주행거리 추이 (chartRangeRecent)
+  // 차트 1: 배터리 건강도 (SoH %) 추이
   // -------------------------------------------------------------
-  if (chartRangeRec) chartRangeRec.destroy();
-  const ctxRange = document.getElementById('chartRangeRecent')?.getContext('2d');
-  if (ctxRange) {
-    const validRanges = rangeData.filter(v => !isNaN(v) && v > 0);
-    const minRange = validRanges.length > 0 ? Math.min(...validRanges) : 350;
-    const maxRange = validRanges.length > 0 ? Math.max(...validRanges) : 500;
+  const ctxSoh = document.getElementById('chartSohTrend')?.getContext('2d');
+  if (ctxSoh) {
+    if (window.chartSohInst) window.chartSohInst.destroy();
 
-    chartRangeRec = new Chart(ctxRange, {
+    const gradient = ctxSoh.createLinearGradient(0, 0, 0, 200);
+    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
+    gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+    window.chartSohInst = new Chart(ctxSoh, {
       type: 'line',
       data: {
         labels: labels,
         datasets: [{
-          label: '100% 환산 거리 (km)',
-          data: rangeData,
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99, 102, 241, 0.12)',
+          label: '배터리 건강도 (SoH %)',
+          data: sohData,
+          borderColor: '#10b981',
+          borderWidth: 2.5,
+          backgroundColor: gradient,
           fill: true,
-          tension: 0.3,
+          tension: 0.25,
           pointRadius: 3,
-          pointHoverRadius: 5
+          pointHoverRadius: 6,
+          pointBackgroundColor: '#10b981'
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: 'rgba(15, 17, 23, 0.9)',
-            titleColor: '#f3f4f6',
-            bodyColor: '#818cf8',
-            borderColor: 'rgba(99, 102, 241, 0.3)',
-            borderWidth: 1,
-            padding: 10,
-            displayColors: false,
-            callbacks: {
-              label: (ctx) => `100% 환산 주행거리: ${ctx.raw} km`
-            }
-          }
-        },
+        plugins: { legend: { display: false } },
         scales: {
-          x: {
-            display: true,
-            grid: { display: false },
-            ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 6 }
-          },
-          y: {
-            min: Math.floor(minRange - 10),
-            max: Math.ceil(maxRange + 10),
-            grid: { color: 'rgba(255, 255, 255, 0.04)' },
-            ticks: { color: '#9ca3af' }
+          x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 8 } },
+          y: { 
+            min: Math.max(70, Math.floor(Math.min(...sohData) - 2)), 
+            max: 100, 
+            grid: { color: 'rgba(255,255,255,0.04)' }, 
+            ticks: { color: '#9ca3af', callback: v => v + '%' } 
           }
         }
       }
@@ -2479,57 +2510,77 @@ function renderBatteryCharts() {
   }
 
   // -------------------------------------------------------------
-  // 차트 2: 회당 충전량 추이 (chartDegradationRecent 재활용)
+  // 차트 2: 완충 주행거리 & 공인 거리 기준선 복합 차트
   // -------------------------------------------------------------
-  if (chartDegRec) chartDegRec.destroy();
-  const ctxDeg = document.getElementById('chartDegradationRecent')?.getContext('2d');
-  if (ctxDeg) {
-    const validkWh = addedkWhData.filter(v => !isNaN(v));
-    const maxkWh = validkWh.length > 0 ? Math.max(...validkWh) : 50;
+  const ctxRC = document.getElementById('chartRangeCapacity')?.getContext('2d');
+  if (ctxRC) {
+    if (window.chartRCInst) window.chartRCInst.destroy();
 
-    chartDegRec = new Chart(ctxDeg, {
-      type: 'bar', // 충전량은 막대그래프가 직관적입니다
+    window.chartRCInst = new Chart(ctxRC, {
+      type: 'line',
       data: {
         labels: labels,
-        datasets: [{
-          label: '충전량 (kWh)',
-          data: addedkWhData,
-          backgroundColor: 'rgba(16, 185, 129, 0.6)',
-          borderColor: '#10b981',
-          borderWidth: 1,
-          borderRadius: 4
-        }]
+        datasets: [
+          {
+            label: '100% 환산 주행거리 (km)',
+            data: maxRangeData,
+            borderColor: '#6366f1',
+            borderWidth: 2,
+            tension: 0.25,
+            pointRadius: 3,
+            pointBackgroundColor: '#818cf8'
+          },
+          {
+            label: '공인 인증 기준선',
+            data: Array(labels.length).fill(certRange),
+            borderColor: 'rgba(156, 163, 175, 0.4)',
+            borderWidth: 1.5,
+            borderDash: [4, 4],
+            pointRadius: 0
+          }
+        ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: 'rgba(15, 17, 23, 0.9)',
-            titleColor: '#f3f4f6',
-            bodyColor: '#34d399',
-            borderColor: 'rgba(16, 185, 129, 0.3)',
-            borderWidth: 1,
-            padding: 10,
-            displayColors: false,
-            callbacks: {
-              label: (ctx) => `충전량: ${ctx.raw} kWh`
-            }
-          }
+          legend: { labels: { color: '#d1d5db', font: { size: 10 } } }
         },
         scales: {
-          x: {
-            display: true,
-            grid: { display: false },
-            ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 6 }
-          },
+          x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 8 } },
           y: {
-            min: 0,
-            max: Math.ceil(maxkWh + 5),
-            grid: { color: 'rgba(255, 255, 255, 0.04)' },
-            ticks: { color: '#9ca3af' }
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#818cf8', callback: v => v + ' km' }
           }
+        }
+      }
+    });
+  }
+
+  // -------------------------------------------------------------
+  // 차트 3: 완속(AC) vs 급속(DC) 충전 비율 도넛 차트
+  // -------------------------------------------------------------
+  const ctxRatio = document.getElementById('chartChargeRatio')?.getContext('2d');
+  if (ctxRatio) {
+    if (window.chartRatioInst) window.chartRatioInst.destroy();
+
+    window.chartRatioInst = new Chart(ctxRatio, {
+      type: 'doughnut',
+      data: {
+        labels: ['완속 (AC)', '급속 (DC)'],
+        datasets: [{
+          data: [acCount, dcCount],
+          backgroundColor: ['#f59e0b', '#ef4444'],
+          borderWidth: 0,
+          hoverOffset: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '70%',
+        plugins: {
+          legend: { position: 'bottom', labels: { color: '#d1d5db', font: { size: 10 }, boxWidth: 12 } }
         }
       }
     });
