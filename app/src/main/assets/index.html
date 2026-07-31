@@ -2885,13 +2885,13 @@ function selectNextMonth() {
 }
 
 
-
 // ==========================================
-// [8] 구글 캘린더 iCal 연동 모듈 (무한 대기 방지 및 타임아웃 적용)
+// [8] 구글 캘린더 iCal 연동 모듈 (안드로이드 브릿지 완벽 지원)
 // ==========================================
 
 let calendarEventsMap = {};
 
+// 1. iCal 주소 읽기
 function getIcalUrl() {
   if (typeof configObj !== 'undefined' && configObj && configObj.icalUrl) {
     return configObj.icalUrl;
@@ -2903,27 +2903,24 @@ function getIcalUrl() {
   return localStorage.getItem('tesla_ical_url') || '';
 }
 
-// 앱(코틀린) 네이티브 우회 + 웹 프록시 백업 수신 함수
+// 2. ICS 데이터 수신 (안드로이드 앱 네이티브 우선 -> 웹 프록시 백업)
 async function fetchIcsTextWithFallback(icalUrl) {
-  
-  // 🚀 1. 안드로이드 코틀린 앱 환경인지 체크 (프록시 전혀 없이 구글 직접 수신)
+  // 🚀 안드로이드 코틀린 브릿지가 연결되어 있으면 프록시 없이 즉시 수신
   if (window.AndroidBridge && typeof window.AndroidBridge.fetchIcal === 'function') {
     try {
-      // 코틀린 네이티브 통신 호출
       const nativeIcsText = window.AndroidBridge.fetchIcal(icalUrl);
       if (nativeIcsText && nativeIcsText.includes('BEGIN:VCALENDAR')) {
-        console.log('✅ 코틀린 네이티브 브릿지를 통해 프록시 없이 직접 수신 성공!');
+        console.log('✅ 안드로이드 네이티브를 통해 프록시 없이 직접 수신 성공!');
         return nativeIcsText;
       }
     } catch (e) {
-      console.warn('네이티브 브릿지 수신 시도 실패:', e);
+      console.warn('네이티브 호출 실패, 웹 프록시 백업으로 전환:', e);
     }
   }
 
-  // 🌐 2. 일반 웹 브라우저(GitHub Pages 접속) 환경일 때의 기존 프록시 백업 로직
+  // 🌐 웹 브라우저 환경 백업
   const encodedUrl = encodeURIComponent(icalUrl);
 
-  // AllOrigins JSON
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -2935,7 +2932,6 @@ async function fetchIcsTextWithFallback(icalUrl) {
     }
   } catch (e) {}
 
-  // CodeTabs
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -2947,10 +2943,34 @@ async function fetchIcsTextWithFallback(icalUrl) {
     }
   } catch (e) {}
 
-  throw new Error('모든 방식으로 캘린더 수신 실패');
-}
+  throw new Error('캘린더 데이터 수신 실패');
 }
 
+// 3. 캘린더 로드 핵심 함수
+async function loadGoogleCalendarEvents() {
+  const icalUrl = getIcalUrl();
+  
+  if (!icalUrl) {
+    console.warn('⚠️ iCal 주소가 설정되지 않았습니다.');
+    calendarEventsMap = {};
+    return;
+  }
+
+  try {
+    const icsText = await fetchIcsTextWithFallback(icalUrl);
+    calendarEventsMap = parseIcsToMap(icsText);
+    
+    console.log('📅 캘린더 데이터 로드 완료! (날짜 수:', Object.keys(calendarEventsMap).length, ')');
+
+    if (typeof renderDrivingData === 'function') {
+      renderDrivingData();
+    }
+  } catch (err) {
+    console.error('❌ 캘린더 로딩 최종 에러:', err.message);
+  }
+}
+
+// 4. ICS 텍스트 날짜별 파싱
 function parseIcsToMap(icsText) {
   const map = {};
   if (!icsText) return map;
@@ -2999,6 +3019,7 @@ function parseIcsToMap(icsText) {
   return map;
 }
 
+// 5. 날짜 뱃지 HTML 생성
 function getCalendarBadgeHtml(targetDate) {
   if (!targetDate) return '';
 
@@ -3022,6 +3043,7 @@ function getCalendarBadgeHtml(targetDate) {
   `).join(' ');
 }
 
+// 6. 페이지 로드 시 자동 실행
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
   setTimeout(loadGoogleCalendarEvents, 1000);
 } else {
@@ -3029,6 +3051,7 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
     setTimeout(loadGoogleCalendarEvents, 1000);
   });
 }
+
 
   </script>
 </body>
