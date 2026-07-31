@@ -123,28 +123,35 @@
       </div>
 
       <!-- 1-1. 차량 정보 서브 탭 -->
-      <div id="sub-panel-vehicle" class="space-y-4">
-        <div class="flex justify-between items-center px-1">
-          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> 최근 차량 상태
-          </h2>
-          <span id="v-last-time" class="text-xs font-mono text-gray-400 bg-gray-900/60 px-2.5 py-1 rounded-lg border border-gray-800">--:-- 기준 🔄</span>
-        </div>
+<div id="sub-panel-vehicle" class="space-y-4">
+  
+  <!-- 1. 상단 제목 헤더 (제목 + 기준 시각) -->
+  <div class="flex justify-between items-center px-1">
+    <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> 최근 차량 상태
+    </h2>
+    <span id="v-last-time" class="text-xs font-mono text-gray-400 bg-gray-900/60 px-2.5 py-1 rounded-lg border border-gray-800">--:-- 기준 🔄</span>
+  </div>
 
-        <div class="glass-card p-4 rounded-2xl flex justify-between items-center shadow-xl">
-          <div class="flex items-center space-x-2.5">
-            <span id="v-status-dot" class="w-3 h-3 rounded-full bg-amber-500 shadow-lg shadow-amber-500/50"></span>
-            <span id="v-status-text" class="text-sm font-bold text-gray-100">현재: 주차 중</span>
-          </div>
-          <div class="flex items-center space-x-4 text-sm font-black tracking-tight">
-            <div class="flex items-center space-x-1.5 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-1 rounded-xl">
-              <span>🔋</span><span id="v-battery-val" class="text-emerald-400">-%</span>
-            </div>
-            <div class="flex items-center space-x-1.5 bg-gray-900/60 border border-gray-800 px-2.5 py-1 rounded-xl">
-              <span>📍</span><span id="v-odometer-val" class="text-gray-200">- km</span>
-            </div>
-          </div>
-        </div>
+  
+
+  <!-- 3. 현재 차량 상태 요약 카드 -->
+  <div class="glass-card p-4 rounded-2xl flex justify-between items-center shadow-xl">
+    <div class="flex items-center space-x-2.5">
+      <span id="v-status-dot" class="w-3 h-3 rounded-full bg-amber-500 shadow-lg shadow-amber-500/50"></span>
+      <span id="v-status-text" class="text-sm font-bold text-gray-100">현재: 주차 중</span>
+    </div>
+    <div class="flex items-center space-x-4 text-sm font-black tracking-tight">
+      <div class="flex items-center space-x-1.5 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-1 rounded-xl">
+        <span>🔋</span><span id="v-battery-val" class="text-emerald-400">-%</span>
+      </div>
+      <div class="flex items-center space-x-1.5 bg-gray-900/60 border border-gray-800 px-2.5 py-1 rounded-xl">
+        <span>📍</span><span id="v-odometer-val" class="text-gray-200">- km</span>
+      </div>
+    </div>
+  </div>
+<div id="vehicle-range-card" class="mt-3"></div>
+  <!-- (이하 기존 차량 상태 관련 나머지 요소들) -->
 
         <!-- 주행/충전/감시 동적 카드 -->
         <div id="card-state-duration" class="glass-card card-border-amber p-4 rounded-2xl flex items-center justify-between transition-all shadow-lg">
@@ -597,15 +604,6 @@
           </div>
         </div>
 
-<!-- 구글 캘린더 iCal 주소 입력 (통합 및 단독 버튼 제거) -->
-<div class="py-1 border-t border-gray-800">
-  <label class="block text-gray-400 mb-1 font-medium">📅 구글 캘린더 iCal 비공개 주소</label>
-  <input type="text" id="setting-ical-url" 
-         placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" 
-         class="w-full bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-white font-mono focus:border-blue-500 outline-none">
-  <p class="text-[10px] text-gray-500 mt-1">구글 캘린더 웹 > 설정 > 캘린더 통합 > 'iCal 형식의 비공개 주소'를 입력하세요.</p>
-</div>
-
 
         <div>
           <label class="block text-gray-400 mb-1 font-medium">ntfy 알림 토픽</label>
@@ -619,53 +617,63 @@
     </div>
   </div>
 
-  <script>
-// 파일의 가장 맨 처음에 추가
-alert('🚀 자바스크립트 파일이 정상적으로 로드되었습니다!');
+<script>
+  const SECRET_SALT = "Tesla_Supabase_Dashboard_2026";
+  let configObj = { 
+    kakaoKey: '159c5d7588efc5939d431f005912f9f3', 
+    url: '', 
+    key: '', 
+    ghToken: '', 
+    vehicleId: '3744141651867089', 
+    ntfyTopic: 'MJYAz6ZyjXiujaTDpJ' 
+  };
 
+  // ✅ 1. 'supabase' 제거하고 'supabaseClient' 변수 하나만 전역 선언 (CDN 변수 충돌 방지)
+  let supabaseClient = null;
+
+  let currentMainTab = localStorage.getItem('tesla_main_tab') || 'monitor';
+  let currentSubTab = localStorage.getItem('tesla_sub_tab') || 'vehicle';
   
+  const VERCEL_BACKEND_URL = "https://my-tesla-app-six.vercel.app/api/exchange"; 
+  const CLIENT_ID = "272ac00a-248e-4fa7-8027-1fc06e8e9a24";
+  const REDIRECT_URI = "https://mdkdw1-ui.github.io/tesla-dash";
+
+  let accessToken = localStorage.getItem('tesla_access_token') || "";
+  let monitorTimer = null;
+  let drivingSyncTimer = null;
+  let lastSentryState = false;
+  let isAppInForeground = true; 
+
+  let map = null, geocoder = null;
+  let allTrips = [], vehicleRows = [];
+  let currentPolylines = [], currentInfoWindow = null;
+  let currentFilterMode = 'daily';
   
+  // 주소 변환 캐시
+  let addressCache = {};
+  try {
+    const savedCache = localStorage.getItem('tesla_address_cache');
+    if (savedCache) addressCache = JSON.parse(savedCache);
+  } catch(e) {}
+
+  let chartDegRec = null, chartRangeRec = null;
+
+  // ✅ 2. initSupabaseClient 함수를 DOMContentLoaded 밖(전역)에 딱 하나만 배치
+  function initSupabaseClient() {
+    if (configObj.url && configObj.key && window.supabase) {
+      supabaseClient = window.supabase.createClient(configObj.url, configObj.key);
+      console.log('⚡ Supabase DB 연결 성공');
+    } else {
+      console.warn('⚠️ Supabase URL 또는 Key 정보가 입력되지 않았습니다.');
+    }
+  }
   
-    const SECRET_SALT = "Tesla_Supabase_Dashboard_2026";
-    let configObj = { 
-      kakaoKey: '159c5d7588efc5939d431f005912f9f3', 
-      url: '', 
-      key: '', 
-      ghToken: '', 
-      vehicleId: '3744141651867089', 
-      ntfyTopic: 'MJYAz6ZyjXiujaTDpJ' 
-    };
 
-    let supabaseClient = null;
-    let currentMainTab = localStorage.getItem('tesla_main_tab') || 'monitor';
-    let currentSubTab = localStorage.getItem('tesla_sub_tab') || 'vehicle';
-    
-    const VERCEL_BACKEND_URL = "https://my-tesla-app-six.vercel.app/api/exchange"; 
-    const CLIENT_ID = "272ac00a-248e-4fa7-8027-1fc06e8e9a24";
-    const REDIRECT_URI = "https://mdkdw1-ui.github.io/tesla-dash";
+  // ✅ 3. 페이지 로드 이벤트 (내부의 중복 선언부 모두 삭제됨)
+  window.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('visibilitychange', handleAppVisibilityChange);
 
-    let accessToken = localStorage.getItem('tesla_access_token') || "";
-    let monitorTimer = null;
-    let drivingSyncTimer = null;
-    let lastSentryState = false;
-    let isAppInForeground = true; 
-
-    let map = null, geocoder = null;
-    let allTrips = [], vehicleRows = [];
-    let currentPolylines = [], currentInfoWindow = null;
-    let currentFilterMode = 'daily';
-    
-        // 주소 변환 캐시
-    let addressCache = {};
-    try {
-      const savedCache = localStorage.getItem('tesla_address_cache');
-      if (savedCache) addressCache = JSON.parse(savedCache);
-    } catch(e) {}
-
-    let chartDegRec = null, chartRangeRec = null;
-
-    window.addEventListener('DOMContentLoaded', () => {
-      document.addEventListener('visibilitychange', handleAppVisibilityChange);
+    // (이 아래 기존 OAuth 토큰 처리, Config 로드 등 기존 이벤트 로직 유지)
 
 // 💡 [정답본] 함수 선언부를 위로 올려 브라우저가 언제든 참조할 수 있게 호이스팅을 보장합니다.
     function initSupabaseClient() {
@@ -819,38 +827,34 @@ alert('🚀 자바스크립트 파일이 정상적으로 로드되었습니다!'
 function saveConfig(e) {
   if (e) e.preventDefault();
 
-  // iCal 입력값 읽기
-  const icalEl = document.getElementById('setting-ical-url');
-  const icalVal = icalEl ? icalEl.value.trim() : '';
-
   configObj = {
     kakaoKey: document.getElementById('input-kakao-key').value.trim(),
     url: document.getElementById('input-supabase-url').value.trim().replace(/\/$/, ""),
     key: document.getElementById('input-supabase-key').value.trim(),
     ghToken: document.getElementById('input-gh-token').value.trim(),
     vehicleId: document.getElementById('input-vehicle-id').value.trim(),
-    ntfyTopic: document.getElementById('input-ntfy-topic').value.trim(),
-    icalUrl: icalVal // 💡 configObj에 iCal 주소 추가
+    ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
+    // ❌ icalUrl 제거
   };
 
   // 1. 기존 AES 암호화 저장 유지
   localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
   
-  // 2. iCal 모듈 전용 키 저장
-  localStorage.setItem('tesla_ical_url', icalVal);
+  // ❌ localStorage.setItem('tesla_ical_url', icalVal); 삭제
 
   closeConfigModal();
  
-  // 3. 📅 구글 캘린더 일정 즉시 새로고침
+  // 2. 📅 Supabase 캘린더 일정 새로고침 (유지)
   if (typeof loadGoogleCalendarEvents === 'function') {
     loadGoogleCalendarEvents();
   }
 
-  // 4. 코어 인프라 안전 재부팅 (기존 로직)
+  // 3. 코어 인프라 재부팅 (유지)
   if (typeof initSupabaseClient === 'function') initSupabaseClient();
   if (typeof loadCachedDataFirst === 'function') loadCachedDataFirst();
   if (typeof initDashboard === 'function') initDashboard();
 }
+
 
 function openConfigModal() {
   if (configObj.kakaoKey) document.getElementById('input-kakao-key').value = configObj.kakaoKey;
@@ -860,16 +864,12 @@ function openConfigModal() {
   if (configObj.vehicleId) document.getElementById('input-vehicle-id').value = configObj.vehicleId;
   if (configObj.ntfyTopic) document.getElementById('input-ntfy-topic').value = configObj.ntfyTopic;
   
-  // 💡 iCal 입력창에 기존 값 복원
-  const icalEl = document.getElementById('setting-ical-url');
-  if (icalEl) {
-    icalEl.value = configObj.icalUrl || localStorage.getItem('tesla_ical_url') || '';
-  }
 
   document.getElementById('modal-config').classList.remove('hidden');
 }
 
-function closeConfigModal() {
+
+   function closeConfigModal() {
   document.getElementById('modal-config').classList.add('hidden');
 }
 
@@ -1747,173 +1747,331 @@ async function exchangeTeslaToken(code) {
     if (durTitle) durTitle.innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
     if (startTime) startTime.innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
   }
+  
+  
+// 💡 AM/PM 시간 포맷 헬퍼 함수
+function formatTimeAmPm(dateObj) {
+  if (!dateObj || isNaN(dateObj.getTime())) return '-';
+  let hours = dateObj.getHours();
+  const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+}
 
-  // 당일 주행 요약 및 캘린더 뱃지 바인딩
-  if (allTrips.length > 0) {
-    const lastTripDateStr = new Date(allTrips[0].timestamp).toDateString();
-    const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr).sort((a, b) => a.timestamp - b.timestamp);
-    const dayDate = new Date(allTrips[0].timestamp);
+// 💡 스마트 도착지-캘린더 매칭 함수 (도로명/번지수 가산점 기반 정밀 교정 버전)
+function matchCalendarToTrip(trip, dayEvents, usedEventIds = new Set()) {
+  if (!trip || !dayEvents || dayEvents.length === 0) return null;
 
-    const totalDist = sameDayTrips.reduce((a,c)=>a+c.moveKM, 0);
-    const totalBat = sameDayTrips.reduce((a,c)=>a+c.useBattery, 0);
-    const totalTime = sameDayTrips.reduce((a,c)=>a+c.durationMin, 0);
-    const totalKwh = (totalBat / 100) * 60;
-    const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
+  // 1. 도착지 전체 주소 문자열 조합 (도로명, 지번, 건물명, 동이름)
+  const rawEndText = `${trip.endAddress || ''} ${trip.endLocation || ''} ${trip.endDong || ''} ${trip.endDetail || ''}`.toLowerCase();
+  const cleanEnd = typeof cleanAddress === 'function' ? cleanAddress(rawEndText) : rawEndText;
 
-    const tripDateEl = document.getElementById('v-latest-trip-date');
-    if (tripDateEl) tripDateEl.innerText = `${dayDate.getMonth()+1}월 ${dayDate.getDate()}일 (총 ${sameDayTrips.length}건)`;
+  let bestMatch = null;
+  let maxScore = 0;
+
+  // 행정구역 대분류 키워드 제외 목록
+  const ignoreWords = ['경기', '경기도', '포천시', '포천', '소흘읍', '의정부시', '의정부', '의정부2동', '자금동', '은평구', '신사1동', '대한민국'];
+
+  // -----------------------------------------------------------------
+  // [1차 검증] 상세 도로명, 번지수, 상호명 가점 매칭
+  // -----------------------------------------------------------------
+  for (const evt of dayEvents) {
+    const evtId = evt.id || `${evt.summary}_${evt.location}`;
+    if (usedEventIds.has(evtId)) continue;
+
+    const evtText = `${evt.summary || ''} ${evt.location || ''}`.toLowerCase();
     
-    // 📅 최근 운행 카드 구글 캘린더 뱃지 바인딩
-    const elCal = document.getElementById('v-latest-trip-calendar');
-    if (elCal && typeof getCalendarBadgeHtml === 'function') {
-      elCal.innerHTML = getCalendarBadgeHtml(dayDate);
-    }
+    // 캘린더 일정에서 핵심 단어 추출
+    const words = evtText.replace(/[(),]/g, ' ').split(/\s+/).filter(w => w.length >= 2 && !ignoreWords.includes(w));
 
-    if (document.getElementById('v-day-efficiency')) document.getElementById('v-day-efficiency').innerText = avgEff;
-    if (document.getElementById('v-day-dist')) document.getElementById('v-day-dist').innerText = `${totalDist.toFixed(1)} km`;
-    if (document.getElementById('v-day-bat')) document.getElementById('v-day-bat').innerText = `-${totalBat.toFixed(1)}%`;
-    if (document.getElementById('v-day-time')) document.getElementById('v-day-time').innerText = `${totalTime} 분`;
-    if (document.getElementById('v-day-kwh')) document.getElementById('v-day-kwh').innerText = `-${totalKwh.toFixed(1)} kWh`;
-
-    const listContainer = document.getElementById('v-day-trips-list');
-    if (listContainer) {
-      listContainer.innerHTML = '';
-      const fullDayRoute = typeof buildSequentialRouteHtml === 'function' ? buildSequentialRouteHtml(sameDayTrips) : '';
-      if (fullDayRoute) {
-        listContainer.insertAdjacentHTML('beforeend', `
-          <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-800 text-[11px] mb-2 shadow-inner">
-            <span class="text-indigo-400 font-bold block mb-1">🌐 당일 이동 경로</span>
-            <div class="text-gray-200 leading-normal break-keep">${fullDayRoute}</div>
-          </div>
-        `);
+    let score = 0;
+    for (const word of words) {
+      if (cleanEnd.includes(word) || (trip.to && trip.to.includes(word))) {
+        // 🎯 도로명(화합로, 호국로)이나 건물 번지수(314, 56 등 숫자) 포함 시 높은 가산점(+5점) 부여
+        if (/\d/.test(word) || word.endsWith('로') || word.endsWith('길') || word.endsWith('점') || word.endsWith('국')) {
+          score += 5;
+        } else {
+          score += 2;
+        }
       }
-
-      sameDayTrips.forEach(t => {
-        const startLoc = typeof cleanAddress === 'function' ? cleanAddress(t.startDong) : (t.startDong || '-');
-        const endLoc = typeof cleanAddress === 'function' ? cleanAddress(t.endDong) : (t.endDong || '-');
-        const moveKmStr = t.moveKM.toFixed(1);
-        const batUsageStr = t.useBattery.toFixed(1);
-        const odoStr = t.odometer ? Math.round(t.odometer).toLocaleString() : odoVal.toLocaleString();
-        const tempStr = t.outsideTemp !== undefined && t.outsideTemp !== null ? `${Math.round(t.outsideTemp)}°C` : '-';
-        
-        let batDetail = `${batUsageStr}%`;
-        if (t.startBat && t.endBat) batDetail += ` (${t.startBat}% → ${t.endBat}%)`;
-
-        listContainer.insertAdjacentHTML('beforeend', `
-          <div onclick="jumpToSingleTrip('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99]">
-            <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
-              <span class="address-tag text-blue-300 font-bold">${startLoc}</span>
-              <span class="text-indigo-400 font-extrabold">→</span>
-              <span class="address-tag text-emerald-300 font-bold">${endLoc}</span>
-            </div>
-            <div class="text-gray-400 text-[11px] leading-relaxed flex flex-wrap gap-2 justify-between items-center">
-              <span>주행 ${moveKmStr}km (${t.durationMin}분) | 🔋 ${batDetail} | 📍 ${odoStr}km</span>
-              <span class="text-amber-400 font-bold">🌡️ ${tempStr}</span>
-            </div>
-          </div>
-        `);
-      });
     }
+
+    if (score > maxScore) {
+      maxScore = score;
+      bestMatch = evt;
+    }
+  }
+
+  // 매칭 점수가 있는 경우 해당 일정 반환 및 사용 등록
+  if (bestMatch && maxScore > 0) {
+    const evtId = bestMatch.id || `${bestMatch.summary}_${bestMatch.location}`;
+    usedEventIds.add(evtId);
+    return bestMatch;
+  }
+
+  // -----------------------------------------------------------------
+  // [2차 검증] 동 단위 매칭 시 남은 일정 중 순서대로 안전 매칭
+  // -----------------------------------------------------------------
+  const remainingEvents = dayEvents.filter(evt => {
+    const evtId = evt.id || `${evt.summary}_${evt.location}`;
+    return !usedEventIds.has(evtId);
+  });
+
+  if (remainingEvents.length > 0) {
+    // 도착지 동/읍이 일치하는 첫 번째 남은 일정 선택
+    const endDongClean = (trip.endDong || '').replace(/(경기도|포천시|의정부시)/g, '').trim();
+    const fallbackMatch = remainingEvents.find(evt => {
+      const evtText = `${evt.summary || ''} ${evt.location || ''}`;
+      return endDongClean && evtText.includes(endDongClean);
+    }) || remainingEvents[0];
+
+    if (fallbackMatch) {
+      const evtId = fallbackMatch.id || `${fallbackMatch.summary}_${fallbackMatch.location}`;
+      usedEventIds.add(evtId);
+      return fallbackMatch;
+    }
+  }
+
+  return null;
+}
+
+
+// ==========================================
+// [1] 당일 주행 요약 및 캘린더 뱃지 / 경로 매칭
+// ==========================================
+if (typeof allTrips !== 'undefined' && allTrips && allTrips.length > 0) {
+  const lastTripDateStr = new Date(allTrips[0].timestamp).toDateString();
+  const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr).sort((a, b) => a.timestamp - b.timestamp);
+  const dayDate = new Date(allTrips[0].timestamp);
+
+  const totalDist = sameDayTrips.reduce((a,c)=>a+c.moveKM, 0);
+  const totalBat = sameDayTrips.reduce((a,c)=>a+c.useBattery, 0);
+  const totalTime = sameDayTrips.reduce((a,c)=>a+c.durationMin, 0);
+  const totalKwh = (totalBat / 100) * 60;
+  const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
+
+  // 제목 세로 찌그러짐 방지
+  const tripDateEl = document.getElementById('v-latest-trip-date');
+  if (tripDateEl) {
+    tripDateEl.innerText = `${dayDate.getMonth()+1}월 ${dayDate.getDate()}일 (총 ${sameDayTrips.length}건)`;
+    if (tripDateEl.parentElement) {
+      tripDateEl.parentElement.classList.add('flex-col', 'items-start', 'w-full');
+    }
+  }
+  
+  // 📅 당일 캘린더 데이터 가져오기
+  const kstY = dayDate.getFullYear();
+  const kstM = String(dayDate.getMonth() + 1).padStart(2, '0');
+  const kstD = String(dayDate.getDate()).padStart(2, '0');
+  const dayKey = `${kstY}-${kstM}-${kstD}`;
+  const dayEvents = (typeof calendarEventsMap !== 'undefined' && calendarEventsMap) ? (calendarEventsMap[dayKey] || []) : [];
+
+  // 캘린더 뱃지 가로 넘침 방지
+  const elCal = document.getElementById('v-latest-trip-calendar');
+  if (elCal) {
+    if (dayEvents.length > 0) {
+      elCal.innerHTML = `
+        <div class="flex flex-col gap-1.5 w-full mt-2 overflow-hidden">
+          ${dayEvents.map(e => `
+            <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-950/80 border border-purple-500/40 text-purple-200 text-xs w-full min-w-0 shadow-sm">
+              <span class="shrink-0">📅</span>
+              <span class="font-bold truncate shrink-0 max-w-[45%]">${e.summary}</span>
+              ${e.location ? `<span class="text-[10px] text-purple-300/80 truncate min-w-0 flex-1">(${e.location})</span>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    } else {
+      elCal.innerHTML = '';
+    }
+  }
+
+  if (document.getElementById('v-day-efficiency')) document.getElementById('v-day-efficiency').innerText = avgEff;
+  if (document.getElementById('v-day-dist')) document.getElementById('v-day-dist').innerText = `${totalDist.toFixed(1)} km`;
+  if (document.getElementById('v-day-bat')) document.getElementById('v-day-bat').innerText = `-${totalBat.toFixed(1)}%`;
+  if (document.getElementById('v-day-time')) document.getElementById('v-day-time').innerText = `${totalTime} 분`;
+  if (document.getElementById('v-day-kwh')) document.getElementById('v-day-kwh').innerText = `-${totalKwh.toFixed(1)} kWh`;
+
+  const listContainer = document.getElementById('v-day-trips-list');
+  if (listContainer) {
+    listContainer.innerHTML = '';
+    const fullDayRoute = typeof buildSequentialRouteHtml === 'function' ? buildSequentialRouteHtml(sameDayTrips) : '';
+    if (fullDayRoute) {
+      listContainer.insertAdjacentHTML('beforeend', `
+        <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-800 text-[11px] mb-2 shadow-inner">
+          <span class="text-indigo-400 font-bold block mb-1">🌐 당일 이동 경로</span>
+          <div class="text-gray-200 leading-normal break-keep">${fullDayRoute}</div>
+        </div>
+      `);
+    }
+
+    // 이미 매칭된 캘린더 ID 추적용 Set (동교리 순대국 / 워크업 중복 매칭 방지)
+    const usedEventIds = new Set();
+
+    // 개별 경로 + 도착지 캘린더 정밀 매칭
+    sameDayTrips.forEach(t => {
+      const startLoc = typeof cleanAddress === 'function' ? cleanAddress(t.startDong) : (t.startDong || '-');
+      const endLoc = typeof cleanAddress === 'function' ? cleanAddress(t.endDong) : (t.endDong || '-');
+      const moveKmStr = t.moveKM.toFixed(1);
+      const batUsageStr = t.useBattery.toFixed(1);
+      const odoStr = t.odometer ? Math.round(t.odometer).toLocaleString() : (typeof odoVal !== 'undefined' ? odoVal.toLocaleString() : '0');
+      const tempStr = t.outsideTemp !== undefined && t.outsideTemp !== null ? `${Math.round(t.outsideTemp)}°C` : '-';
+      
+      let batDetail = `${batUsageStr}%`;
+      if (t.startBat && t.endBat) batDetail += ` (${t.startBat}% → ${t.endBat}%)`;
+
+      // 📍 정밀 매칭 실행
+      const matchedEvt = matchCalendarToTrip(t, dayEvents, usedEventIds);
+
+      listContainer.insertAdjacentHTML('beforeend', `
+        <div onclick="jumpToSingleTrip('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99] overflow-hidden">
+          <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
+            <span class="address-tag text-blue-300 font-bold">${startLoc}</span>
+            <span class="text-indigo-400 font-extrabold">→</span>
+            <span class="address-tag text-emerald-300 font-bold">${endLoc}</span>
+          </div>
+          <div class="text-gray-400 text-[11px] leading-relaxed flex flex-wrap gap-2 justify-between items-center">
+            <span>주행 ${moveKmStr}km (${t.durationMin}분) | 🔋 ${batDetail} | 📍 ${odoStr}km</span>
+            <span class="text-amber-400 font-bold">🌡️ ${tempStr}</span>
+          </div>
+
+          <!-- 📍 도착지 일정 매칭 결과 -->
+          ${matchedEvt ? `
+            <div class="mt-2 pt-2 border-t border-purple-500/30 flex items-center gap-1.5 text-xs text-purple-200 bg-purple-950/60 p-2 rounded-lg overflow-hidden">
+              <span class="shrink-0">📍 도착지 일정:</span>
+              <span class="font-bold text-purple-300 truncate shrink-0 max-w-[40%]">${matchedEvt.summary}</span>
+              ${matchedEvt.location ? `<span class="text-[10px] text-purple-400/80 truncate min-w-0 flex-1">(${matchedEvt.location})</span>` : ''}
+            </div>
+          ` : ''}
+        </div>
+      `);
+    });
+  }
+
+
+// ==========================================
+// [2] 최근 상태 히스토리 타임라인 (줄바꿈 방지 & AM/PM 적용)
+// ==========================================
+const timelineBox = document.getElementById('timeline-container');
+if (timelineBox) {
+  timelineBox.innerHTML = '';
+
+  let eventsGrouped = {};
+  let validEventsCount = 0;
+
+  if (typeof vehicleRows !== 'undefined' && vehicleRows && vehicleRows.length > 1) {
+    for (let i = 0; i < vehicleRows.length - 1 && validEventsCount < 20; i++) {
+      const cur = vehicleRows[i], prev = vehicleRows[i+1];
+      const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
+      const odoDiff = Math.round((cur.odometer || 0) - (prev.odometer || 0));
+
+      if (odoDiff >= 2 || batDiff > 0) {
+        const curDate = new Date(cur.updated_at);
+        const dateKey = `${curDate.getFullYear()}-${String(curDate.getMonth() + 1).padStart(2,'0')}-${String(curDate.getDate()).padStart(2,'0')}`;
+
+        if (!eventsGrouped[dateKey]) eventsGrouped[dateKey] = [];
+
+        const isDrive = odoDiff >= 2;
+        const matchedTrip = isDrive ? (typeof allTrips !== 'undefined' && allTrips ? allTrips.find(t => Math.abs(t.timestamp - curDate.getTime()) < 3600000) : null) : null;
+        let rawCur = cur.raw_data;
+        if (typeof rawCur === 'string') { try { rawCur = JSON.parse(rawCur); } catch(e){} }
+        const evtTemp = cur.outside_temp ?? rawCur?.climate_state?.outside_temp ?? matchedTrip?.outsideTemp;
+
+        // 🕒 AM / PM 시간 포맷 변환
+        const timeAmPmStr = formatTimeAmPm(curDate);
+
+        eventsGrouped[dateKey].push({
+          isDrive: isDrive,
+          tripId: matchedTrip ? matchedTrip.id : null,
+          timeStr: timeAmPmStr,
+          odoDiff: odoDiff,
+          batDiff: batDiff,
+          startDong: matchedTrip ? cleanAddress(matchedTrip.startDong) : "출발지",
+          endDong: matchedTrip ? cleanAddress(matchedTrip.endDong) : "도착지",
+          durationMin: matchedTrip ? matchedTrip.durationMin : null,
+          startBat: matchedTrip ? matchedTrip.startBat : null,
+          endBat: matchedTrip ? matchedTrip.endBat : null,
+          bat: cur.battery_level,
+          odo: Math.round(cur.odometer || 0),
+          outsideTemp: evtTemp
+        });
+        validEventsCount++;
+      }
+    }
+  }
+
+  const groupKeys = Object.keys(eventsGrouped);
+
+  if (groupKeys.length === 0) {
+    timelineBox.innerHTML = `
+      <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 text-center text-xs text-gray-500">
+        최근 주행 및 충전 상태 히스토리 기록이 없습니다.
+      </div>
+    `;
+  } else {
+    groupKeys.forEach(dateHeader => {
+      let groupHtml = `
+        <div class="glass-card p-3.5 rounded-2xl space-y-2.5 shadow-lg overflow-hidden">
+          <div onclick="jumpToDrivingDate('${dateHeader}')" class="flex items-center justify-between border-b border-gray-800 pb-2 cursor-pointer hover:opacity-80 transition">
+            <span class="text-xs font-black text-indigo-400 bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/50">📅 ${dateHeader}</span>
+            <span class="text-[10px] text-gray-500 underline font-medium">해당 날짜 전체 지도 보기 ▶</span>
+          </div>
+          <div class="space-y-2 pt-1">
+      `;
+
+      eventsGrouped[dateHeader].forEach(evt => {
+        const badgeClass = evt.isDrive ? "bg-blue-600/30 text-blue-300 border-blue-500/40" : "bg-emerald-600/30 text-emerald-300 border-emerald-500/40";
+        const icon = evt.isDrive ? "🚗" : "⚡";
+        const tempText = evt.outsideTemp !== undefined && evt.outsideTemp !== null ? `${Math.round(evt.outsideTemp)}°C` : '-';
+
+        if (evt.isDrive) {
+          let batDetail = `${Math.abs(evt.batDiff)}%`;
+          if (evt.startBat && evt.endBat) batDetail += ` (${evt.startBat}% → ${evt.endBat}%)`;
+
+          const clickHandler = evt.tripId ? `onclick="jumpToSingleTrip('${evt.tripId}')"` : `onclick="jumpToDrivingDate('${dateHeader}')"`;
+
+          groupHtml += `
+            <div ${clickHandler} class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800/90 space-y-1 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99] overflow-hidden">
+              <div class="font-bold text-gray-100 flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
+                <span class="px-1.5 py-0.5 rounded-md text-[9px] font-bold border shrink-0 ${badgeClass}">${icon} 주행</span>
+                <span class="text-gray-400 text-[10px] font-mono shrink-0">${evt.timeStr}</span>
+                <div class="flex items-center gap-1 truncate text-xs min-w-0">
+                  <span class="address-tag text-blue-300 font-bold truncate">${evt.startDong}</span>
+                  <span class="text-indigo-400 font-extrabold shrink-0">→</span>
+                  <span class="address-tag text-emerald-300 font-bold truncate">${evt.endDong}</span>
+                </div>
+              </div>
+              <div class="text-gray-400 text-[11px] leading-relaxed flex justify-between items-center whitespace-nowrap">
+                <span>주행 ${evt.odoDiff}km (${evt.durationMin ? evt.durationMin + '분' : '-'}) | 🔋 ${batDetail}</span>
+                <span class="text-amber-400 font-bold shrink-0 ml-1">🌡️ ${tempText}</span>
+              </div>
+            </div>
+          `;
+        } else {
+          groupHtml += `
+            <div class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800/90 flex justify-between items-center text-xs shadow-md whitespace-nowrap overflow-hidden">
+              <div class="flex items-center space-x-2 shrink-0">
+                <span class="px-1.5 py-0.5 rounded-md text-[9px] font-bold border ${badgeClass}">${icon} 충전</span>
+                <span class="text-gray-400 text-[10px] font-mono">${evt.timeStr}</span>
+              </div>
+              <div class="text-right truncate min-w-0">
+                <span class="font-bold text-emerald-400 text-[11px]">충전 +${evt.batDiff}% (+${((evt.batDiff/100)*60).toFixed(1)}kWh)</span>
+                <span class="text-[10px] text-gray-500 block truncate">🔋 ${evt.bat}% | 📍 ${evt.odo.toLocaleString()}km | 🌡️ ${tempText}</span>
+              </div>
+            </div>
+          `;
+        }
+      });
+
+      groupHtml += `</div></div>`;
+      timelineBox.insertAdjacentHTML('beforeend', groupHtml);
+    });
   }
 }
 
-      const timelineBox = document.getElementById('timeline-container');
-      timelineBox.innerHTML = '';
-
-      let eventsGrouped = {};
-      let validEventsCount = 0;
-
-      for (let i = 0; i < vehicleRows.length - 1 && validEventsCount < 20; i++) {
-        const cur = vehicleRows[i], prev = vehicleRows[i+1];
-        const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
-        const odoDiff = Math.round((cur.odometer || 0) - (prev.odometer || 0));
-
-        if (odoDiff >= 2 || batDiff > 0) {
-          const curDate = new Date(cur.updated_at);
-          const dateKey = `${curDate.getFullYear()}-${String(curDate.getMonth() + 1).padStart(2,'0')}-${String(curDate.getDate()).padStart(2,'0')}`;
-
-          if (!eventsGrouped[dateKey]) eventsGrouped[dateKey] = [];
-
-          const isDrive = odoDiff >= 2;
-          const matchedTrip = isDrive ? allTrips.find(t => Math.abs(t.timestamp - curDate.getTime()) < 3600000) : null;
-          let rawCur = cur.raw_data;
-          if (typeof rawCur === 'string') { try { rawCur = JSON.parse(rawCur); } catch(e){} }
-          const evtTemp = cur.outside_temp ?? rawCur?.climate_state?.outside_temp ?? matchedTrip?.outsideTemp;
-
-          eventsGrouped[dateKey].push({
-            isDrive: isDrive,
-            tripId: matchedTrip ? matchedTrip.id : null,
-            timeStr: curDate.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' }),
-            odoDiff: odoDiff,
-            batDiff: batDiff,
-            startDong: matchedTrip ? cleanAddress(matchedTrip.startDong) : "출발지",
-            endDong: matchedTrip ? cleanAddress(matchedTrip.endDong) : "도착지",
-            durationMin: matchedTrip ? matchedTrip.durationMin : null,
-            startBat: matchedTrip ? matchedTrip.startBat : null,
-            endBat: matchedTrip ? matchedTrip.endBat : null,
-            bat: cur.battery_level,
-            odo: Math.round(cur.odometer || 0),
-            outsideTemp: evtTemp
-          });
-          validEventsCount++;
-        }
-      }
-
-      Object.keys(eventsGrouped).forEach(dateHeader => {
-        let groupHtml = `
-          <div class="glass-card p-3.5 rounded-2xl space-y-2.5 shadow-lg">
-            <div onclick="jumpToDrivingDate('${dateHeader}')" class="flex items-center justify-between border-b border-gray-800 pb-2 cursor-pointer hover:opacity-80 transition">
-              <span class="text-xs font-black text-indigo-400 bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/50">📅 ${dateHeader}</span>
-              <span class="text-[10px] text-gray-500 underline font-medium">해당 날짜 전체 지도 보기 ▶</span>
-            </div>
-            <div class="space-y-2 pt-1">
-        `;
-
-        eventsGrouped[dateHeader].forEach(evt => {
-          const badgeClass = evt.isDrive ? "bg-blue-600/30 text-blue-300 border-blue-500/40" : "bg-emerald-600/30 text-emerald-300 border-emerald-500/40";
-          const icon = evt.isDrive ? "🚗" : "⚡";
-          const tempText = evt.outsideTemp !== undefined && evt.outsideTemp !== null ? `${Math.round(evt.outsideTemp)}°C` : '-';
-
-          if (evt.isDrive) {
-            let batDetail = `${Math.abs(evt.batDiff)}%`;
-            if (evt.startBat && evt.endBat) batDetail += ` (${evt.startBat}% → ${evt.endBat}%)`;
-
-            const clickHandler = evt.tripId ? `onclick="jumpToSingleTrip('${evt.tripId}')"` : `onclick="jumpToDrivingDate('${dateHeader}')"`;
-
-            groupHtml += `
-              <div ${clickHandler} class="bg-gray-900/80 p-3 rounded-xl border border-gray-800/90 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99]">
-                <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
-                  <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 주행</span>
-                  <span class="text-gray-400 text-[11px] font-mono mr-1">${evt.timeStr}</span>
-                  <span class="address-tag text-blue-300 font-bold">${evt.startDong}</span>
-                  <span class="text-indigo-400 font-extrabold">→</span>
-                  <span class="address-tag text-emerald-300 font-bold">${evt.endDong}</span>
-                </div>
-                <div class="text-gray-400 text-[11px] leading-relaxed flex justify-between items-center">
-                  <span>주행 ${evt.odoDiff}km (${evt.durationMin ? evt.durationMin + '분' : '-'}) | 🔋 ${batDetail}</span>
-                  <span class="text-amber-400 font-bold">🌡️ ${tempText}</span>
-                </div>
-              </div>
-            `;
-          } else {
-            groupHtml += `
-              <div class="bg-gray-900/80 p-3 rounded-xl border border-gray-800/90 flex justify-between items-center text-xs shadow-md">
-                <div class="flex items-center space-x-2">
-                  <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 충전</span>
-                  <span class="text-gray-400 text-[11px] font-mono">${evt.timeStr}</span>
-                </div>
-                <div class="text-right">
-                  <span class="font-bold text-emerald-400 text-[11px]">충전 +${evt.batDiff}% (+${((evt.batDiff/100)*60).toFixed(1)}kWh)</span>
-                  <span class="text-[10px] text-gray-500 block">🔋 ${evt.bat}% | 📍 ${evt.odo.toLocaleString()}km | 🌡️ ${tempText}</span>
-                </div>
-              </div>
-            `;
-          }
-        });
-
-        groupHtml += `</div></div>`;
-        timelineBox.insertAdjacentHTML('beforeend', groupHtml);
-      });
+}
     
 
     function setFilterMode(mode) {
@@ -2122,7 +2280,6 @@ function highlightSingleTripOnMap(tripId) {
 }
 
 
-
 function renderDrivingData() {
   clearMapPolylines();
   let matched = [];
@@ -2166,11 +2323,14 @@ function renderDrivingData() {
     matched = allTrips.filter(t => new Date(t.timestamp).getFullYear() === selY);
   }
 
-  // 💡 상단 날짜 선택창 영역에 캘린더 뱃지 직접 주입
+  // 📅 당일 캘린더 데이터 준비
   const selectedDay = document.getElementById('ctrl-sub-select')?.value || '';
+  const dayEvents = (typeof calendarEventsMap !== 'undefined' && calendarEventsMap && selectedDay) ? (calendarEventsMap[selectedDay] || []) : [];
+  
+  // 상단 캘린더 뱃지 (주소 없이 깔끔하게 출력)
   const calBadge = (currentFilterMode === 'daily' && typeof getCalendarBadgeHtml === 'function') ? getCalendarBadgeHtml(selectedDay) : '';
 
-  // 상단 날짜 선택 드롭다운 부모 요소에 뱃지 주입 (없으면 자동 생성)
+  // 상단 날짜 선택 드롭다운 부모 요소에 뱃지 주입
   let topBadgeContainer = document.getElementById('top-cal-badge-area');
   if (!topBadgeContainer) {
     const subSelectEl = document.getElementById('ctrl-sub-select');
@@ -2207,8 +2367,15 @@ function renderDrivingData() {
     if (matched.length === 0) {
       dailyList.innerHTML = `<span class="text-gray-500">해당 일자의 운행 기록이 없습니다.</span>`;
     } else {
+      // 🎯 중복 매칭 방지용 Set
+      const usedEventIds = new Set();
+
       dailyList.innerHTML = matched.map((t, idx) => {
-        const timeStr = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        const tripDate = new Date(t.timestamp);
+        const timeStr = typeof formatTimeAmPm === 'function' 
+          ? formatTimeAmPm(tripDate) 
+          : tripDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
         const kwh = ((t.useBattery / 100) * 60);
         const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
 
@@ -2222,7 +2389,7 @@ function renderDrivingData() {
           rawT?.outside_temp;
 
         if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
-          const tripTime = new Date(t.timestamp).getTime();
+          const tripTime = tripDate.getTime();
           if (!isNaN(tripTime)) {
             let validVehicles = vehicleRows.filter(v => v.outside_temp !== null && v.outside_temp !== undefined);
             if (validVehicles.length > 0) {
@@ -2248,21 +2415,34 @@ function renderDrivingData() {
           batText += ` (${t.startBat}% → ${t.endBat}%)`;
         }
 
+        // 📍 도착지 장소 정밀 매칭 (주소 제외, 일정 이름만 사용)
+        const matchedEvt = (typeof matchCalendarToTrip === 'function') 
+          ? matchCalendarToTrip(t, dayEvents, usedEventIds) 
+          : null;
+
         return `
-          <div onclick="highlightSingleTripOnMap('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-blue-500/60 transition shadow-md text-xs active:scale-[0.99]">
+          <div onclick="highlightSingleTripOnMap('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-blue-500/60 transition shadow-md text-xs active:scale-[0.99] overflow-hidden">
             <div class="flex justify-between items-center border-b border-gray-800/80 pb-1">
               <span class="font-extrabold text-blue-400">#${idx + 1} 운행 (${timeStr} 출발)</span>
               <span class="font-bold text-gray-200">${t.moveKM.toFixed(1)} km / ${t.durationMin}분</span>
             </div>
             <div class="text-gray-200 font-medium break-keep leading-relaxed flex items-center gap-1.5 flex-wrap">
-              <span class="bg-gray-800/80 px-2 py-0.5 rounded text-blue-300 font-bold">${t.startDong}</span>
+              <span class="bg-gray-800/80 px-2 py-0.5 rounded text-blue-300 font-bold">${typeof cleanAddress === 'function' ? cleanAddress(t.startDong) : t.startDong}</span>
               <span class="text-indigo-400 font-extrabold">→</span>
-              <span class="bg-gray-800/80 px-2 py-0.5 rounded text-emerald-300 font-bold">${t.endDong}</span>
+              <span class="bg-gray-800/80 px-2 py-0.5 rounded text-emerald-300 font-bold">${typeof cleanAddress === 'function' ? cleanAddress(t.endDong) : t.endDong}</span>
             </div>
             <div class="text-[11px] text-gray-400 flex justify-between items-center pt-0.5">
               <span>🔋 소모: ${batText} | 🌡️ 외기: ${tempStr}</span>
               <span class="font-bold text-indigo-400">⚡ 전비: ${eff} km/kWh</span>
             </div>
+
+            <!-- 📍 매칭된 도착지 일정 표시 (주소 제거 버전) -->
+            ${matchedEvt ? `
+              <div class="mt-2 pt-1.5 border-t border-purple-500/30 flex items-center gap-1.5 text-xs text-purple-200 bg-purple-950/60 p-2 rounded-lg">
+                <span class="shrink-0">📍 도착지 일정:</span>
+                <span class="font-bold text-purple-300 truncate">${matchedEvt.summary}</span>
+              </div>
+            ` : ''}
           </div>
         `;
       }).join('');
@@ -2270,6 +2450,8 @@ function renderDrivingData() {
   } else {
     dailyContainer.classList.add('hidden');
   }
+}
+
 
 
 
@@ -2885,168 +3067,78 @@ function selectNextMonth() {
 }
 
 
-
 // ==========================================
-// [8] 구글 캘린더 iCal 연동 모듈 (무한 대기 방지 및 타임아웃 적용)
+// [8] Supabase 캘린더 연동 모듈 (최종 완결본)
 // ==========================================
 
+// 📅 Supabase 캘린더 연동 모듈
 let calendarEventsMap = {};
 
-function getIcalUrl() {
-  if (typeof configObj !== 'undefined' && configObj && configObj.icalUrl) {
-    return configObj.icalUrl;
-  }
-  const inputEl = document.getElementById('setting-ical-url');
-  if (inputEl && inputEl.value.trim()) {
-    return inputEl.value.trim();
-  }
-  return localStorage.getItem('tesla_ical_url') || '';
-}
-
-// 5초 타임아웃이 적용된 프록시 수신 함수
-// 구글 차단을 우회하는 JSON Wrapper 프록시 수신 함수
-async function fetchIcsTextWithFallback(icalUrl) {
-  const encodedUrl = encodeURIComponent(icalUrl);
-
-  // 1차 시도: AllOrigins JSON 방식 (구글 프록시 IP 차단 우회율 99%)
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-    const res = await fetch(`https://api.allorigins.win/get?url=${encodedUrl}`, { signal: controller.signal });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.contents && data.contents.includes('BEGIN:VCALENDAR')) {
-        return data.contents;
-      }
-    }
-  } catch (e) {
-    console.warn('AllOrigins JSON 방식 실패:', e);
-  }
-
-  // 2차 시도: ThingProxy
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-    const res = await fetch(`https://thingproxy.freeboard.io/fetch/${icalUrl}`, { signal: controller.signal });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const text = await res.text();
-      if (text && text.includes('BEGIN:VCALENDAR')) {
-        return text;
-      }
-    }
-  } catch (e) {
-    console.warn('ThingProxy 실패:', e);
-  }
-
-  // 3차 시도: CodeTabs
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-    const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`, { signal: controller.signal });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const text = await res.text();
-      if (text && text.includes('BEGIN:VCALENDAR')) {
-        return text;
-      }
-    }
-  } catch (e) {
-    console.warn('CodeTabs 실패:', e);
-  }
-
-  throw new Error('프록시 우회 수신 실패 (구글 서버 차단)');
-}
 async function loadGoogleCalendarEvents() {
-  alert('🔍 [1단계] 캘린더 함수가 시작되었습니다.');
-
-  const icalUrl = getIcalUrl();
-  
-  if (!icalUrl) {
-    alert('⚠️ [2단계] 저장된 iCal 주소가 없습니다.\n설정(⚙️) 창에서 iCal 주소를 입력하고 저장을 눌러주세요.');
-    calendarEventsMap = {};
-    return;
-  }
-
-  // 읽어온 주소 확인용 팝업
-  alert(`🔍 [1.5단계] 읽어온 iCal 주소:\n${icalUrl.slice(0, 50)}...`);
-
   try {
-    const icsText = await fetchIcsTextWithFallback(icalUrl);
-    calendarEventsMap = parseIcsToMap(icsText);
-    
-    const totalDates = Object.keys(calendarEventsMap).length;
-
-    if (totalDates > 0) {
-      alert(`✅ [2단계] 수신 성공!\n총 ${totalDates}개 날짜의 일정을 불러왔습니다.`);
-    } else {
-      alert('⚠️ [2단계] iCal 파일은 읽었으나 일정(VEVENT)이 없습니다.');
+    // 💡 supabaseClient 인스턴스와 .from 메소드가 정상 존재하는지 확인
+    if (!supabaseClient || typeof supabaseClient.from !== 'function') {
+      console.warn('⚠️ Supabase 클라이언트가 준비되지 않아 캘린더 조회를 건너뜁니다.');
+      return;
     }
 
-    if (typeof renderDrivingData === 'function') {
-      renderDrivingData();
-    }
+    // 💡 window.supabase가 아닌 생성된 인스턴스(supabaseClient)에서 .from()을 호출합니다.
+    const { data, error } = await supabaseClient
+      .from('calendar_events')
+      .select('uid, summary, location, start_time, end_time');
+
+    if (error) throw error;
+
+    calendarEventsMap = {};
+
+    (data || []).forEach(evt => {
+      if (!evt.start_time) return;
+
+      const startDate = new Date(evt.start_time);
+      let endDate = evt.end_time ? new Date(evt.end_time) : new Date(startDate);
+
+      if (endDate > startDate && endDate.getHours() === 0 && endDate.getMinutes() === 0) {
+        endDate.setSeconds(endDate.getSeconds() - 1);
+      }
+
+      let curr = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      const last = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+      while (curr <= last) {
+        const yyyy = curr.getFullYear();
+        const mm = String(curr.getMonth() + 1).padStart(2, '0');
+        const dd = String(curr.getDate()).padStart(2, '0');
+        const dateKey = `${yyyy}-${mm}-${dd}`;
+
+        if (!calendarEventsMap[dateKey]) {
+          calendarEventsMap[dateKey] = [];
+        }
+
+        const exists = calendarEventsMap[dateKey].some(e => e.id === evt.uid);
+        if (!exists) {
+          calendarEventsMap[dateKey].push({
+            id: evt.uid,
+            summary: evt.summary || '',
+            location: evt.location || ''
+          });
+        }
+
+        curr.setDate(curr.getDate() + 1);
+      }
+    });
+
+    console.log('📅 Supabase 캘린더 로드 완료! (등록 날짜 수:', Object.keys(calendarEventsMap).length, ')');
+
+    if (typeof renderDrivingData === 'function') renderDrivingData();
+    if (typeof renderTrips === 'function') renderTrips();
 
   } catch (err) {
-    alert(`❌ [2단계] 수신 실패:\n${err.message}`);
+    console.error('❌ Supabase 캘린더 로딩 에러:', err.message);
   }
 }
 
-function parseIcsToMap(icsText) {
-  const map = {};
-  if (!icsText) return map;
 
-  const blocks = icsText.split('BEGIN:VEVENT');
-
-  for (let i = 1; i < blocks.length; i++) {
-    const block = blocks[i].split('END:VEVENT')[0];
-
-    const dtMatch = block.match(/DTSTART(;[^:]*)?:(\d{8})(T\d{6}Z?)?/);
-    if (!dtMatch) continue;
-
-    const rawDate = dtMatch[2]; 
-    const rawTime = dtMatch[3];
-
-    let dateKey = '';
-
-    if (rawTime && rawTime.endsWith('Z')) {
-      const year = parseInt(rawDate.slice(0, 4));
-      const month = parseInt(rawDate.slice(4, 6)) - 1;
-      const day = parseInt(rawDate.slice(6, 8));
-      const hour = parseInt(rawTime.slice(1, 3));
-      const min = parseInt(rawTime.slice(3, 5));
-
-      const utcDate = new Date(Date.UTC(year, month, day, hour, min));
-      const kstY = utcDate.getFullYear();
-      const kstM = String(utcDate.getMonth() + 1).padStart(2, '0');
-      const kstD = String(utcDate.getDate()).padStart(2, '0');
-      dateKey = `${kstY}-${kstM}-${kstD}`;
-    } else {
-      dateKey = `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
-    }
-
-    const sumMatch = block.match(/SUMMARY:(.*)/);
-    let summary = sumMatch ? sumMatch[1].trim() : '일정';
-    summary = summary.replace(/\\,/g, ',').replace(/\\;/g, ';');
-
-    const locMatch = block.match(/LOCATION:(.*)/);
-    let location = locMatch ? locMatch[1].trim() : '';
-    location = location.replace(/\\,/g, ',').replace(/\\;/g, ';');
-
-    if (!map[dateKey]) map[dateKey] = [];
-    map[dateKey].push({ summary, location });
-  }
-
-  return map;
-}
-
+// 2. 날짜 뱃지 HTML 생성 (상호명만 깔끔하게 출력)
 function getCalendarBadgeHtml(targetDate) {
   if (!targetDate) return '';
 
@@ -3063,21 +3155,67 @@ function getCalendarBadgeHtml(targetDate) {
   const events = calendarEventsMap[dateKey];
   if (!events || events.length === 0) return '';
 
-  return events.map(e => `
-    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-900/80 border border-purple-500/50 text-purple-200 text-[11px] font-bold shadow-sm">
-      📅 ${e.summary} ${e.location ? `<span class="text-[9px] text-purple-300">(${e.location})</span>` : ''}
-    </span>
-  `).join(' ');
+  return events.map(e => {
+    // 괄호 및 괄호 안 주소 제거 (상호명만 표시)
+    const cleanSummary = (e.summary || '').replace(/\(.*?\)/g, '').trim();
+    return `
+      <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-900/80 border border-purple-500/50 text-purple-200 text-xs font-bold shadow-sm">
+        📅 ${cleanSummary}
+      </span>
+    `;
+  }).join(' ');
 }
 
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  setTimeout(loadGoogleCalendarEvents, 1000);
-} else {
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(loadGoogleCalendarEvents, 1000);
-  });
+// 3. 최하단 자동 실행 이벤트
+document.addEventListener('DOMContentLoaded', () => {
+  loadGoogleCalendarEvents();
+  if (typeof updateEstimatedRangeCard === 'function') {
+    updateEstimatedRangeCard();
+  }
+});
+
+
+// 1. 스크립트 상단 (헬퍼 함수 영역)에 함수 정의 배치
+function renderEstimatedRange(batteryPercent, avgEfficiency) {
+  const container = document.getElementById('vehicle-range-card');
+  if (!container) return;
+
+  const batteryCapacity = window.configObj?.batteryCapacity || 60;
+  const remainingKwh = (batteryPercent / 100) * batteryCapacity;
+  const estRange = Math.round(remainingKwh * (avgEfficiency || 5.5));
+
+  container.innerHTML = `
+    <div class="bg-gray-800/80 p-3 rounded-xl border border-emerald-500/30 flex items-center justify-between shadow-md">
+      <div>
+        <div class="text-xs text-gray-400">최근 연비 기준 예상 주행거리</div>
+        <div class="text-xl font-extrabold text-emerald-400 mt-0.5">
+          약 ${estRange} km
+        </div>
+      </div>
+      <div class="text-right text-[11px] text-gray-500">
+        <div>잔여 전력: ${(remainingKwh).toFixed(1)} kWh</div>
+        <div>적용 전비: ${avgEfficiency || 5.5} km/kWh</div>
+      </div>
+    </div>
+  `;
 }
+
+// 3. 주행가능 거리 카드 안전 렌더링 함수 (데이터 로드 완료 후 호출용)
+function updateEstimatedRangeCard() {
+  if (typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
+    const currentBattery = vehicleRows[0].battery_level || 0;
+    // avgEff 안전 변환 (NaN 방지)
+    const effVal = (typeof avgEff !== 'undefined' && !isNaN(parseFloat(avgEff)) && parseFloat(avgEff) > 0) 
+      ? parseFloat(avgEff) 
+      : 5.5;
+
+    renderEstimatedRange(currentBattery, effVal);
+  }
+}
+
+
+
 
   </script>
 </body>
-  </html>
+              </html>
