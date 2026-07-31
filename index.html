@@ -2887,11 +2887,12 @@ function selectNextMonth() {
 
 
 // ==========================================
-// [8] 구글 캘린더 iCal 연동 모듈 (CORS 우회 및 디버깅 강화)
+// [8] 구글 캘린더 iCal 연동 모듈 (최종 안전 검증 및 진단 버전)
 // ==========================================
 
 let calendarEventsMap = {};
 
+// iCal URL 안전하게 읽어오기
 function getIcalUrl() {
   if (typeof configObj !== 'undefined' && configObj && configObj.icalUrl) {
     return configObj.icalUrl;
@@ -2903,10 +2904,9 @@ function getIcalUrl() {
   return localStorage.getItem('tesla_ical_url') || '';
 }
 
+// 프록시 수신
 async function fetchIcsTextWithFallback(icalUrl) {
   const encodedUrl = encodeURIComponent(icalUrl);
-  
-  // CORS 차단을 피하기 위한 최신 프록시 서버 목록
   const proxyList = [
     `https://api.allorigins.win/raw?url=${encodedUrl}`,
     `https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`,
@@ -2919,7 +2919,6 @@ async function fetchIcsTextWithFallback(icalUrl) {
       if (res.ok) {
         const text = await res.text();
         if (text && text.includes('BEGIN:VCALENDAR')) {
-          console.log('✅ iCal 수신 성공 프록시:', proxyUrl);
           return text;
         }
       }
@@ -2927,16 +2926,17 @@ async function fetchIcsTextWithFallback(icalUrl) {
       console.warn(`프록시 접속 실패 (${proxyUrl}):`, e);
     }
   }
-
-  throw new Error('모든 프록시에서 iCal 수신에 실패했습니다. iCal 비공개 주소를 확인해 주세요.');
+  throw new Error('모든 프록시 서버에서 캘린더 데이터 수신에 실패했습니다.');
 }
 
+// 캘린더 불러오기 핵심 함수
 async function loadGoogleCalendarEvents() {
+  alert('🔍 [1단계] 캘린더 함수가 정상적으로 시작되었습니다.');
+
   const icalUrl = getIcalUrl();
   
-  // 1. 주소 존재 여부 확인
   if (!icalUrl) {
-    alert('🔍 [진단 결과] iCal 주소가 설정되지 않았습니다.\n설정(⚙️) 창에서 iCal 주소를 입력하고 저장을 눌러주세요.');
+    alert('⚠️ [2단계] 설정된 iCal 주소가 없습니다.\n설정(⚙️) 모달에서 주소를 입력하고 저장을 눌러주세요.');
     calendarEventsMap = {};
     return;
   }
@@ -2946,24 +2946,23 @@ async function loadGoogleCalendarEvents() {
     calendarEventsMap = parseIcsToMap(icsText);
     
     const totalDates = Object.keys(calendarEventsMap).length;
-    const dateList = Object.keys(calendarEventsMap).join(', ');
 
-    // 2. 수신 성공 시 결과 알림
     if (totalDates > 0) {
-      alert(`✅ [진단 결과] iCal 수신 성공!\n- 총 ${totalDates}개 일자의 일정을 불러왔습니다.\n- 등록된 날짜 목록: ${dateList.slice(0, 60)}...`);
+      alert(`✅ [2단계] iCal 수신 성공!\n총 ${totalDates}개 일자의 일정 데이터를 읽어왔습니다.`);
     } else {
-      alert('⚠️ [진단 결과] iCal 파일은 수신했으나, 캘린더 내에 등록된 일정(VEVENT)이 없습니다.');
+      alert('⚠️ [2단계] iCal 데이터는 받아왔으나 등록된 일정(VEVENT)이 없습니다.');
     }
 
-    if (typeof renderDrivingData === 'function') renderDrivingData();
+    if (typeof renderDrivingData === 'function') {
+      renderDrivingData();
+    }
 
   } catch (err) {
-    // 3. 네트워크/CORS 차단 에러 발생 시
-    alert(`❌ [진단 결과] 캘린더 수신 실패!\n원인: ${err.message}`);
+    alert(`❌ [2단계 에러] 캘린더 수신 실패:\n${err.message}`);
   }
 }
 
-
+// ICS 파싱 함수
 function parseIcsToMap(icsText) {
   const map = {};
   if (!icsText) return map;
@@ -3012,6 +3011,7 @@ function parseIcsToMap(icsText) {
   return map;
 }
 
+// 뱃지 HTML 생성
 function getCalendarBadgeHtml(targetDate) {
   if (!targetDate) return '';
 
@@ -3035,12 +3035,14 @@ function getCalendarBadgeHtml(targetDate) {
   `).join(' ');
 }
 
-// 초기 로딩
-document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => {
-    loadGoogleCalendarEvents();
-  }, 1000);
-});
+// 자동 실행 트리거
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  setTimeout(loadGoogleCalendarEvents, 1000);
+} else {
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(loadGoogleCalendarEvents, 1000);
+  });
+}
 
 
 
