@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.25</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -620,6 +620,8 @@
   </div>
 
   <script>
+// 파일의 가장 맨 처음에 추가
+alert('🚀 자바스크립트 파일이 정상적으로 로드되었습니다!');
 
   
   
@@ -2885,7 +2887,7 @@ function selectNextMonth() {
 
 
 // ==========================================
-// [8] 구글 캘린더 iCal 연동 모듈 (CORS 우회 및 디버깅 강화)
+// [8] 구글 캘린더 iCal 연동 모듈 (무한 대기 방지 및 타임아웃 적용)
 // ==========================================
 
 let calendarEventsMap = {};
@@ -2901,58 +2903,52 @@ function getIcalUrl() {
   return localStorage.getItem('tesla_ical_url') || '';
 }
 
+// 앱(코틀린) 네이티브 우회 + 웹 프록시 백업 수신 함수
 async function fetchIcsTextWithFallback(icalUrl) {
-  const encodedUrl = encodeURIComponent(icalUrl);
   
-  // CORS 차단을 피하기 위한 최신 프록시 서버 목록
-  const proxyList = [
-    `https://api.allorigins.win/raw?url=${encodedUrl}`,
-    `https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`,
-    `https://corsproxy.io/?${encodedUrl}`
-  ];
-
-  for (const proxyUrl of proxyList) {
+  // 🚀 1. 안드로이드 코틀린 앱 환경인지 체크 (프록시 전혀 없이 구글 직접 수신)
+  if (window.AndroidBridge && typeof window.AndroidBridge.fetchIcal === 'function') {
     try {
-      const res = await fetch(proxyUrl);
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.includes('BEGIN:VCALENDAR')) {
-          console.log('✅ iCal 수신 성공 프록시:', proxyUrl);
-          return text;
-        }
+      // 코틀린 네이티브 통신 호출
+      const nativeIcsText = window.AndroidBridge.fetchIcal(icalUrl);
+      if (nativeIcsText && nativeIcsText.includes('BEGIN:VCALENDAR')) {
+        console.log('✅ 코틀린 네이티브 브릿지를 통해 프록시 없이 직접 수신 성공!');
+        return nativeIcsText;
       }
     } catch (e) {
-      console.warn(`프록시 접속 실패 (${proxyUrl}):`, e);
+      console.warn('네이티브 브릿지 수신 시도 실패:', e);
     }
   }
 
-  throw new Error('모든 프록시에서 iCal 수신에 실패했습니다. iCal 비공개 주소를 확인해 주세요.');
-}
+  // 🌐 2. 일반 웹 브라우저(GitHub Pages 접속) 환경일 때의 기존 프록시 백업 로직
+  const encodedUrl = encodeURIComponent(icalUrl);
 
-async function loadGoogleCalendarEvents() {
-  const icalUrl = getIcalUrl();
-  
-  if (!icalUrl) {
-    console.log('⚠️ iCal 주소가 설정되지 않았습니다.');
-    calendarEventsMap = {};
-    return;
-  }
-
+  // AllOrigins JSON
   try {
-    const icsText = await fetchIcsTextWithFallback(icalUrl);
-    calendarEventsMap = parseIcsToMap(icsText);
-    
-    // 💡 불러온 전체 일정 목록 콘솔 출력
-    console.log('📅 로드된 캘린더 데이터 (날짜별):', calendarEventsMap);
-
-    // 주행 지도 갱신
-    if (typeof renderDrivingData === 'function') {
-      renderDrivingData();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`https://api.allorigins.win/get?url=${encodedUrl}`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.contents && data.contents.includes('BEGIN:VCALENDAR')) return data.contents;
     }
+  } catch (e) {}
 
-  } catch (err) {
-    console.error('❌ 캘린더 로딩 최종 에러:', err);
-  }
+  // CodeTabs
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const text = await res.text();
+      if (text && text.includes('BEGIN:VCALENDAR')) return text;
+    }
+  } catch (e) {}
+
+  throw new Error('모든 방식으로 캘린더 수신 실패');
+}
 }
 
 function parseIcsToMap(icsText) {
@@ -3026,14 +3022,13 @@ function getCalendarBadgeHtml(targetDate) {
   `).join(' ');
 }
 
-// 초기 로딩
-document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => {
-    loadGoogleCalendarEvents();
-  }, 1000);
-});
-
-
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  setTimeout(loadGoogleCalendarEvents, 1000);
+} else {
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(loadGoogleCalendarEvents, 1000);
+  });
+}
 
   </script>
 </body>
