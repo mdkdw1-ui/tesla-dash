@@ -2838,30 +2838,31 @@ function selectNextMonth() {
 
 
 // ==========================================
-// [8] 구글 캘린더 iCal 설정 및 연동 모듈 (최종 통합본)
+// [8] 구글 캘린더 iCal 연동 모듈 (403 방지 및 KST 시차 보정 완벽판)
 // ==========================================
 
 let calendarEventsMap = {};
 
-// 1. 저장된 iCal URL 가져오기
 function getIcalUrl() {
   return localStorage.getItem('tesla_ical_url') || '';
 }
 
-// 2. 설정 화면에서 [저장] 버튼 클릭 시 실행
 function saveIcalUrl() {
   const inputEl = document.getElementById('setting-ical-url');
   if (!inputEl) return;
 
   const url = inputEl.value.trim();
-  localStorage.setItem('tesla_ical_url', url);
-  alert('iCal 주소가 성공적으로 저장되었습니다!');
+  if (!url) {
+    alert('iCal 주소를 입력해주세요.');
+    return;
+  }
 
-  // 저장 직후 즉시 데이터 새로고침
+  localStorage.setItem('tesla_ical_url', url);
+  alert('iCal 주소가 저장되었습니다! 일정을 불러옵니다.');
+
   loadGoogleCalendarEvents();
 }
 
-// 3. 설정 화면이 열릴 때 기존 입력값 채워두기
 function initIcalSettingInput() {
   const inputEl = document.getElementById('setting-ical-url');
   if (inputEl) {
@@ -2869,55 +2870,100 @@ function initIcalSettingInput() {
   }
 }
 
-// 4. iCal 데이터 불러오기 및 파싱 (무한 루프 방지 및 즉시 반영)
+// 403 에러 방지용 3중 우회 프록시 수신 함수
+async function fetchIcsTextWithFallback(icalUrl) {
+  const encodedUrl = encodeURIComponent(icalUrl);
+  
+  // 프록시 후보 리스트
+  const proxyList = [
+    `https://api.allorigins.win/raw?url=${encodedUrl}`,
+    `https://corsproxy.io/?${encodedUrl}`,
+    `https://thingproxy.freeboard.io/fetch/${icalUrl}`
+  ];
+
+  for (const proxyUrl of proxyList) {
+    try {
+      const res = await fetch(proxyUrl);
+      // HTTP status가 200 OK 인지 반드시 확인 (403/404 에러 방지)
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.includes('BEGIN:VCALENDAR')) {
+          return text;
+        }
+      }
+    } catch (e) {
+      console.warn(`프록시 접속 시도 실패 (${proxyUrl}):`, e);
+    }
+  }
+
+  throw new Error('모든 프록시 서버에서 캘린더 수신에 실패했습니다.');
+}
+
+// 캘린더 이벤트 불러오기 및 UI 주입
 async function loadGoogleCalendarEvents() {
   const icalUrl = getIcalUrl();
+  
   if (!icalUrl) {
     calendarEventsMap = {};
     return;
   }
 
   try {
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(icalUrl)}`;
-    const res = await fetch(proxyUrl);
-    const icsText = await res.text();
-
+    const icsText = await fetchIcsTextWithFallback(icalUrl);
     calendarEventsMap = parseIcsToMap(icsText);
-    console.log('📅 캘린더 일정 로드 완료:', calendarEventsMap);
+    console.log('📅 캘린더 일정 로드 성공 (정상 데이터):', calendarEventsMap);
 
-    // 1. 월간 리포트 & 지도 갱신
+    // 1. 월간 리포트 & 주행 지도 갱신
     if (typeof renderMonthlyTop5 === 'function') renderMonthlyTop5();
     if (typeof renderDrivingData === 'function') renderDrivingData();
 
-    // 2. 메인 카드 일정 뱃지 즉시 갱신 (allTrips 존재 여부 유연하게 처리)
-    if (typeof allTrips !== 'undefined' && allTrips.length > 0) {
-      const elCal = document.getElementById('v-latest-trip-calendar');
-      if (elCal) {
-        const dayDate = new Date(allTrips[0].timestamp);
-        elCal.innerHTML = getCalendarBadgeHtml(dayDate);
-      }
+    // 2. 메인 차량 카드 캘린더 뱃지 핀포인트 갱신
+    const elCal = document.getElementById('v-latest-trip-calendar');
+    if (elCal && typeof getCalendarBadgeHtml === 'function' && typeof allTrips !== 'undefined' && allTrips.length > 0) {
+      const dayDate = new Date(allTrips[0].timestamp);
+      elCal.innerHTML = getCalendarBadgeHtml(dayDate);
     }
+
   } catch (err) {
-    console.warn('캘린더 일정을 가져오는 데 실패했습니다:', err);
+    console.error('❌ 캘린더 데이터 로딩 에러:', err);
   }
 }
 
-// 5. ICS 파일 텍스트 파싱
+// ICS 파싱 (UTC 및 종일 일정 한국 시간 KST 기준 파싱)
 function parseIcsToMap(icsText) {
   const map = {};
-  if (!icsText) return map; // 예외 안전 처리
+  if (!icsText) return map;
 
   const blocks = icsText.split('BEGIN:VEVENT');
 
   for (let i = 1; i < blocks.length; i++) {
     const block = blocks[i].split('END:VEVENT')[0];
 
-    // 날짜 추출
-    const dtMatch = block.match(/DTSTART(;[^:]*)?:(\d{8})/);
+    // DTSTART 파싱 (시간 지정 및 종일 일정 대응)
+    const dtMatch = block.match(/DTSTART(;[^:]*)?:(\d{8})(T\d{6}Z?)?/);
     if (!dtMatch) continue;
 
     const rawDate = dtMatch[2]; // YYYYMMDD
-    const dateKey = `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`; // YYYY-MM-DD
+    const rawTime = dtMatch[3]; // T150000Z 등 (선택)
+
+    let dateKey = '';
+
+    // UTC 시간(Z)이 포함된 경우 한국 시간(UTC+9) 보정
+    if (rawTime && rawTime.endsWith('Z')) {
+      const year = parseInt(rawDate.slice(0, 4));
+      const month = parseInt(rawDate.slice(4, 6)) - 1;
+      const day = parseInt(rawDate.slice(6, 8));
+      const hour = parseInt(rawTime.slice(1, 3));
+      const min = parseInt(rawTime.slice(3, 5));
+
+      const utcDate = new Date(Date.UTC(year, month, day, hour, min));
+      const kstY = utcDate.getFullYear();
+      const kstM = String(utcDate.getMonth() + 1).padStart(2, '0');
+      const kstD = String(utcDate.getDate()).padStart(2, '0');
+      dateKey = `${kstY}-${kstM}-${kstD}`;
+    } else {
+      dateKey = `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
+    }
 
     // 일정 제목
     const sumMatch = block.match(/SUMMARY:(.*)/);
@@ -2936,7 +2982,7 @@ function parseIcsToMap(icsText) {
   return map;
 }
 
-// 6. 특정 날짜 일정 뱃지 HTML 반환 (운행 카드 / 지도 팝업에서 호출)
+// 특정 날짜 일정 뱃지 HTML 반환
 function getCalendarBadgeHtml(targetDate) {
   if (!targetDate) return '';
 
@@ -2970,4 +3016,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
   </script>
 </body>
-</html>
+  </html>
