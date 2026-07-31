@@ -123,28 +123,36 @@
       </div>
 
       <!-- 1-1. 차량 정보 서브 탭 -->
-      <div id="sub-panel-vehicle" class="space-y-4">
-        <div class="flex justify-between items-center px-1">
-          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> 최근 차량 상태
-          </h2>
-          <span id="v-last-time" class="text-xs font-mono text-gray-400 bg-gray-900/60 px-2.5 py-1 rounded-lg border border-gray-800">--:-- 기준 🔄</span>
-        </div>
+<div id="sub-panel-vehicle" class="space-y-4">
+  
+  <!-- 1. 상단 제목 헤더 (제목 + 기준 시각) -->
+  <div class="flex justify-between items-center px-1">
+    <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> 최근 차량 상태
+    </h2>
+    <span id="v-last-time" class="text-xs font-mono text-gray-400 bg-gray-900/60 px-2.5 py-1 rounded-lg border border-gray-800">--:-- 기준 🔄</span>
+  </div>
 
-        <div class="glass-card p-4 rounded-2xl flex justify-between items-center shadow-xl">
-          <div class="flex items-center space-x-2.5">
-            <span id="v-status-dot" class="w-3 h-3 rounded-full bg-amber-500 shadow-lg shadow-amber-500/50"></span>
-            <span id="v-status-text" class="text-sm font-bold text-gray-100">현재: 주차 중</span>
-          </div>
-          <div class="flex items-center space-x-4 text-sm font-black tracking-tight">
-            <div class="flex items-center space-x-1.5 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-1 rounded-xl">
-              <span>🔋</span><span id="v-battery-val" class="text-emerald-400">-%</span>
-            </div>
-            <div class="flex items-center space-x-1.5 bg-gray-900/60 border border-gray-800 px-2.5 py-1 rounded-xl">
-              <span>📍</span><span id="v-odometer-val" class="text-gray-200">- km</span>
-            </div>
-          </div>
-        </div>
+  <!-- 2. 💡 [예상 주행거리 카드] 독립 배치 -->
+  <div id="vehicle-range-card"></div>
+
+  <!-- 3. 현재 차량 상태 요약 카드 -->
+  <div class="glass-card p-4 rounded-2xl flex justify-between items-center shadow-xl">
+    <div class="flex items-center space-x-2.5">
+      <span id="v-status-dot" class="w-3 h-3 rounded-full bg-amber-500 shadow-lg shadow-amber-500/50"></span>
+      <span id="v-status-text" class="text-sm font-bold text-gray-100">현재: 주차 중</span>
+    </div>
+    <div class="flex items-center space-x-4 text-sm font-black tracking-tight">
+      <div class="flex items-center space-x-1.5 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-1 rounded-xl">
+        <span>🔋</span><span id="v-battery-val" class="text-emerald-400">-%</span>
+      </div>
+      <div class="flex items-center space-x-1.5 bg-gray-900/60 border border-gray-800 px-2.5 py-1 rounded-xl">
+        <span>📍</span><span id="v-odometer-val" class="text-gray-200">- km</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- (이하 기존 차량 상태 관련 나머지 요소들) -->
 
         <!-- 주행/충전/감시 동적 카드 -->
         <div id="card-state-duration" class="glass-card card-border-amber p-4 rounded-2xl flex items-center justify-between transition-all shadow-lg">
@@ -620,6 +628,7 @@
   </div>
 
   <script>
+  
   
   
   
@@ -1914,7 +1923,7 @@ if (typeof allTrips !== 'undefined' && allTrips && allTrips.length > 0) {
       `);
     });
   }
-}
+
 
 // ==========================================
 // [2] 최근 상태 히스토리 타임라인 (줄바꿈 방지 & AM/PM 적용)
@@ -2245,7 +2254,6 @@ function highlightSingleTripOnMap(tripId) {
 }
 
 
-
 function renderDrivingData() {
   clearMapPolylines();
   let matched = [];
@@ -2289,11 +2297,14 @@ function renderDrivingData() {
     matched = allTrips.filter(t => new Date(t.timestamp).getFullYear() === selY);
   }
 
-  // 💡 상단 날짜 선택창 영역에 캘린더 뱃지 직접 주입
+  // 📅 당일 캘린더 데이터 준비
   const selectedDay = document.getElementById('ctrl-sub-select')?.value || '';
+  const dayEvents = (typeof calendarEventsMap !== 'undefined' && calendarEventsMap && selectedDay) ? (calendarEventsMap[selectedDay] || []) : [];
+  
+  // 상단 캘린더 뱃지 (주소 없이 깔끔하게 출력)
   const calBadge = (currentFilterMode === 'daily' && typeof getCalendarBadgeHtml === 'function') ? getCalendarBadgeHtml(selectedDay) : '';
 
-  // 상단 날짜 선택 드롭다운 부모 요소에 뱃지 주입 (없으면 자동 생성)
+  // 상단 날짜 선택 드롭다운 부모 요소에 뱃지 주입
   let topBadgeContainer = document.getElementById('top-cal-badge-area');
   if (!topBadgeContainer) {
     const subSelectEl = document.getElementById('ctrl-sub-select');
@@ -2330,8 +2341,15 @@ function renderDrivingData() {
     if (matched.length === 0) {
       dailyList.innerHTML = `<span class="text-gray-500">해당 일자의 운행 기록이 없습니다.</span>`;
     } else {
+      // 🎯 중복 매칭 방지용 Set
+      const usedEventIds = new Set();
+
       dailyList.innerHTML = matched.map((t, idx) => {
-        const timeStr = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        const tripDate = new Date(t.timestamp);
+        const timeStr = typeof formatTimeAmPm === 'function' 
+          ? formatTimeAmPm(tripDate) 
+          : tripDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
         const kwh = ((t.useBattery / 100) * 60);
         const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
 
@@ -2345,7 +2363,7 @@ function renderDrivingData() {
           rawT?.outside_temp;
 
         if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
-          const tripTime = new Date(t.timestamp).getTime();
+          const tripTime = tripDate.getTime();
           if (!isNaN(tripTime)) {
             let validVehicles = vehicleRows.filter(v => v.outside_temp !== null && v.outside_temp !== undefined);
             if (validVehicles.length > 0) {
@@ -2371,21 +2389,34 @@ function renderDrivingData() {
           batText += ` (${t.startBat}% → ${t.endBat}%)`;
         }
 
+        // 📍 도착지 장소 정밀 매칭 (주소 제외, 일정 이름만 사용)
+        const matchedEvt = (typeof matchCalendarToTrip === 'function') 
+          ? matchCalendarToTrip(t, dayEvents, usedEventIds) 
+          : null;
+
         return `
-          <div onclick="highlightSingleTripOnMap('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-blue-500/60 transition shadow-md text-xs active:scale-[0.99]">
+          <div onclick="highlightSingleTripOnMap('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-blue-500/60 transition shadow-md text-xs active:scale-[0.99] overflow-hidden">
             <div class="flex justify-between items-center border-b border-gray-800/80 pb-1">
               <span class="font-extrabold text-blue-400">#${idx + 1} 운행 (${timeStr} 출발)</span>
               <span class="font-bold text-gray-200">${t.moveKM.toFixed(1)} km / ${t.durationMin}분</span>
             </div>
             <div class="text-gray-200 font-medium break-keep leading-relaxed flex items-center gap-1.5 flex-wrap">
-              <span class="bg-gray-800/80 px-2 py-0.5 rounded text-blue-300 font-bold">${t.startDong}</span>
+              <span class="bg-gray-800/80 px-2 py-0.5 rounded text-blue-300 font-bold">${typeof cleanAddress === 'function' ? cleanAddress(t.startDong) : t.startDong}</span>
               <span class="text-indigo-400 font-extrabold">→</span>
-              <span class="bg-gray-800/80 px-2 py-0.5 rounded text-emerald-300 font-bold">${t.endDong}</span>
+              <span class="bg-gray-800/80 px-2 py-0.5 rounded text-emerald-300 font-bold">${typeof cleanAddress === 'function' ? cleanAddress(t.endDong) : t.endDong}</span>
             </div>
             <div class="text-[11px] text-gray-400 flex justify-between items-center pt-0.5">
               <span>🔋 소모: ${batText} | 🌡️ 외기: ${tempStr}</span>
               <span class="font-bold text-indigo-400">⚡ 전비: ${eff} km/kWh</span>
             </div>
+
+            <!-- 📍 매칭된 도착지 일정 표시 (주소 제거 버전) -->
+            ${matchedEvt ? `
+              <div class="mt-2 pt-1.5 border-t border-purple-500/30 flex items-center gap-1.5 text-xs text-purple-200 bg-purple-950/60 p-2 rounded-lg">
+                <span class="shrink-0">📍 도착지 일정:</span>
+                <span class="font-bold text-purple-300 truncate">${matchedEvt.summary}</span>
+              </div>
+            ` : ''}
           </div>
         `;
       }).join('');
@@ -2393,6 +2424,8 @@ function renderDrivingData() {
   } else {
     dailyContainer.classList.add('hidden');
   }
+}
+
 
 
 
@@ -3174,6 +3207,41 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
     setTimeout(loadGoogleCalendarEvents, 1000);
   });
 }
+
+// 1. 스크립트 상단 (헬퍼 함수 영역)에 함수 정의 배치
+function renderEstimatedRange(batteryPercent, avgEfficiency) {
+  const container = document.getElementById('vehicle-range-card');
+  if (!container) return;
+
+  const batteryCapacity = window.configObj?.batteryCapacity || 60;
+  const remainingKwh = (batteryPercent / 100) * batteryCapacity;
+  const estRange = Math.round(remainingKwh * (avgEfficiency || 5.5));
+
+  container.innerHTML = `
+    <div class="bg-gray-800/80 p-3 rounded-xl border border-emerald-500/30 flex items-center justify-between shadow-md">
+      <div>
+        <div class="text-xs text-gray-400">최근 연비 기준 예상 주행거리</div>
+        <div class="text-xl font-extrabold text-emerald-400 mt-0.5">
+          약 ${estRange} km
+        </div>
+      </div>
+      <div class="text-right text-[11px] text-gray-500">
+        <div>잔여 전력: ${(remainingKwh).toFixed(1)} kWh</div>
+        <div>적용 전비: ${avgEfficiency || 5.5} km/kWh</div>
+      </div>
+    </div>
+  `;
+}
+
+// 2. 대시보드 렌더링 로직 내부에서 실행 (예: 당일 주행 요약 또는 차량 상태 수신 시점)
+if (typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
+  const currentBattery = vehicleRows[0].battery_level || 0; // 최신 배터리 %
+  const currentEfficiency = parseFloat(avgEff) || 5.5;      // 최근 계산된 전비 (예: 5.62)
+
+  // 예상 주행거리 카드 렌더링 호출
+  renderEstimatedRange(currentBattery, currentEfficiency);
+}
+
 
 
   </script>
