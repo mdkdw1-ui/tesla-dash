@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.46</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -2164,27 +2164,43 @@ function renderDrivingData() {
     matched = allTrips.filter(t => new Date(t.timestamp).getFullYear() === selY);
   }
 
-  // 일간 선택 시 단일 운행 상세 목록 렌더링 (외기 온도 및 시간 연동)
+  // 💡 상단 날짜 선택창 영역에 캘린더 뱃지 직접 주입
+  const selectedDay = document.getElementById('ctrl-sub-select')?.value || '';
+  const calBadge = (currentFilterMode === 'daily' && typeof getCalendarBadgeHtml === 'function') ? getCalendarBadgeHtml(selectedDay) : '';
+
+  // 상단 날짜 선택 드롭다운 부모 요소에 뱃지 주입 (없으면 자동 생성)
+  let topBadgeContainer = document.getElementById('top-cal-badge-area');
+  if (!topBadgeContainer) {
+    const subSelectEl = document.getElementById('ctrl-sub-select');
+    if (subSelectEl && subSelectEl.parentElement) {
+      topBadgeContainer = document.createElement('div');
+      topBadgeContainer.id = 'top-cal-badge-area';
+      topBadgeContainer.className = 'mt-2 flex justify-center items-center gap-1.5 flex-wrap';
+      subSelectEl.parentElement.after(topBadgeContainer);
+    }
+  }
+  if (topBadgeContainer) {
+    topBadgeContainer.innerHTML = calBadge;
+  }
+
+  // 일간 선택 시 단일 운행 상세 목록 렌더링
   const dailyContainer = document.getElementById('daily-trips-container');
   const dailyList = document.getElementById('daily-trips-list');
   const dailyTitle = document.getElementById('daily-trips-title');
   const dailyCount = document.getElementById('daily-trips-count');
 
   if (currentFilterMode === 'daily') {
-    const selectedDay = document.getElementById('ctrl-sub-select')?.value || '';
     dailyContainer.classList.remove('hidden');
 
-    // 💡 1. 선택된 일자의 구글 캘린더 뱃지 HTML 가져오기
-    const calBadge = typeof getCalendarBadgeHtml === 'function' ? getCalendarBadgeHtml(selectedDay) : '';
-
-    // 💡 2. innerHTML을 사용하여 제목 뒤에 캘린더 뱃지 렌더링
-    dailyTitle.innerHTML = `
-      <span class="inline-flex items-center gap-2 flex-wrap">
-        <span>${selectedDay} 단일 운행 상세 목록</span>
-        ${calBadge}
-      </span>
-    `;
-    dailyCount.innerText = `${matched.length}건`;
+    if (dailyTitle) {
+      dailyTitle.innerHTML = `
+        <span class="inline-flex items-center gap-2 flex-wrap">
+          <span>${selectedDay} 단일 운행 상세 목록</span>
+          ${calBadge}
+        </span>
+      `;
+    }
+    if (dailyCount) dailyCount.innerText = `${matched.length}건`;
 
     if (matched.length === 0) {
       dailyList.innerHTML = `<span class="text-gray-500">해당 일자의 운행 기록이 없습니다.</span>`;
@@ -2194,7 +2210,6 @@ function renderDrivingData() {
         const kwh = ((t.useBattery / 100) * 60);
         const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
 
-        // driving과 vehicle 양쪽 모두에서 외기 온도 탐색
         let rawT = t.raw_data;
         if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
 
@@ -2254,7 +2269,6 @@ function renderDrivingData() {
     dailyContainer.classList.add('hidden');
   }
 
-  // (이 아래에 지도 폴리라인 그리기 로직이 있다면 그대로 유지해 주세요)
 
 
 
@@ -2871,13 +2885,16 @@ function selectNextMonth() {
 
 
 // ==========================================
-// [8] 구글 캘린더 iCal 연동 모듈 (단독 저장 버튼 제거 버전)
+// [8] 구글 캘린더 iCal 연동 모듈 (최종 안정화 버전)
 // ==========================================
 
 let calendarEventsMap = {};
 
-// 1. iCal URL 가져오기 (input 요소값 우선, 없으면 localStorage)
+// iCal URL 가져오기 (configObj -> input -> localStorage 순서로 안전하게 탐색)
 function getIcalUrl() {
+  if (typeof configObj !== 'undefined' && configObj && configObj.icalUrl) {
+    return configObj.icalUrl;
+  }
   const inputEl = document.getElementById('setting-ical-url');
   if (inputEl && inputEl.value.trim()) {
     return inputEl.value.trim();
@@ -2885,22 +2902,15 @@ function getIcalUrl() {
   return localStorage.getItem('tesla_ical_url') || '';
 }
 
-// 2. 설정 화면 초기화 시 기존 주소 채워두기
-function initIcalSettingInput() {
-  const inputEl = document.getElementById('setting-ical-url');
-  if (inputEl) {
-    inputEl.value = localStorage.getItem('tesla_ical_url') || '';
-  }
-}
-
-// 3. 3중 우회 프록시 수신 함수 (403/CORS 방지)
+// GitHub Pages용 고성능 프록시 수신 함수
 async function fetchIcsTextWithFallback(icalUrl) {
   const encodedUrl = encodeURIComponent(icalUrl);
   
+  // GitHub Pages에서 차단되지 않는 프록시 순서
   const proxyList = [
+    `https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`,
     `https://api.allorigins.win/raw?url=${encodedUrl}`,
-    `https://corsproxy.io/?${encodedUrl}`,
-    `https://thingproxy.freeboard.io/fetch/${icalUrl}`
+    `https://corsproxy.io/?${encodedUrl}`
   ];
 
   for (const proxyUrl of proxyList) {
@@ -2913,14 +2923,14 @@ async function fetchIcsTextWithFallback(icalUrl) {
         }
       }
     } catch (e) {
-      console.warn(`프록시 접속 실패 (${proxyUrl}):`, e);
+      console.warn(`프록시 접속 시도 실패 (${proxyUrl}):`, e);
     }
   }
 
   throw new Error('모든 프록시 서버에서 캘린더 수신에 실패했습니다.');
 }
 
-// 4. 캘린더 이벤트 불러오기 및 UI 주입
+// 캘린더 불러오기 및 UI 즉시 갱신
 async function loadGoogleCalendarEvents() {
   const icalUrl = getIcalUrl();
   
@@ -2934,23 +2944,23 @@ async function loadGoogleCalendarEvents() {
     calendarEventsMap = parseIcsToMap(icsText);
     console.log('📅 캘린더 일정 로드 성공:', calendarEventsMap);
 
-    // ① 월간 리포트 & 주행 지도 갱신
-    if (typeof renderMonthlyTop5 === 'function') renderMonthlyTop5();
+    // 1. 주행 지도 탭 & 월간 리포트 화면 즉시 재갱신
     if (typeof renderDrivingData === 'function') renderDrivingData();
+    if (typeof renderMonthlyTop5 === 'function') renderMonthlyTop5();
 
-    // ② 메인 차량 카드 캘린더 뱃지 직접 갱신
+    // 2. 차량 정보 메인 카드 뱃지 갱신
     const elCal = document.getElementById('v-latest-trip-calendar');
-    if (elCal && typeof getCalendarBadgeHtml === 'function' && typeof allTrips !== 'undefined' && allTrips.length > 0) {
+    if (elCal && typeof allTrips !== 'undefined' && allTrips.length > 0) {
       const dayDate = new Date(allTrips[0].timestamp);
       elCal.innerHTML = getCalendarBadgeHtml(dayDate);
     }
 
   } catch (err) {
-    console.error('❌ 캘린더 로딩 에러:', err);
+    console.error('❌ 캘린더 데이터 로딩 에러:', err);
   }
 }
 
-// 5. ICS 파싱 (KST 시차 보정 포함)
+// ICS 데이터 파싱 (KST 시차 보정)
 function parseIcsToMap(icsText) {
   const map = {};
   if (!icsText) return map;
@@ -2999,7 +3009,7 @@ function parseIcsToMap(icsText) {
   return map;
 }
 
-// 6. 특정 날짜 일정 뱃지 HTML 반환
+// 특정 날짜 일정 뱃지 HTML 반환
 function getCalendarBadgeHtml(targetDate) {
   if (!targetDate) return '';
 
@@ -3017,18 +3027,18 @@ function getCalendarBadgeHtml(targetDate) {
   if (!events || events.length === 0) return '';
 
   return events.map(e => `
-    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-900/60 border border-purple-500/40 text-purple-300 text-[11px] font-bold shadow-sm">
-      📅 ${e.summary} ${e.location ? `<span class="text-[9px] text-purple-400">(${e.location})</span>` : ''}
+    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-900/80 border border-purple-500/50 text-purple-200 text-[11px] font-bold shadow-sm">
+      📅 ${e.summary} ${e.location ? `<span class="text-[9px] text-purple-300">(${e.location})</span>` : ''}
     </span>
   `).join(' ');
 }
 
-// 페이지 로드 시 초기화
+// 페이지 로드 후 1초 뒤 자동 실행 (설정 로딩 완료 보장)
 document.addEventListener('DOMContentLoaded', () => {
-  initIcalSettingInput();
-  loadGoogleCalendarEvents();
+  setTimeout(() => {
+    loadGoogleCalendarEvents();
+  }, 1000);
 });
-
 
 
 
