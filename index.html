@@ -2887,12 +2887,11 @@ function selectNextMonth() {
 
 
 // ==========================================
-// [8] 구글 캘린더 iCal 연동 모듈 (최종 안전 검증 및 진단 버전)
+// [8] 구글 캘린더 iCal 연동 모듈 (무한 대기 방지 및 타임아웃 적용)
 // ==========================================
 
 let calendarEventsMap = {};
 
-// iCal URL 안전하게 읽어오기
 function getIcalUrl() {
   if (typeof configObj !== 'undefined' && configObj && configObj.icalUrl) {
     return configObj.icalUrl;
@@ -2904,18 +2903,24 @@ function getIcalUrl() {
   return localStorage.getItem('tesla_ical_url') || '';
 }
 
-// 프록시 수신
+// 5초 타임아웃이 적용된 프록시 수신 함수
 async function fetchIcsTextWithFallback(icalUrl) {
   const encodedUrl = encodeURIComponent(icalUrl);
   const proxyList = [
     `https://api.allorigins.win/raw?url=${encodedUrl}`,
-    `https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`,
-    `https://corsproxy.io/?${encodedUrl}`
+    `https://corsproxy.io/?${encodedUrl}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`
   ];
 
   for (const proxyUrl of proxyList) {
     try {
-      const res = await fetch(proxyUrl);
+      // 5초 지나면 자동으로 요청을 취소하여 무한 대기 방지
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const res = await fetch(proxyUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
       if (res.ok) {
         const text = await res.text();
         if (text && text.includes('BEGIN:VCALENDAR')) {
@@ -2923,23 +2928,25 @@ async function fetchIcsTextWithFallback(icalUrl) {
         }
       }
     } catch (e) {
-      console.warn(`프록시 접속 실패 (${proxyUrl}):`, e);
+      console.warn(`프록시 실패/시간초과 (${proxyUrl}):`, e);
     }
   }
-  throw new Error('모든 프록시 서버에서 캘린더 데이터 수신에 실패했습니다.');
+  throw new Error('모든 프록시 서버 응답 실패 (주소 오류 또는 네트워크 차단)');
 }
 
-// 캘린더 불러오기 핵심 함수
 async function loadGoogleCalendarEvents() {
-  alert('🔍 [1단계] 캘린더 함수가 정상적으로 시작되었습니다.');
+  alert('🔍 [1단계] 캘린더 함수가 시작되었습니다.');
 
   const icalUrl = getIcalUrl();
   
   if (!icalUrl) {
-    alert('⚠️ [2단계] 설정된 iCal 주소가 없습니다.\n설정(⚙️) 모달에서 주소를 입력하고 저장을 눌러주세요.');
+    alert('⚠️ [2단계] 저장된 iCal 주소가 없습니다.\n설정(⚙️) 창에서 iCal 주소를 입력하고 저장을 눌러주세요.');
     calendarEventsMap = {};
     return;
   }
+
+  // 읽어온 주소 확인용 팝업
+  alert(`🔍 [1.5단계] 읽어온 iCal 주소:\n${icalUrl.slice(0, 50)}...`);
 
   try {
     const icsText = await fetchIcsTextWithFallback(icalUrl);
@@ -2948,9 +2955,9 @@ async function loadGoogleCalendarEvents() {
     const totalDates = Object.keys(calendarEventsMap).length;
 
     if (totalDates > 0) {
-      alert(`✅ [2단계] iCal 수신 성공!\n총 ${totalDates}개 일자의 일정 데이터를 읽어왔습니다.`);
+      alert(`✅ [2단계] 수신 성공!\n총 ${totalDates}개 날짜의 일정을 불러왔습니다.`);
     } else {
-      alert('⚠️ [2단계] iCal 데이터는 받아왔으나 등록된 일정(VEVENT)이 없습니다.');
+      alert('⚠️ [2단계] iCal 파일은 읽었으나 일정(VEVENT)이 없습니다.');
     }
 
     if (typeof renderDrivingData === 'function') {
@@ -2958,11 +2965,10 @@ async function loadGoogleCalendarEvents() {
     }
 
   } catch (err) {
-    alert(`❌ [2단계 에러] 캘린더 수신 실패:\n${err.message}`);
+    alert(`❌ [2단계] 수신 실패:\n${err.message}`);
   }
 }
 
-// ICS 파싱 함수
 function parseIcsToMap(icsText) {
   const map = {};
   if (!icsText) return map;
@@ -3011,7 +3017,6 @@ function parseIcsToMap(icsText) {
   return map;
 }
 
-// 뱃지 HTML 생성
 function getCalendarBadgeHtml(targetDate) {
   if (!targetDate) return '';
 
@@ -3035,7 +3040,6 @@ function getCalendarBadgeHtml(targetDate) {
   `).join(' ');
 }
 
-// 자동 실행 트리거
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
   setTimeout(loadGoogleCalendarEvents, 1000);
 } else {
@@ -3043,8 +3047,6 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
     setTimeout(loadGoogleCalendarEvents, 1000);
   });
 }
-
-
 
   </script>
 </body>
