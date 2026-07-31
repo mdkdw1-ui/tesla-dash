@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.46</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -597,17 +597,15 @@
           </div>
         </div>
 
-<!-- 설정 패널 내에 추가할 iCal 주소 입력 폼 -->
-<div class="space-y-2 py-3 border-t border-gray-800">
-  <label class="block text-xs font-bold text-gray-300">📅 구글 캘린더 iCal 비공개 주소</label>
-  <div class="flex gap-2">
-    <input id="setting-ical-url" type="text" 
-           placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" 
-           class="flex-1 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" />
-    <button onclick="saveIcalUrl()" class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition shrink-0">저장</button>
-  </div>
-  <p class="text-[10px] text-gray-400">구글 캘린더 웹 > 설정 > 캘린더 통합 > 'iCal 형식의 비공개 주소'를 입력하세요.</p>
+<!-- 구글 캘린더 iCal 주소 입력 (통합 및 단독 버튼 제거) -->
+<div class="py-1 border-t border-gray-800">
+  <label class="block text-gray-400 mb-1 font-medium">📅 구글 캘린더 iCal 비공개 주소</label>
+  <input type="text" id="setting-ical-url" 
+         placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" 
+         class="w-full bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-white font-mono focus:border-blue-500 outline-none">
+  <p class="text-[10px] text-gray-500 mt-1">구글 캘린더 웹 > 설정 > 캘린더 통합 > 'iCal 형식의 비공개 주소'를 입력하세요.</p>
 </div>
+
 
         <div>
           <label class="block text-gray-400 mb-1 font-medium">ntfy 알림 토픽</label>
@@ -816,38 +814,63 @@
       } catch (e) { return false; }
     }
 
-    function saveConfig(e) {
-      if (e) e.preventDefault();
-      configObj = {
-        kakaoKey: document.getElementById('input-kakao-key').value.trim(),
-        url: document.getElementById('input-supabase-url').value.trim().replace(/\/$/, ""),
-        key: document.getElementById('input-supabase-key').value.trim(),
-        ghToken: document.getElementById('input-gh-token').value.trim(),
-        vehicleId: document.getElementById('input-vehicle-id').value.trim(),
-        ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
-      };
-      localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
-      closeConfigModal();
-     
-      // 💡 강제 리로드 대신 코어 인프라만 안전하게 재부팅합니다.
-      if (typeof initSupabaseClient === 'function') initSupabaseClient();
-      if (typeof loadCachedDataFirst === 'function') loadCachedDataFirst();
-      if (typeof initDashboard === 'function') initDashboard();
-    }
+function saveConfig(e) {
+  if (e) e.preventDefault();
 
-    function openConfigModal() {
-      if (configObj.kakaoKey) document.getElementById('input-kakao-key').value = configObj.kakaoKey;
-      if (configObj.url) document.getElementById('input-supabase-url').value = configObj.url;
-      if (configObj.key) document.getElementById('input-supabase-key').value = configObj.key;
-      if (configObj.ghToken) document.getElementById('input-gh-token').value = configObj.ghToken;
-      if (configObj.vehicleId) document.getElementById('input-vehicle-id').value = configObj.vehicleId;
-      if (configObj.ntfyTopic) document.getElementById('input-ntfy-topic').value = configObj.ntfyTopic;
-      document.getElementById('modal-config').classList.remove('hidden');
-    }
+  // iCal 입력값 읽기
+  const icalEl = document.getElementById('setting-ical-url');
+  const icalVal = icalEl ? icalEl.value.trim() : '';
 
-    function closeConfigModal() {
-      document.getElementById('modal-config').classList.add('hidden');
-    }
+  configObj = {
+    kakaoKey: document.getElementById('input-kakao-key').value.trim(),
+    url: document.getElementById('input-supabase-url').value.trim().replace(/\/$/, ""),
+    key: document.getElementById('input-supabase-key').value.trim(),
+    ghToken: document.getElementById('input-gh-token').value.trim(),
+    vehicleId: document.getElementById('input-vehicle-id').value.trim(),
+    ntfyTopic: document.getElementById('input-ntfy-topic').value.trim(),
+    icalUrl: icalVal // 💡 configObj에 iCal 주소 추가
+  };
+
+  // 1. 기존 AES 암호화 저장 유지
+  localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
+  
+  // 2. iCal 모듈 전용 키 저장
+  localStorage.setItem('tesla_ical_url', icalVal);
+
+  closeConfigModal();
+ 
+  // 3. 📅 구글 캘린더 일정 즉시 새로고침
+  if (typeof loadGoogleCalendarEvents === 'function') {
+    loadGoogleCalendarEvents();
+  }
+
+  // 4. 코어 인프라 안전 재부팅 (기존 로직)
+  if (typeof initSupabaseClient === 'function') initSupabaseClient();
+  if (typeof loadCachedDataFirst === 'function') loadCachedDataFirst();
+  if (typeof initDashboard === 'function') initDashboard();
+}
+
+function openConfigModal() {
+  if (configObj.kakaoKey) document.getElementById('input-kakao-key').value = configObj.kakaoKey;
+  if (configObj.url) document.getElementById('input-supabase-url').value = configObj.url;
+  if (configObj.key) document.getElementById('input-supabase-key').value = configObj.key;
+  if (configObj.ghToken) document.getElementById('input-gh-token').value = configObj.ghToken;
+  if (configObj.vehicleId) document.getElementById('input-vehicle-id').value = configObj.vehicleId;
+  if (configObj.ntfyTopic) document.getElementById('input-ntfy-topic').value = configObj.ntfyTopic;
+  
+  // 💡 iCal 입력창에 기존 값 복원
+  const icalEl = document.getElementById('setting-ical-url');
+  if (icalEl) {
+    icalEl.value = configObj.icalUrl || localStorage.getItem('tesla_ical_url') || '';
+  }
+
+  document.getElementById('modal-config').classList.remove('hidden');
+}
+
+function closeConfigModal() {
+  document.getElementById('modal-config').classList.add('hidden');
+}
+
 
         function switchMainTab(mainTab, pushHistory = true) {
   currentMainTab = mainTab;
@@ -2098,132 +2121,142 @@ function highlightSingleTripOnMap(tripId) {
 
 
 
-    function renderDrivingData() {
-      clearMapPolylines();
-      let matched = [];
+function renderDrivingData() {
+  clearMapPolylines();
+  let matched = [];
 
-      if (currentFilterMode === 'single') {
-        const selectedId = document.getElementById('ctrl-select')?.value;
-        matched = allTrips.filter(t => t.id === selectedId);
-      } else if (currentFilterMode === 'daily') {
-        const selectedDay = document.getElementById('ctrl-sub-select')?.value;
-        matched = allTrips.filter(t => {
-          const d = new Date(t.timestamp);
-          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` === selectedDay;
-        }).sort((a,b) => a.timestamp - b.timestamp);
-      } else if (currentFilterMode === 'weekly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value), selM = Number(document.getElementById('ctrl-month')?.value), selW = Number(document.getElementById('ctrl-week')?.value);
-        matched = allTrips.filter(t => {
-          const d = new Date(t.timestamp);
-          return d.getFullYear() === selY && (d.getMonth() + 1) === selM && Math.ceil(d.getDate() / 7) === selW;
-        });
-      } else if (currentFilterMode === 'monthly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value), selM = Number(document.getElementById('ctrl-month')?.value);
-        matched = allTrips.filter(t => {
-          const d = new Date(t.timestamp);
-          return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
-        });
-      } else if (currentFilterMode === 'quarterly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value), selQ = Number(document.getElementById('ctrl-quarter')?.value);
-        const startM = (selQ - 1) * 3 + 1, endM = selQ * 3;
-        matched = allTrips.filter(t => {
-          const m = new Date(t.timestamp).getMonth() + 1;
-          return new Date(t.timestamp).getFullYear() === selY && (m >= startM && m <= endM);
-        });
-      } else if (currentFilterMode === 'half') {
-        const selY = Number(document.getElementById('ctrl-year')?.value), selH = Number(document.getElementById('ctrl-half')?.value);
-        matched = allTrips.filter(t => {
-          const m = new Date(t.timestamp).getMonth() + 1;
-          return new Date(t.timestamp).getFullYear() === selY && (selH === 1 ? m <= 6 : m >= 7);
-        });
-      } else if (currentFilterMode === 'yearly') {
-        const selY = Number(document.getElementById('ctrl-year')?.value);
-        matched = allTrips.filter(t => new Date(t.timestamp).getFullYear() === selY);
-      }
-
-      // 일간 선택 시 단일 운행 상세 목록 렌더링 (외기 온도 및 시간 연동)
-      const dailyContainer = document.getElementById('daily-trips-container');
-      const dailyList = document.getElementById('daily-trips-list');
-      const dailyTitle = document.getElementById('daily-trips-title');
-      const dailyCount = document.getElementById('daily-trips-count');
-
-      if (currentFilterMode === 'daily') {
-        const selectedDay = document.getElementById('ctrl-sub-select')?.value || '';
-        dailyContainer.classList.remove('hidden');
-        dailyTitle.innerText = `${selectedDay} 단일 운행 상세 목록`;
-        dailyCount.innerText = `${matched.length}건`;
-
-        if (matched.length === 0) {
-          dailyList.innerHTML = `<span class="text-gray-500">해당 일자의 운행 기록이 없습니다.</span>`;
-        } else {
-          dailyList.innerHTML = matched.map((t, idx) => {
-            const timeStr = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-            const kwh = ((t.useBattery / 100) * 60);
-            const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
-   // [수정 후] driving과 vehicle 양쪽 모두에서 외기 온도 탐색
-let rawT = t.raw_data;
-if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
-
-// 1차: driving 테이블 자체의 외기 온도 컬럼 및 raw_data 탐색
-let resolvedTemp = 
-  t.outside_temp ?? 
-  t.outsideTemp ?? 
-  rawT?.climate_state?.outside_temp ?? 
-  rawT?.outside_temp;
-
-// 2차: driving에 온도가 없다면, 기존 방식대로 vehicleRows에서 가장 가까운 시점의 온도 매칭
-if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
-  const tripTime = new Date(t.timestamp).getTime();
-  if (!isNaN(tripTime)) {
-    let validVehicles = vehicleRows.filter(v => v.outside_temp !== null && v.outside_temp !== undefined);
-    if (validVehicles.length > 0) {
-      let closestVehicle = validVehicles.reduce((prev, curr) => {
-        const prevDiff = Math.abs(new Date(prev.updated_at).getTime() - tripTime);
-        const currDiff = Math.abs(new Date(curr.updated_at).getTime() - tripTime);
-        return currDiff < prevDiff ? curr : prev;
-      });
-
-      if (closestVehicle) {
-        resolvedTemp = closestVehicle.outside_temp;
-      }
-    }
+  if (currentFilterMode === 'single') {
+    const selectedId = document.getElementById('ctrl-select')?.value;
+    matched = allTrips.filter(t => t.id === selectedId);
+  } else if (currentFilterMode === 'daily') {
+    const selectedDay = document.getElementById('ctrl-sub-select')?.value;
+    matched = allTrips.filter(t => {
+      const d = new Date(t.timestamp);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` === selectedDay;
+    }).sort((a,b) => a.timestamp - b.timestamp);
+  } else if (currentFilterMode === 'weekly') {
+    const selY = Number(document.getElementById('ctrl-year')?.value), selM = Number(document.getElementById('ctrl-month')?.value), selW = Number(document.getElementById('ctrl-week')?.value);
+    matched = allTrips.filter(t => {
+      const d = new Date(t.timestamp);
+      return d.getFullYear() === selY && (d.getMonth() + 1) === selM && Math.ceil(d.getDate() / 7) === selW;
+    });
+  } else if (currentFilterMode === 'monthly') {
+    const selY = Number(document.getElementById('ctrl-year')?.value), selM = Number(document.getElementById('ctrl-month')?.value);
+    matched = allTrips.filter(t => {
+      const d = new Date(t.timestamp);
+      return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
+    });
+  } else if (currentFilterMode === 'quarterly') {
+    const selY = Number(document.getElementById('ctrl-year')?.value), selQ = Number(document.getElementById('ctrl-quarter')?.value);
+    const startM = (selQ - 1) * 3 + 1, endM = selQ * 3;
+    matched = allTrips.filter(t => {
+      const m = new Date(t.timestamp).getMonth() + 1;
+      return new Date(t.timestamp).getFullYear() === selY && (m >= startM && m <= endM);
+    });
+  } else if (currentFilterMode === 'half') {
+    const selY = Number(document.getElementById('ctrl-year')?.value), selH = Number(document.getElementById('ctrl-half')?.value);
+    matched = allTrips.filter(t => {
+      const m = new Date(t.timestamp).getMonth() + 1;
+      return new Date(t.timestamp).getFullYear() === selY && (selH === 1 ? m <= 6 : m >= 7);
+    });
+  } else if (currentFilterMode === 'yearly') {
+    const selY = Number(document.getElementById('ctrl-year')?.value);
+    matched = allTrips.filter(t => new Date(t.timestamp).getFullYear() === selY);
   }
-}
 
-const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp) && Number(resolvedTemp) !== 0) 
-  ? `${Math.round(Number(resolvedTemp))}°C` 
-  : '-';
+  // 일간 선택 시 단일 운행 상세 목록 렌더링 (외기 온도 및 시간 연동)
+  const dailyContainer = document.getElementById('daily-trips-container');
+  const dailyList = document.getElementById('daily-trips-list');
+  const dailyTitle = document.getElementById('daily-trips-title');
+  const dailyCount = document.getElementById('daily-trips-count');
 
+  if (currentFilterMode === 'daily') {
+    const selectedDay = document.getElementById('ctrl-sub-select')?.value || '';
+    dailyContainer.classList.remove('hidden');
 
+    // 💡 1. 선택된 일자의 구글 캘린더 뱃지 HTML 가져오기
+    const calBadge = typeof getCalendarBadgeHtml === 'function' ? getCalendarBadgeHtml(selectedDay) : '';
 
-            
-            let batText = `${t.useBattery.toFixed(1)}%`;
-            if (t.startBat !== undefined && t.endBat !== undefined) {
-              batText += ` (${t.startBat}% → ${t.endBat}%)`;
+    // 💡 2. innerHTML을 사용하여 제목 뒤에 캘린더 뱃지 렌더링
+    dailyTitle.innerHTML = `
+      <span class="inline-flex items-center gap-2 flex-wrap">
+        <span>${selectedDay} 단일 운행 상세 목록</span>
+        ${calBadge}
+      </span>
+    `;
+    dailyCount.innerText = `${matched.length}건`;
+
+    if (matched.length === 0) {
+      dailyList.innerHTML = `<span class="text-gray-500">해당 일자의 운행 기록이 없습니다.</span>`;
+    } else {
+      dailyList.innerHTML = matched.map((t, idx) => {
+        const timeStr = new Date(t.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        const kwh = ((t.useBattery / 100) * 60);
+        const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
+
+        // driving과 vehicle 양쪽 모두에서 외기 온도 탐색
+        let rawT = t.raw_data;
+        if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
+
+        let resolvedTemp = 
+          t.outside_temp ?? 
+          t.outsideTemp ?? 
+          rawT?.climate_state?.outside_temp ?? 
+          rawT?.outside_temp;
+
+        if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
+          const tripTime = new Date(t.timestamp).getTime();
+          if (!isNaN(tripTime)) {
+            let validVehicles = vehicleRows.filter(v => v.outside_temp !== null && v.outside_temp !== undefined);
+            if (validVehicles.length > 0) {
+              let closestVehicle = validVehicles.reduce((prev, curr) => {
+                const prevDiff = Math.abs(new Date(prev.updated_at).getTime() - tripTime);
+                const currDiff = Math.abs(new Date(curr.updated_at).getTime() - tripTime);
+                return currDiff < prevDiff ? curr : prev;
+              });
+
+              if (closestVehicle) {
+                resolvedTemp = closestVehicle.outside_temp;
+              }
             }
-
-            return `
-              <div onclick="highlightSingleTripOnMap('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-blue-500/60 transition shadow-md text-xs active:scale-[0.99]">
-                <div class="flex justify-between items-center border-b border-gray-800/80 pb-1">
-                  <span class="font-extrabold text-blue-400">#${idx + 1} 운행 (${timeStr} 출발)</span>
-                  <span class="font-bold text-gray-200">${t.moveKM.toFixed(1)} km / ${t.durationMin}분</span>
-                </div>
-                <div class="text-gray-200 font-medium break-keep leading-relaxed flex items-center gap-1.5 flex-wrap">
-                  <span class="bg-gray-800/80 px-2 py-0.5 rounded text-blue-300 font-bold">${t.startDong}</span>
-                  <span class="text-indigo-400 font-extrabold">→</span>
-                  <span class="bg-gray-800/80 px-2 py-0.5 rounded text-emerald-300 font-bold">${t.endDong}</span>
-                </div>
-                <div class="text-[11px] text-gray-400 flex justify-between items-center pt-0.5">
-                  <span>🔋 소모: ${batText} | 🌡️ 외기: ${tempStr}</span>
-                  <span class="font-bold text-indigo-400">⚡ 전비: ${eff} km/kWh</span>
-                </div>
-              </div>
-            `;
-          }).join('');
+          }
         }
-      } else {
-        dailyContainer.classList.add('hidden');
-      }
+
+        const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp) && Number(resolvedTemp) !== 0) 
+          ? `${Math.round(Number(resolvedTemp))}°C` 
+          : '-';
+
+        let batText = `${t.useBattery.toFixed(1)}%`;
+        if (t.startBat !== undefined && t.endBat !== undefined) {
+          batText += ` (${t.startBat}% → ${t.endBat}%)`;
+        }
+
+        return `
+          <div onclick="highlightSingleTripOnMap('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-blue-500/60 transition shadow-md text-xs active:scale-[0.99]">
+            <div class="flex justify-between items-center border-b border-gray-800/80 pb-1">
+              <span class="font-extrabold text-blue-400">#${idx + 1} 운행 (${timeStr} 출발)</span>
+              <span class="font-bold text-gray-200">${t.moveKM.toFixed(1)} km / ${t.durationMin}분</span>
+            </div>
+            <div class="text-gray-200 font-medium break-keep leading-relaxed flex items-center gap-1.5 flex-wrap">
+              <span class="bg-gray-800/80 px-2 py-0.5 rounded text-blue-300 font-bold">${t.startDong}</span>
+              <span class="text-indigo-400 font-extrabold">→</span>
+              <span class="bg-gray-800/80 px-2 py-0.5 rounded text-emerald-300 font-bold">${t.endDong}</span>
+            </div>
+            <div class="text-[11px] text-gray-400 flex justify-between items-center pt-0.5">
+              <span>🔋 소모: ${batText} | 🌡️ 외기: ${tempStr}</span>
+              <span class="font-bold text-indigo-400">⚡ 전비: ${eff} km/kWh</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  } else {
+    dailyContainer.classList.add('hidden');
+  }
+
+  // (이 아래에 지도 폴리라인 그리기 로직이 있다면 그대로 유지해 주세요)
+
+
 
       // 주/월/분기/반년/년 TOP 5 렌더링
       const top5Container = document.getElementById('top5-container');
@@ -2838,43 +2871,32 @@ function selectNextMonth() {
 
 
 // ==========================================
-// [8] 구글 캘린더 iCal 연동 모듈 (403 방지 및 KST 시차 보정 완벽판)
+// [8] 구글 캘린더 iCal 연동 모듈 (단독 저장 버튼 제거 버전)
 // ==========================================
 
 let calendarEventsMap = {};
 
+// 1. iCal URL 가져오기 (input 요소값 우선, 없으면 localStorage)
 function getIcalUrl() {
+  const inputEl = document.getElementById('setting-ical-url');
+  if (inputEl && inputEl.value.trim()) {
+    return inputEl.value.trim();
+  }
   return localStorage.getItem('tesla_ical_url') || '';
 }
 
-function saveIcalUrl() {
-  const inputEl = document.getElementById('setting-ical-url');
-  if (!inputEl) return;
-
-  const url = inputEl.value.trim();
-  if (!url) {
-    alert('iCal 주소를 입력해주세요.');
-    return;
-  }
-
-  localStorage.setItem('tesla_ical_url', url);
-  alert('iCal 주소가 저장되었습니다! 일정을 불러옵니다.');
-
-  loadGoogleCalendarEvents();
-}
-
+// 2. 설정 화면 초기화 시 기존 주소 채워두기
 function initIcalSettingInput() {
   const inputEl = document.getElementById('setting-ical-url');
   if (inputEl) {
-    inputEl.value = getIcalUrl();
+    inputEl.value = localStorage.getItem('tesla_ical_url') || '';
   }
 }
 
-// 403 에러 방지용 3중 우회 프록시 수신 함수
+// 3. 3중 우회 프록시 수신 함수 (403/CORS 방지)
 async function fetchIcsTextWithFallback(icalUrl) {
   const encodedUrl = encodeURIComponent(icalUrl);
   
-  // 프록시 후보 리스트
   const proxyList = [
     `https://api.allorigins.win/raw?url=${encodedUrl}`,
     `https://corsproxy.io/?${encodedUrl}`,
@@ -2884,7 +2906,6 @@ async function fetchIcsTextWithFallback(icalUrl) {
   for (const proxyUrl of proxyList) {
     try {
       const res = await fetch(proxyUrl);
-      // HTTP status가 200 OK 인지 반드시 확인 (403/404 에러 방지)
       if (res.ok) {
         const text = await res.text();
         if (text && text.includes('BEGIN:VCALENDAR')) {
@@ -2892,14 +2913,14 @@ async function fetchIcsTextWithFallback(icalUrl) {
         }
       }
     } catch (e) {
-      console.warn(`프록시 접속 시도 실패 (${proxyUrl}):`, e);
+      console.warn(`프록시 접속 실패 (${proxyUrl}):`, e);
     }
   }
 
   throw new Error('모든 프록시 서버에서 캘린더 수신에 실패했습니다.');
 }
 
-// 캘린더 이벤트 불러오기 및 UI 주입
+// 4. 캘린더 이벤트 불러오기 및 UI 주입
 async function loadGoogleCalendarEvents() {
   const icalUrl = getIcalUrl();
   
@@ -2911,13 +2932,13 @@ async function loadGoogleCalendarEvents() {
   try {
     const icsText = await fetchIcsTextWithFallback(icalUrl);
     calendarEventsMap = parseIcsToMap(icsText);
-    console.log('📅 캘린더 일정 로드 성공 (정상 데이터):', calendarEventsMap);
+    console.log('📅 캘린더 일정 로드 성공:', calendarEventsMap);
 
-    // 1. 월간 리포트 & 주행 지도 갱신
+    // ① 월간 리포트 & 주행 지도 갱신
     if (typeof renderMonthlyTop5 === 'function') renderMonthlyTop5();
     if (typeof renderDrivingData === 'function') renderDrivingData();
 
-    // 2. 메인 차량 카드 캘린더 뱃지 핀포인트 갱신
+    // ② 메인 차량 카드 캘린더 뱃지 직접 갱신
     const elCal = document.getElementById('v-latest-trip-calendar');
     if (elCal && typeof getCalendarBadgeHtml === 'function' && typeof allTrips !== 'undefined' && allTrips.length > 0) {
       const dayDate = new Date(allTrips[0].timestamp);
@@ -2925,11 +2946,11 @@ async function loadGoogleCalendarEvents() {
     }
 
   } catch (err) {
-    console.error('❌ 캘린더 데이터 로딩 에러:', err);
+    console.error('❌ 캘린더 로딩 에러:', err);
   }
 }
 
-// ICS 파싱 (UTC 및 종일 일정 한국 시간 KST 기준 파싱)
+// 5. ICS 파싱 (KST 시차 보정 포함)
 function parseIcsToMap(icsText) {
   const map = {};
   if (!icsText) return map;
@@ -2939,16 +2960,14 @@ function parseIcsToMap(icsText) {
   for (let i = 1; i < blocks.length; i++) {
     const block = blocks[i].split('END:VEVENT')[0];
 
-    // DTSTART 파싱 (시간 지정 및 종일 일정 대응)
     const dtMatch = block.match(/DTSTART(;[^:]*)?:(\d{8})(T\d{6}Z?)?/);
     if (!dtMatch) continue;
 
-    const rawDate = dtMatch[2]; // YYYYMMDD
-    const rawTime = dtMatch[3]; // T150000Z 등 (선택)
+    const rawDate = dtMatch[2]; 
+    const rawTime = dtMatch[3];
 
     let dateKey = '';
 
-    // UTC 시간(Z)이 포함된 경우 한국 시간(UTC+9) 보정
     if (rawTime && rawTime.endsWith('Z')) {
       const year = parseInt(rawDate.slice(0, 4));
       const month = parseInt(rawDate.slice(4, 6)) - 1;
@@ -2965,12 +2984,10 @@ function parseIcsToMap(icsText) {
       dateKey = `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
     }
 
-    // 일정 제목
     const sumMatch = block.match(/SUMMARY:(.*)/);
     let summary = sumMatch ? sumMatch[1].trim() : '일정';
     summary = summary.replace(/\\,/g, ',').replace(/\\;/g, ';');
 
-    // 장소
     const locMatch = block.match(/LOCATION:(.*)/);
     let location = locMatch ? locMatch[1].trim() : '';
     location = location.replace(/\\,/g, ',').replace(/\\;/g, ';');
@@ -2982,7 +2999,7 @@ function parseIcsToMap(icsText) {
   return map;
 }
 
-// 특정 날짜 일정 뱃지 HTML 반환
+// 6. 특정 날짜 일정 뱃지 HTML 반환
 function getCalendarBadgeHtml(targetDate) {
   if (!targetDate) return '';
 
@@ -3011,6 +3028,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initIcalSettingInput();
   loadGoogleCalendarEvents();
 });
+
 
 
 
