@@ -620,9 +620,6 @@
   </div>
 
   <script>
-// 파일의 가장 맨 처음에 추가
-alert('🚀 자바스크립트 파일이 정상적으로 로드되었습니다!');
-
   
   
   
@@ -1748,172 +1745,232 @@ async function exchangeTeslaToken(code) {
     if (startTime) startTime.innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
   }
 
-  // 당일 주행 요약 및 캘린더 뱃지 바인딩
-  if (allTrips.length > 0) {
-    const lastTripDateStr = new Date(allTrips[0].timestamp).toDateString();
-    const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr).sort((a, b) => a.timestamp - b.timestamp);
-    const dayDate = new Date(allTrips[0].timestamp);
+// 💡 도착지 주소와 캘린더 일정 매칭 헬퍼 함수
+function matchCalendarToTrip(endDong, dayEvents) {
+  if (!endDong || !dayEvents || dayEvents.length === 0) return null;
+  const cleanLoc = typeof cleanAddress === 'function' ? cleanAddress(endDong) : endDong;
+  const words = cleanLoc.split(' ').map(w => w.trim()).filter(w => w.length > 1);
+  
+  return dayEvents.find(evt => {
+    const fullText = `${evt.summary} ${evt.location || ''}`;
+    return words.some(word => fullText.includes(word));
+  });
+}
 
-    const totalDist = sameDayTrips.reduce((a,c)=>a+c.moveKM, 0);
-    const totalBat = sameDayTrips.reduce((a,c)=>a+c.useBattery, 0);
-    const totalTime = sameDayTrips.reduce((a,c)=>a+c.durationMin, 0);
-    const totalKwh = (totalBat / 100) * 60;
-    const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
+// ==========================================
+// [1] 당일 주행 요약 및 캘린더 뱃지 / 경로 매칭
+// ==========================================
+if (typeof allTrips !== 'undefined' && allTrips && allTrips.length > 0) {
+  const lastTripDateStr = new Date(allTrips[0].timestamp).toDateString();
+  const sameDayTrips = allTrips.filter(t => new Date(t.timestamp).toDateString() === lastTripDateStr).sort((a, b) => a.timestamp - b.timestamp);
+  const dayDate = new Date(allTrips[0].timestamp);
 
-    const tripDateEl = document.getElementById('v-latest-trip-date');
-    if (tripDateEl) tripDateEl.innerText = `${dayDate.getMonth()+1}월 ${dayDate.getDate()}일 (총 ${sameDayTrips.length}건)`;
-    
-    // 📅 최근 운행 카드 구글 캘린더 뱃지 바인딩
-    const elCal = document.getElementById('v-latest-trip-calendar');
-    if (elCal && typeof getCalendarBadgeHtml === 'function') {
-      elCal.innerHTML = getCalendarBadgeHtml(dayDate);
+  const totalDist = sameDayTrips.reduce((a,c)=>a+c.moveKM, 0);
+  const totalBat = sameDayTrips.reduce((a,c)=>a+c.useBattery, 0);
+  const totalTime = sameDayTrips.reduce((a,c)=>a+c.durationMin, 0);
+  const totalKwh = (totalBat / 100) * 60;
+  const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
+
+  const tripDateEl = document.getElementById('v-latest-trip-date');
+  if (tripDateEl) tripDateEl.innerText = `${dayDate.getMonth()+1}월 ${dayDate.getDate()}일 (총 ${sameDayTrips.length}건)`;
+  
+  // 📅 YYYY-MM-DD 키로 당일 캘린더 가져오기
+  const kstY = dayDate.getFullYear();
+  const kstM = String(dayDate.getMonth() + 1).padStart(2, '0');
+  const kstD = String(dayDate.getDate()).padStart(2, '0');
+  const dayKey = `${kstY}-${kstM}-${kstD}`;
+  const dayEvents = (typeof calendarEventsMap !== 'undefined' && calendarEventsMap) ? (calendarEventsMap[dayKey] || []) : [];
+
+  // 상단 캘린더 뱃지 (세로 밀림 방지 적용)
+  const elCal = document.getElementById('v-latest-trip-calendar');
+  if (elCal) {
+    if (dayEvents.length > 0) {
+      elCal.innerHTML = dayEvents.map(e => `
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-900/80 border border-purple-500/50 text-purple-200 text-[11px] font-bold shadow-sm whitespace-nowrap">
+          📅 ${e.summary} ${e.location ? `<span class="text-[9px] text-purple-300">(${e.location})</span>` : ''}
+        </span>
+      `).join(' ');
+    } else {
+      elCal.innerHTML = '';
+    }
+  }
+
+  if (document.getElementById('v-day-efficiency')) document.getElementById('v-day-efficiency').innerText = avgEff;
+  if (document.getElementById('v-day-dist')) document.getElementById('v-day-dist').innerText = `${totalDist.toFixed(1)} km`;
+  if (document.getElementById('v-day-bat')) document.getElementById('v-day-bat').innerText = `-${totalBat.toFixed(1)}%`;
+  if (document.getElementById('v-day-time')) document.getElementById('v-day-time').innerText = `${totalTime} 분`;
+  if (document.getElementById('v-day-kwh')) document.getElementById('v-day-kwh').innerText = `-${totalKwh.toFixed(1)} kWh`;
+
+  const listContainer = document.getElementById('v-day-trips-list');
+  if (listContainer) {
+    listContainer.innerHTML = '';
+    const fullDayRoute = typeof buildSequentialRouteHtml === 'function' ? buildSequentialRouteHtml(sameDayTrips) : '';
+    if (fullDayRoute) {
+      listContainer.insertAdjacentHTML('beforeend', `
+        <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-800 text-[11px] mb-2 shadow-inner">
+          <span class="text-indigo-400 font-bold block mb-1">🌐 당일 이동 경로</span>
+          <div class="text-gray-200 leading-normal break-keep">${fullDayRoute}</div>
+        </div>
+      `);
     }
 
-    if (document.getElementById('v-day-efficiency')) document.getElementById('v-day-efficiency').innerText = avgEff;
-    if (document.getElementById('v-day-dist')) document.getElementById('v-day-dist').innerText = `${totalDist.toFixed(1)} km`;
-    if (document.getElementById('v-day-bat')) document.getElementById('v-day-bat').innerText = `-${totalBat.toFixed(1)}%`;
-    if (document.getElementById('v-day-time')) document.getElementById('v-day-time').innerText = `${totalTime} 분`;
-    if (document.getElementById('v-day-kwh')) document.getElementById('v-day-kwh').innerText = `-${totalKwh.toFixed(1)} kWh`;
+    // 개별 경로 + 도착지 캘린더 매칭
+    sameDayTrips.forEach(t => {
+      const startLoc = typeof cleanAddress === 'function' ? cleanAddress(t.startDong) : (t.startDong || '-');
+      const endLoc = typeof cleanAddress === 'function' ? cleanAddress(t.endDong) : (t.endDong || '-');
+      const moveKmStr = t.moveKM.toFixed(1);
+      const batUsageStr = t.useBattery.toFixed(1);
+      const odoStr = t.odometer ? Math.round(t.odometer).toLocaleString() : (typeof odoVal !== 'undefined' ? odoVal.toLocaleString() : '0');
+      const tempStr = t.outsideTemp !== undefined && t.outsideTemp !== null ? `${Math.round(t.outsideTemp)}°C` : '-';
+      
+      let batDetail = `${batUsageStr}%`;
+      if (t.startBat && t.endBat) batDetail += ` (${t.startBat}% → ${t.endBat}%)`;
 
-    const listContainer = document.getElementById('v-day-trips-list');
-    if (listContainer) {
-      listContainer.innerHTML = '';
-      const fullDayRoute = typeof buildSequentialRouteHtml === 'function' ? buildSequentialRouteHtml(sameDayTrips) : '';
-      if (fullDayRoute) {
-        listContainer.insertAdjacentHTML('beforeend', `
-          <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-800 text-[11px] mb-2 shadow-inner">
-            <span class="text-indigo-400 font-bold block mb-1">🌐 당일 이동 경로</span>
-            <div class="text-gray-200 leading-normal break-keep">${fullDayRoute}</div>
+      // 📍 도착지와 캘린더 장소 매칭
+      const matchedEvt = matchCalendarToTrip(endLoc, dayEvents);
+
+      listContainer.insertAdjacentHTML('beforeend', `
+        <div onclick="jumpToSingleTrip('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99]">
+          <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
+            <span class="address-tag text-blue-300 font-bold">${startLoc}</span>
+            <span class="text-indigo-400 font-extrabold">→</span>
+            <span class="address-tag text-emerald-300 font-bold">${endLoc}</span>
           </div>
-        `);
-      }
-
-      sameDayTrips.forEach(t => {
-        const startLoc = typeof cleanAddress === 'function' ? cleanAddress(t.startDong) : (t.startDong || '-');
-        const endLoc = typeof cleanAddress === 'function' ? cleanAddress(t.endDong) : (t.endDong || '-');
-        const moveKmStr = t.moveKM.toFixed(1);
-        const batUsageStr = t.useBattery.toFixed(1);
-        const odoStr = t.odometer ? Math.round(t.odometer).toLocaleString() : odoVal.toLocaleString();
-        const tempStr = t.outsideTemp !== undefined && t.outsideTemp !== null ? `${Math.round(t.outsideTemp)}°C` : '-';
-        
-        let batDetail = `${batUsageStr}%`;
-        if (t.startBat && t.endBat) batDetail += ` (${t.startBat}% → ${t.endBat}%)`;
-
-        listContainer.insertAdjacentHTML('beforeend', `
-          <div onclick="jumpToSingleTrip('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99]">
-            <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
-              <span class="address-tag text-blue-300 font-bold">${startLoc}</span>
-              <span class="text-indigo-400 font-extrabold">→</span>
-              <span class="address-tag text-emerald-300 font-bold">${endLoc}</span>
-            </div>
-            <div class="text-gray-400 text-[11px] leading-relaxed flex flex-wrap gap-2 justify-between items-center">
-              <span>주행 ${moveKmStr}km (${t.durationMin}분) | 🔋 ${batDetail} | 📍 ${odoStr}km</span>
-              <span class="text-amber-400 font-bold">🌡️ ${tempStr}</span>
-            </div>
+          <div class="text-gray-400 text-[11px] leading-relaxed flex flex-wrap gap-2 justify-between items-center">
+            <span>주행 ${moveKmStr}km (${t.durationMin}분) | 🔋 ${batDetail} | 📍 ${odoStr}km</span>
+            <span class="text-amber-400 font-bold">🌡️ ${tempStr}</span>
           </div>
-        `);
-      });
-    }
+
+          <!-- 📍 도착지와 매칭된 캘린더 표시 -->
+          ${matchedEvt ? `
+            <div class="mt-2 pt-2 border-t border-purple-500/30 flex items-center gap-1.5 text-xs text-purple-200 bg-purple-950/50 p-2 rounded-lg">
+              <span>📍 도착지 일정:</span>
+              <span class="font-bold text-purple-300">${matchedEvt.summary}</span>
+              ${matchedEvt.location ? `<span class="text-[10px] text-purple-400">(${matchedEvt.location})</span>` : ''}
+            </div>
+          ` : ''}
+        </div>
+      `);
+    });
   }
 }
 
-      const timelineBox = document.getElementById('timeline-container');
-      timelineBox.innerHTML = '';
+// ==========================================
+// [2] 최근 상태 히스토리 타임라인 (예외 방지 강화)
+// ==========================================
+const timelineBox = document.getElementById('timeline-container');
+if (timelineBox) {
+  timelineBox.innerHTML = '';
 
-      let eventsGrouped = {};
-      let validEventsCount = 0;
+  let eventsGrouped = {};
+  let validEventsCount = 0;
 
-      for (let i = 0; i < vehicleRows.length - 1 && validEventsCount < 20; i++) {
-        const cur = vehicleRows[i], prev = vehicleRows[i+1];
-        const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
-        const odoDiff = Math.round((cur.odometer || 0) - (prev.odometer || 0));
+  if (typeof vehicleRows !== 'undefined' && vehicleRows && vehicleRows.length > 1) {
+    for (let i = 0; i < vehicleRows.length - 1 && validEventsCount < 20; i++) {
+      const cur = vehicleRows[i], prev = vehicleRows[i+1];
+      const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
+      const odoDiff = Math.round((cur.odometer || 0) - (prev.odometer || 0));
 
-        if (odoDiff >= 2 || batDiff > 0) {
-          const curDate = new Date(cur.updated_at);
-          const dateKey = `${curDate.getFullYear()}-${String(curDate.getMonth() + 1).padStart(2,'0')}-${String(curDate.getDate()).padStart(2,'0')}`;
+      if (odoDiff >= 2 || batDiff > 0) {
+        const curDate = new Date(cur.updated_at);
+        const dateKey = `${curDate.getFullYear()}-${String(curDate.getMonth() + 1).padStart(2,'0')}-${String(curDate.getDate()).padStart(2,'0')}`;
 
-          if (!eventsGrouped[dateKey]) eventsGrouped[dateKey] = [];
+        if (!eventsGrouped[dateKey]) eventsGrouped[dateKey] = [];
 
-          const isDrive = odoDiff >= 2;
-          const matchedTrip = isDrive ? allTrips.find(t => Math.abs(t.timestamp - curDate.getTime()) < 3600000) : null;
-          let rawCur = cur.raw_data;
-          if (typeof rawCur === 'string') { try { rawCur = JSON.parse(rawCur); } catch(e){} }
-          const evtTemp = cur.outside_temp ?? rawCur?.climate_state?.outside_temp ?? matchedTrip?.outsideTemp;
+        const isDrive = odoDiff >= 2;
+        const matchedTrip = isDrive ? (typeof allTrips !== 'undefined' && allTrips ? allTrips.find(t => Math.abs(t.timestamp - curDate.getTime()) < 3600000) : null) : null;
+        let rawCur = cur.raw_data;
+        if (typeof rawCur === 'string') { try { rawCur = JSON.parse(rawCur); } catch(e){} }
+        const evtTemp = cur.outside_temp ?? rawCur?.climate_state?.outside_temp ?? matchedTrip?.outsideTemp;
 
-          eventsGrouped[dateKey].push({
-            isDrive: isDrive,
-            tripId: matchedTrip ? matchedTrip.id : null,
-            timeStr: curDate.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' }),
-            odoDiff: odoDiff,
-            batDiff: batDiff,
-            startDong: matchedTrip ? cleanAddress(matchedTrip.startDong) : "출발지",
-            endDong: matchedTrip ? cleanAddress(matchedTrip.endDong) : "도착지",
-            durationMin: matchedTrip ? matchedTrip.durationMin : null,
-            startBat: matchedTrip ? matchedTrip.startBat : null,
-            endBat: matchedTrip ? matchedTrip.endBat : null,
-            bat: cur.battery_level,
-            odo: Math.round(cur.odometer || 0),
-            outsideTemp: evtTemp
-          });
-          validEventsCount++;
-        }
-      }
-
-      Object.keys(eventsGrouped).forEach(dateHeader => {
-        let groupHtml = `
-          <div class="glass-card p-3.5 rounded-2xl space-y-2.5 shadow-lg">
-            <div onclick="jumpToDrivingDate('${dateHeader}')" class="flex items-center justify-between border-b border-gray-800 pb-2 cursor-pointer hover:opacity-80 transition">
-              <span class="text-xs font-black text-indigo-400 bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/50">📅 ${dateHeader}</span>
-              <span class="text-[10px] text-gray-500 underline font-medium">해당 날짜 전체 지도 보기 ▶</span>
-            </div>
-            <div class="space-y-2 pt-1">
-        `;
-
-        eventsGrouped[dateHeader].forEach(evt => {
-          const badgeClass = evt.isDrive ? "bg-blue-600/30 text-blue-300 border-blue-500/40" : "bg-emerald-600/30 text-emerald-300 border-emerald-500/40";
-          const icon = evt.isDrive ? "🚗" : "⚡";
-          const tempText = evt.outsideTemp !== undefined && evt.outsideTemp !== null ? `${Math.round(evt.outsideTemp)}°C` : '-';
-
-          if (evt.isDrive) {
-            let batDetail = `${Math.abs(evt.batDiff)}%`;
-            if (evt.startBat && evt.endBat) batDetail += ` (${evt.startBat}% → ${evt.endBat}%)`;
-
-            const clickHandler = evt.tripId ? `onclick="jumpToSingleTrip('${evt.tripId}')"` : `onclick="jumpToDrivingDate('${dateHeader}')"`;
-
-            groupHtml += `
-              <div ${clickHandler} class="bg-gray-900/80 p-3 rounded-xl border border-gray-800/90 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99]">
-                <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
-                  <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 주행</span>
-                  <span class="text-gray-400 text-[11px] font-mono mr-1">${evt.timeStr}</span>
-                  <span class="address-tag text-blue-300 font-bold">${evt.startDong}</span>
-                  <span class="text-indigo-400 font-extrabold">→</span>
-                  <span class="address-tag text-emerald-300 font-bold">${evt.endDong}</span>
-                </div>
-                <div class="text-gray-400 text-[11px] leading-relaxed flex justify-between items-center">
-                  <span>주행 ${evt.odoDiff}km (${evt.durationMin ? evt.durationMin + '분' : '-'}) | 🔋 ${batDetail}</span>
-                  <span class="text-amber-400 font-bold">🌡️ ${tempText}</span>
-                </div>
-              </div>
-            `;
-          } else {
-            groupHtml += `
-              <div class="bg-gray-900/80 p-3 rounded-xl border border-gray-800/90 flex justify-between items-center text-xs shadow-md">
-                <div class="flex items-center space-x-2">
-                  <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 충전</span>
-                  <span class="text-gray-400 text-[11px] font-mono">${evt.timeStr}</span>
-                </div>
-                <div class="text-right">
-                  <span class="font-bold text-emerald-400 text-[11px]">충전 +${evt.batDiff}% (+${((evt.batDiff/100)*60).toFixed(1)}kWh)</span>
-                  <span class="text-[10px] text-gray-500 block">🔋 ${evt.bat}% | 📍 ${evt.odo.toLocaleString()}km | 🌡️ ${tempText}</span>
-                </div>
-              </div>
-            `;
-          }
+        eventsGrouped[dateKey].push({
+          isDrive: isDrive,
+          tripId: matchedTrip ? matchedTrip.id : null,
+          timeStr: curDate.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' }),
+          odoDiff: odoDiff,
+          batDiff: batDiff,
+          startDong: matchedTrip ? cleanAddress(matchedTrip.startDong) : "출발지",
+          endDong: matchedTrip ? cleanAddress(matchedTrip.endDong) : "도착지",
+          durationMin: matchedTrip ? matchedTrip.durationMin : null,
+          startBat: matchedTrip ? matchedTrip.startBat : null,
+          endBat: matchedTrip ? matchedTrip.endBat : null,
+          bat: cur.battery_level,
+          odo: Math.round(cur.odometer || 0),
+          outsideTemp: evtTemp
         });
+        validEventsCount++;
+      }
+    }
+  }
 
-        groupHtml += `</div></div>`;
-        timelineBox.insertAdjacentHTML('beforeend', groupHtml);
+  const groupKeys = Object.keys(eventsGrouped);
+
+  // 기록된 데이터가 없을 경우 안내 메시지 표시
+  if (groupKeys.length === 0) {
+    timelineBox.innerHTML = `
+      <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 text-center text-xs text-gray-500">
+        최근 주행 및 충전 상태 히스토리 기록이 없습니다.
+      </div>
+    `;
+  } else {
+    groupKeys.forEach(dateHeader => {
+      let groupHtml = `
+        <div class="glass-card p-3.5 rounded-2xl space-y-2.5 shadow-lg">
+          <div onclick="jumpToDrivingDate('${dateHeader}')" class="flex items-center justify-between border-b border-gray-800 pb-2 cursor-pointer hover:opacity-80 transition">
+            <span class="text-xs font-black text-indigo-400 bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/50">📅 ${dateHeader}</span>
+            <span class="text-[10px] text-gray-500 underline font-medium">해당 날짜 전체 지도 보기 ▶</span>
+          </div>
+          <div class="space-y-2 pt-1">
+      `;
+
+      eventsGrouped[dateHeader].forEach(evt => {
+        const badgeClass = evt.isDrive ? "bg-blue-600/30 text-blue-300 border-blue-500/40" : "bg-emerald-600/30 text-emerald-300 border-emerald-500/40";
+        const icon = evt.isDrive ? "🚗" : "⚡";
+        const tempText = evt.outsideTemp !== undefined && evt.outsideTemp !== null ? `${Math.round(evt.outsideTemp)}°C` : '-';
+
+        if (evt.isDrive) {
+          let batDetail = `${Math.abs(evt.batDiff)}%`;
+          if (evt.startBat && evt.endBat) batDetail += ` (${evt.startBat}% → ${evt.endBat}%)`;
+
+          const clickHandler = evt.tripId ? `onclick="jumpToSingleTrip('${evt.tripId}')"` : `onclick="jumpToDrivingDate('${dateHeader}')"`;
+
+          groupHtml += `
+            <div ${clickHandler} class="bg-gray-900/80 p-3 rounded-xl border border-gray-800/90 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99]">
+              <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 주행</span>
+                <span class="text-gray-400 text-[11px] font-mono mr-1">${evt.timeStr}</span>
+                <span class="address-tag text-blue-300 font-bold">${evt.startDong}</span>
+                <span class="text-indigo-400 font-extrabold">→</span>
+                <span class="address-tag text-emerald-300 font-bold">${evt.endDong}</span>
+              </div>
+              <div class="text-gray-400 text-[11px] leading-relaxed flex justify-between items-center">
+                <span>주행 ${evt.odoDiff}km (${evt.durationMin ? evt.durationMin + '분' : '-'}) | 🔋 ${batDetail}</span>
+                <span class="text-amber-400 font-bold">🌡️ ${tempText}</span>
+              </div>
+            </div>
+          `;
+        } else {
+          groupHtml += `
+            <div class="bg-gray-900/80 p-3 rounded-xl border border-gray-800/90 flex justify-between items-center text-xs shadow-md">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 충전</span>
+                <span class="text-gray-400 text-[11px] font-mono">${evt.timeStr}</span>
+              </div>
+              <div class="text-right">
+                <span class="font-bold text-emerald-400 text-[11px]">충전 +${evt.batDiff}% (+${((evt.batDiff/100)*60).toFixed(1)}kWh)</span>
+                <span class="text-[10px] text-gray-500 block">🔋 ${evt.bat}% | 📍 ${evt.odo.toLocaleString()}km | 🌡️ ${tempText}</span>
+              </div>
+            </div>
+          `;
+        }
       });
+
+      groupHtml += `</div></div>`;
+      timelineBox.insertAdjacentHTML('beforeend', groupHtml);
+    });
+  }
+}
+}
     
 
     function setFilterMode(mode) {
@@ -3055,4 +3112,4 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 
   </script>
 </body>
-  </html>
+        </html>
