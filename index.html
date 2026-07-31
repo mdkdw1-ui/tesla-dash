@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.25</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -2932,8 +2932,9 @@ async function fetchIcsTextWithFallback(icalUrl) {
 async function loadGoogleCalendarEvents() {
   const icalUrl = getIcalUrl();
   
+  // 1. 주소 존재 여부 확인
   if (!icalUrl) {
-    console.log('⚠️ iCal 주소가 설정되지 않았습니다.');
+    alert('🔍 [진단 결과] iCal 주소가 설정되지 않았습니다.\n설정(⚙️) 창에서 iCal 주소를 입력하고 저장을 눌러주세요.');
     calendarEventsMap = {};
     return;
   }
@@ -2942,18 +2943,24 @@ async function loadGoogleCalendarEvents() {
     const icsText = await fetchIcsTextWithFallback(icalUrl);
     calendarEventsMap = parseIcsToMap(icsText);
     
-    // 💡 불러온 전체 일정 목록 콘솔 출력
-    console.log('📅 로드된 캘린더 데이터 (날짜별):', calendarEventsMap);
+    const totalDates = Object.keys(calendarEventsMap).length;
+    const dateList = Object.keys(calendarEventsMap).join(', ');
 
-    // 주행 지도 갱신
-    if (typeof renderDrivingData === 'function') {
-      renderDrivingData();
+    // 2. 수신 성공 시 결과 알림
+    if (totalDates > 0) {
+      alert(`✅ [진단 결과] iCal 수신 성공!\n- 총 ${totalDates}개 일자의 일정을 불러왔습니다.\n- 등록된 날짜 목록: ${dateList.slice(0, 60)}...`);
+    } else {
+      alert('⚠️ [진단 결과] iCal 파일은 수신했으나, 캘린더 내에 등록된 일정(VEVENT)이 없습니다.');
     }
 
+    if (typeof renderDrivingData === 'function') renderDrivingData();
+
   } catch (err) {
-    console.error('❌ 캘린더 로딩 최종 에러:', err);
+    // 3. 네트워크/CORS 차단 에러 발생 시
+    alert(`❌ [진단 결과] 캘린더 수신 실패!\n원인: ${err.message}`);
   }
 }
+
 
 function parseIcsToMap(icsText) {
   const map = {};
