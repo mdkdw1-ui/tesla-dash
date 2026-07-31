@@ -628,7 +628,7 @@
     ntfyTopic: 'MJYAz6ZyjXiujaTDpJ' 
   };
 
-  // ✅ 1. 'supabase' 제거하고 'supabaseClient' 변수 하나만 전역 선언 (CDN 변수 충돌 방지)
+  // ✅ 1. 'supabase' 변수명 충돌 방지를 위해 'supabaseClient' 하나만 전역 선언
   let supabaseClient = null;
 
   let currentMainTab = localStorage.getItem('tesla_main_tab') || 'monitor';
@@ -658,7 +658,7 @@
 
   let chartDegRec = null, chartRangeRec = null;
 
-  // ✅ 2. initSupabaseClient 함수를 DOMContentLoaded 밖(전역)에 딱 하나만 배치
+  // Supabase 클라이언트 초기화 함수
   function initSupabaseClient() {
     if (configObj.url && configObj.key && window.supabase) {
       supabaseClient = window.supabase.createClient(configObj.url, configObj.key);
@@ -667,76 +667,29 @@
       console.warn('⚠️ Supabase URL 또는 Key 정보가 입력되지 않았습니다.');
     }
   }
-  
 
-  // ✅ 3. 페이지 로드 이벤트 (내부의 중복 선언부 모두 삭제됨)
-  window.addEventListener('DOMContentLoaded', () => {
-    document.addEventListener('visibilitychange', handleAppVisibilityChange);
+  // 백엔드(Vercel)를 통해 인증 코드(code)를 Access Token으로 교환하는 함수
+  async function exchangeCodeWithBackend(code) {
+    if (typeof addLog === 'function') addLog('🔄 Vercel 백엔드로 인증 코드 전송 중...');
+    try {
+      const response = await fetch(VERCEL_BACKEND_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          code: code,
+          redirect_uri: REDIRECT_URI
+        })
+      });
 
-    // (이 아래 기존 OAuth 토큰 처리, Config 로드 등 기존 이벤트 로직 유지)
+      const data = await response.json();
+     
+      window.history.replaceState({}, document.title, window.location.pathname);
 
-// 💡 [정답본] 함수 선언부를 위로 올려 브라우저가 언제든 참조할 수 있게 호이스팅을 보장합니다.
-    function initSupabaseClient() {
-      if (configObj.url && configObj.key && window.supabase) {
-        supabaseClient = supabase.createClient(configObj.url, configObj.key);
-      }
-    }
-
-    // 백엔드(Vercel)를 통해 인증 코드(code)를 Access Token으로 교환하는 함수 (안전성 강화)
-    async function exchangeCodeWithBackend(code) {
-      if (typeof addLog === 'function') addLog('🔄 Vercel 백엔드로 인증 코드 전송 중...');
-      try {
-        const response = await fetch(VERCEL_BACKEND_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            code: code,
-            redirect_uri: REDIRECT_URI
-          })
-        });
-
-        const data = await response.json();
-       
-        window.history.replaceState({}, document.title, window.location.pathname);
-
-        if (response.ok && (data.access_token || data.token)) {
-          accessToken = data.access_token || data.token;
-          localStorage.setItem('tesla_access_token', accessToken);
-         
-          if (typeof renderAccessTokenUI === 'function') {
-            renderAccessTokenUI(accessToken);
-          } else {
-            const el = document.getElementById('displayAccessToken');
-            if (el) el.innerText = accessToken;
-          }
-         
-          document.getElementById('loginSection')?.classList.add('hidden');
-          document.getElementById('tokenInfoSection')?.classList.remove('hidden');
-         
-          if (typeof addLog === 'function') addLog('✅ 테슬라 Access Token 교환 성공!');
-          if (typeof fetchTeslaVehicles === 'function') fetchTeslaVehicles(accessToken, true);
-        } else {
-          if (typeof addLog === 'function') addLog(`⚠️ 토큰 교환 실패 (만료되었거나 이미 사용된 코드일 수 있습니다): ${data.error || JSON.stringify(data)}`);
-        }
-      } catch (err) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-        if (typeof addLog === 'function') addLog(`⚠️ 토큰 교환 요청 예외 발생: ${err.message}`);
-        console.error(err);
-      }
-    }
-
-    // 💡 6번 조각에서 시작된 DOMContentLoaded 리스너 내부 로직을 안전한 순서로 배치합니다.
-      const isValidToken = accessToken &&
-                           accessToken.trim() !== '' &&
-                           accessToken !== 'dummy_token' &&
-                           accessToken !== 'undefined' &&
-                           accessToken.length > 40;
-
-      if (isValidToken) {
-        document.getElementById('loginSection')?.classList.add('hidden');
-        document.getElementById('tokenInfoSection')?.classList.remove('hidden');
+      if (response.ok && (data.access_token || data.token)) {
+        accessToken = data.access_token || data.token;
+        localStorage.setItem('tesla_access_token', accessToken);
        
         if (typeof renderAccessTokenUI === 'function') {
           renderAccessTokenUI(accessToken);
@@ -745,1020 +698,1090 @@
           if (el) el.innerText = accessToken;
         }
        
+        document.getElementById('loginSection')?.classList.add('hidden');
+        document.getElementById('tokenInfoSection')?.classList.remove('hidden');
+       
+        if (typeof addLog === 'function') addLog('✅ 테슬라 Access Token 교환 성공!');
         if (typeof fetchTeslaVehicles === 'function') fetchTeslaVehicles(accessToken, true);
       } else {
-        localStorage.removeItem('tesla_access_token');
-        document.getElementById('loginSection')?.classList.remove('hidden');
-        document.getElementById('tokenInfoSection')?.classList.add('hidden');
+        if (typeof addLog === 'function') addLog(`⚠️ 토큰 교환 실패: ${data.error || JSON.stringify(data)}`);
       }
+    } catch (err) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      if (typeof addLog === 'function') addLog(`⚠️ 토큰 교환 요청 예외 발생: ${err.message}`);
+      console.error(err);
+    }
+  }
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const code = urlParams.get('code');
-      if (code) {
-        if (typeof switchMainTab === 'function') switchMainTab('guardian');
-        if (typeof addLog === 'function') addLog('🔄 OAuth 인증 코드 감지! 토큰 교환 중...');
-       
-        try {
-          exchangeCodeWithBackend(code);
-        } catch (err) {
-          console.error("토큰 교환 호출 중 예외:", err);
-        }
-       
-        setTimeout(() => {
-          if (!window.dashboardInitialized) {
-            window.dashboardInitialized = true;
-            if (typeof addLog === 'function') addLog('⚠️ 인증 처리 지연으로 대시보드를 강제 시작합니다.');
-            initSupabaseClient();
-            if (typeof loadCachedDataFirst === 'function') loadCachedDataFirst();
-            if (typeof initDashboard === 'function') initDashboard();
-          }
-        }, 4000);
-      }
+  // DOM 로드 완료 후 초기화 로직
+  document.addEventListener('DOMContentLoaded', () => {
+    const isValidToken = accessToken &&
+                         accessToken.trim() !== '' &&
+                         accessToken !== 'dummy_token' &&
+                         accessToken !== 'undefined' &&
+                         accessToken.length > 40;
 
-      const isConfigLoaded = (typeof loadConfig === 'function') ? loadConfig() : false;
-      if (!isConfigLoaded) {
-        if (typeof openConfigModal === 'function') openConfigModal();
+    if (isValidToken) {
+      document.getElementById('loginSection')?.classList.add('hidden');
+      document.getElementById('tokenInfoSection')?.classList.remove('hidden');
+     
+      if (typeof renderAccessTokenUI === 'function') {
+        renderAccessTokenUI(accessToken);
       } else {
+        const el = document.getElementById('displayAccessToken');
+        if (el) el.innerText = accessToken;
+      }
+     
+      if (typeof fetchTeslaVehicles === 'function') fetchTeslaVehicles(accessToken, true);
+    } else {
+      localStorage.removeItem('tesla_access_token');
+      document.getElementById('loginSection')?.classList.remove('hidden');
+      document.getElementById('tokenInfoSection')?.classList.add('hidden');
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    if (code) {
+      if (typeof switchMainTab === 'function') switchMainTab('guardian');
+      if (typeof addLog === 'function') addLog('🔄 OAuth 인증 코드 감지! 토큰 교환 중...');
+     
+      try {
+        exchangeCodeWithBackend(code);
+      } catch (err) {
+        console.error("토큰 교환 호출 중 예외:", err);
+      }
+     
+      setTimeout(() => {
         if (!window.dashboardInitialized) {
           window.dashboardInitialized = true;
+          if (typeof addLog === 'function') addLog('⚠️ 인증 처리 지연으로 대시보드를 강제 시작합니다.');
           initSupabaseClient();
           if (typeof loadCachedDataFirst === 'function') loadCachedDataFirst();
           if (typeof initDashboard === 'function') initDashboard();
         }
-      }
-    }); // 👈 ⚠️ 중간에 끊겼던 이 기호를 맨 뒤로 보내 리스너 전체를 안전하게 닫아줍니다!
-    
-
-    function handleAppVisibilityChange() {
-      const indicator = document.getElementById('sync-status-indicator');
-      if (document.hidden) {
-        isAppInForeground = false;
-        stopDrivingSyncLoop();
-      } else {
-        isAppInForeground = true;
-        if (indicator) {
-          indicator.innerText = "🅿️ 대기";
-        }
-        handleRefresh(true);
-      }
+      }, 4000);
     }
 
-    function stopDrivingSyncLoop() {
-      if (drivingSyncTimer) {
-        clearInterval(drivingSyncTimer);
-        drivingSyncTimer = null;
-      }
-    }
-
-    function loadConfig() {
-      const enc = localStorage.getItem('tesla_dashboard_config');
-      if (!enc) return false;
-      try {
-        const dec = CryptoJS.AES.decrypt(enc, SECRET_SALT).toString(CryptoJS.enc.Utf8);
-        const parsed = JSON.parse(dec);
-        if (parsed && parsed.url && parsed.key) {
-          configObj = parsed;
-          return true;
-        }
-        return false;
-      } catch (e) { return false; }
-    }
-
-function saveConfig(e) {
-  if (e) e.preventDefault();
-
-  configObj = {
-    kakaoKey: document.getElementById('input-kakao-key').value.trim(),
-    url: document.getElementById('input-supabase-url').value.trim().replace(/\/$/, ""),
-    key: document.getElementById('input-supabase-key').value.trim(),
-    ghToken: document.getElementById('input-gh-token').value.trim(),
-    vehicleId: document.getElementById('input-vehicle-id').value.trim(),
-    ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
-    // ❌ icalUrl 제거
-  };
-
-  // 1. 기존 AES 암호화 저장 유지
-  localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
-  
-  // ❌ localStorage.setItem('tesla_ical_url', icalVal); 삭제
-
-  closeConfigModal();
- 
-  // 2. 📅 Supabase 캘린더 일정 새로고침 (유지)
-  if (typeof loadGoogleCalendarEvents === 'function') {
-    loadGoogleCalendarEvents();
-  }
-
-  // 3. 코어 인프라 재부팅 (유지)
-  if (typeof initSupabaseClient === 'function') initSupabaseClient();
-  if (typeof loadCachedDataFirst === 'function') loadCachedDataFirst();
-  if (typeof initDashboard === 'function') initDashboard();
-}
-
-
-function openConfigModal() {
-  if (configObj.kakaoKey) document.getElementById('input-kakao-key').value = configObj.kakaoKey;
-  if (configObj.url) document.getElementById('input-supabase-url').value = configObj.url;
-  if (configObj.key) document.getElementById('input-supabase-key').value = configObj.key;
-  if (configObj.ghToken) document.getElementById('input-gh-token').value = configObj.ghToken;
-  if (configObj.vehicleId) document.getElementById('input-vehicle-id').value = configObj.vehicleId;
-  if (configObj.ntfyTopic) document.getElementById('input-ntfy-topic').value = configObj.ntfyTopic;
-  
-
-  document.getElementById('modal-config').classList.remove('hidden');
-}
-
-
-   function closeConfigModal() {
-  document.getElementById('modal-config').classList.add('hidden');
-}
-
-
-        function switchMainTab(mainTab, pushHistory = true) {
-  currentMainTab = mainTab;
-  localStorage.setItem('tesla_main_tab', mainTab);
-
-  if (pushHistory && history.pushState) {
-    history.pushState({ tab: mainTab, sub: typeof currentSubTab !== 'undefined' ? currentSubTab : 'vehicle' }, '', '');
-  }
-
-  const monitorPanel = document.getElementById('main-panel-monitor');
-  const guardianPanel = document.getElementById('main-panel-guardian');
- 
-  if (monitorPanel) monitorPanel.classList.toggle('hidden', mainTab !== 'monitor');
-  if (guardianPanel) guardianPanel.classList.toggle('hidden', mainTab !== 'guardian');
-
-  const btnMonitor = document.getElementById('btn-main-monitor');
-  if (btnMonitor) {
-    btnMonitor.className = mainTab === 'monitor'
-      ? "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
-      : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
-  }
-
-  const btnGuardian = document.getElementById('btn-main-guardian');
-  if (btnGuardian) {
-    btnGuardian.className = mainTab === 'guardian'
-      ? "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-red-600 to-rose-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-red-900/20"
-      : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
-  }
-
-  if (mainTab === 'monitor') {
-    if (typeof switchSubTab === 'function') {
-      switchSubTab(currentSubTab || 'vehicle', false);
-    }
-  }
- 
-  if (mainTab === 'guardian') {
-    // ReferenceError 방지를 위해 typeof 안전 검사 적용
-    const token = (typeof accessToken !== 'undefined') ? accessToken : null;
-    const validToken = token && token !== 'dummy_token' && token.trim() !== '' && token.length > 40;
-   
-    const loginSec = document.getElementById('loginSection');
-    const tokenSec = document.getElementById('tokenInfoSection');
-   
-    if (validToken) {
-      if (loginSec) loginSec.classList.add('hidden');
-      if (tokenSec) tokenSec.classList.remove('hidden');
-      if (typeof renderAccessTokenUI === 'function') renderAccessTokenUI(token);
+    const isConfigLoaded = (typeof loadConfig === 'function') ? loadConfig() : false;
+    if (!isConfigLoaded) {
+      if (typeof openConfigModal === 'function') openConfigModal();
     } else {
-      if (loginSec) loginSec.classList.remove('hidden');
-      if (tokenSec) tokenSec.classList.add('hidden');
-    }
-  }
-}
-
-
-
-// 서브 탭 전환 (안전 통합 버전)
-function switchSubTab(subTab, pushHistory = true) {
-  currentSubTab = subTab;
-  localStorage.setItem('tesla_sub_tab', subTab);
-
-  if (pushHistory) {
-    history.pushState({ tab: currentMainTab, sub: subTab }, '', '');
-  }
-
-  ['vehicle', 'driving', 'monthly', 'battery'].forEach(t => {
-    const panel = document.getElementById(`sub-panel-${t}`);
-    if (panel) panel.classList.toggle('hidden', t !== subTab);
-
-    const btn = document.getElementById(`btn-sub-${t}`);
-    if (btn) {
-      btn.className = t === subTab
-        ? "py-2.5 rounded-xl bg-blue-600 text-white font-bold transition shadow-md"
-        : "py-2.5 rounded-xl text-gray-400 hover:text-white transition";
+      if (!window.dashboardInitialized) {
+        window.dashboardInitialized = true;
+        initSupabaseClient();
+        if (typeof loadCachedDataFirst === 'function') loadCachedDataFirst();
+        if (typeof initDashboard === 'function') initDashboard();
+      }
     }
   });
 
-  // 지도 또는 차트/데이터 재렌더링 트리거
-  if (subTab === 'driving' && typeof map !== 'undefined' && map) {
-    setTimeout(() => map.relayout(), 100);
+  function handleAppVisibilityChange() {
+    const indicator = document.getElementById('sync-status-indicator');
+    if (document.hidden) {
+      isAppInForeground = false;
+      stopDrivingSyncLoop();
+    } else {
+      isAppInForeground = true;
+      if (indicator) {
+        indicator.innerText = "🅿️ 대기";
+      }
+      handleRefresh(true);
+    }
   }
-  if (subTab === 'battery' && typeof renderBatteryCharts === 'function') {
-    renderBatteryCharts();
+
+  function stopDrivingSyncLoop() {
+    if (drivingSyncTimer) {
+      clearInterval(drivingSyncTimer);
+      drivingSyncTimer = null;
+    }
   }
-  // ★ 여기에 추가
-  if (subTab === 'monthly' && typeof initMonthlyDropdowns === 'function') {
-    initMonthlyDropdowns();
+
+  function loadConfig() {
+    const enc = localStorage.getItem('tesla_dashboard_config');
+    if (!enc) return false;
+    try {
+      const dec = CryptoJS.AES.decrypt(enc, SECRET_SALT).toString(CryptoJS.enc.Utf8);
+      const parsed = JSON.parse(dec);
+      if (parsed && parsed.url && parsed.key) {
+        configObj = parsed;
+        return true;
+      }
+      return false;
+    } catch (e) { return false; }
   }
-}
+
+  function saveConfig(e) {
+    if (e) e.preventDefault();
+
+    configObj = {
+      kakaoKey: document.getElementById('input-kakao-key').value.trim(),
+      url: document.getElementById('input-supabase-url').value.trim().replace(/\/$/, ""),
+      key: document.getElementById('input-supabase-key').value.trim(),
+      ghToken: document.getElementById('input-gh-token').value.trim(),
+      vehicleId: document.getElementById('input-vehicle-id').value.trim(),
+      ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
+    };
+
+    localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
+    
+    closeConfigModal();
+   
+    if (typeof loadGoogleCalendarEvents === 'function') {
+      loadGoogleCalendarEvents();
+    }
+
+    if (typeof initSupabaseClient === 'function') initSupabaseClient();
+    if (typeof loadCachedDataFirst === 'function') loadCachedDataFirst();
+    if (typeof initDashboard === 'function') initDashboard();
+  }
+
+  function openConfigModal() {
+    if (configObj.kakaoKey) document.getElementById('input-kakao-key').value = configObj.kakaoKey;
+    if (configObj.url) document.getElementById('input-supabase-url').value = configObj.url;
+    if (configObj.key) document.getElementById('input-supabase-key').value = configObj.key;
+    if (configObj.ghToken) document.getElementById('input-gh-token').value = configObj.ghToken;
+    if (configObj.vehicleId) document.getElementById('input-vehicle-id').value = configObj.vehicleId;
+    if (configObj.ntfyTopic) document.getElementById('input-ntfy-topic').value = configObj.ntfyTopic;
+
+    document.getElementById('modal-config').classList.remove('hidden');
+  }
 
 
 
-    // 뒤로가기(←) 버튼 감지 리스너
-    window.addEventListener('popstate', function(event) {
-      if (event.state && event.state.tab) {
-        switchMainTab(event.state.tab, false);
-        if (event.state.sub && typeof switchSubTab === 'function') {
-          switchSubTab(event.state.sub, false);
-        }
+  // 설정 모달 닫기
+  function closeConfigModal() {
+    const modal = document.getElementById('modal-config');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  // 메인 탭 전환 (모니터 / 가디언)
+  function switchMainTab(mainTab, pushHistory = true) {
+    currentMainTab = mainTab;
+    localStorage.setItem('tesla_main_tab', mainTab);
+
+    if (pushHistory && history.pushState) {
+      history.pushState({ tab: mainTab, sub: typeof currentSubTab !== 'undefined' ? currentSubTab : 'vehicle' }, '', '');
+    }
+
+    const monitorPanel = document.getElementById('main-panel-monitor');
+    const guardianPanel = document.getElementById('main-panel-guardian');
+   
+    if (monitorPanel) monitorPanel.classList.toggle('hidden', mainTab !== 'monitor');
+    if (guardianPanel) guardianPanel.classList.toggle('hidden', mainTab !== 'guardian');
+
+    const btnMonitor = document.getElementById('btn-main-monitor');
+    if (btnMonitor) {
+      btnMonitor.className = mainTab === 'monitor'
+        ? "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
+        : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
+    }
+
+    const btnGuardian = document.getElementById('btn-main-guardian');
+    if (btnGuardian) {
+      btnGuardian.className = mainTab === 'guardian'
+        ? "py-2.5 rounded-xl font-extrabold text-sm bg-gradient-to-r from-red-600 to-rose-600 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-red-900/20"
+        : "py-2.5 rounded-xl font-extrabold text-sm bg-gray-800/80 text-gray-400 hover:text-white transition flex items-center justify-center gap-2";
+    }
+
+    if (mainTab === 'monitor') {
+      if (typeof switchSubTab === 'function') {
+        switchSubTab(currentSubTab || 'vehicle', false);
+      }
+    }
+   
+    if (mainTab === 'guardian') {
+      const token = (typeof accessToken !== 'undefined') ? accessToken : null;
+      const validToken = token && token !== 'dummy_token' && token.trim() !== '' && token.length > 40;
+     
+      const loginSec = document.getElementById('loginSection');
+      const tokenSec = document.getElementById('tokenInfoSection');
+     
+      if (validToken) {
+        if (loginSec) loginSec.classList.add('hidden');
+        if (tokenSec) tokenSec.classList.remove('hidden');
+        if (typeof renderAccessTokenUI === 'function') renderAccessTokenUI(token);
       } else {
-        switchMainTab('monitor', false);
+        if (loginSec) loginSec.classList.remove('hidden');
+        if (tokenSec) tokenSec.classList.add('hidden');
+      }
+    }
+  }
+
+  // 서브 탭 전환 (차량 정보, 주행 지도, 월간 리포트, 배터리)
+  function switchSubTab(subTab, pushHistory = true) {
+    currentSubTab = subTab;
+    localStorage.setItem('tesla_sub_tab', subTab);
+
+    if (pushHistory && history.pushState) {
+      history.pushState({ tab: currentMainTab, sub: subTab }, '', '');
+    }
+
+    ['vehicle', 'driving', 'monthly', 'battery'].forEach(t => {
+      const panel = document.getElementById(`sub-panel-${t}`);
+      if (panel) panel.classList.toggle('hidden', t !== subTab);
+
+      const btn = document.getElementById(`btn-sub-${t}`);
+      if (btn) {
+        btn.className = t === subTab
+          ? "py-2.5 rounded-xl bg-blue-600 text-white font-bold transition shadow-md"
+          : "py-2.5 rounded-xl text-gray-400 hover:text-white transition";
       }
     });
 
-
-    // 날짜 클릭 시 해당 일간 주행 기록으로 이동
-    function jumpToDrivingDate(dateStr) {
-      switchMainTab('monitor');
-      switchSubTab('driving');
-      setFilterMode('daily');
-
-      setTimeout(() => {
-        const subSelect = document.getElementById('ctrl-sub-select');
-        if (subSelect) {
-          subSelect.value = dateStr;
-          renderDrivingData();
-        }
-      }, 50);
+    // 지도 또는 차트/데이터 재렌더링 트리거
+    if (subTab === 'driving' && typeof map !== 'undefined' && map) {
+      setTimeout(() => map.relayout(), 100);
     }
-
-    // 단일 주행 클릭 시 해당 주행 지도로 이동
-    function jumpToSingleTrip(tripId) {
-      switchMainTab('monitor');
-      switchSubTab('driving');
-      setFilterMode('single');
-
-      setTimeout(() => {
-        const select = document.getElementById('ctrl-select');
-        if (select) {
-          select.value = tripId;
-          renderDrivingData();
-        }
-      }, 50);
+    if (subTab === 'battery' && typeof renderBatteryCharts === 'function') {
+      renderBatteryCharts();
     }
-
-    function loadCachedDataFirst() {
-      try {
-        const cachedVehicle = localStorage.getItem('tesla_cached_vehicle');
-        const cachedTrips = localStorage.getItem('tesla_cached_trips');
-
-        if (cachedVehicle) {
-          vehicleRows = JSON.parse(cachedVehicle);
-          loadVehicleData();
-        }
-        if (cachedTrips) {
-          allTrips = JSON.parse(cachedTrips);
-          switchMainTab(currentMainTab);
-        }
-      } catch (e) {}
+    if (subTab === 'monthly' && typeof initMonthlyDropdowns === 'function') {
+      initMonthlyDropdowns();
     }
+  }
 
-    // vercel sync.js와 연결된 단일 갱신 버튼 핸들러
-    async function handleUnifiedSync() {
-      addLog('⚡ Vercel /api/sync.js 동기화 및 최신 데이터 갱신 요청 중...');
-      const indicator = document.getElementById('sync-status-indicator');
-      if (indicator) indicator.innerText = "⏳ 동기화 중...";
-
-      try {
-        const res = await fetch('https://my-tesla-app-six.vercel.app/api/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: accessToken, vehicleId: configObj.vehicleId })
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          addLog('✅ Vercel Sync 완료!');
-        } else {
-          addLog(`⚠️ Sync 백엔드 응답: ${JSON.stringify(data)}`);
-        }
-      } catch(e) {
-        addLog(`⚠️ Vercel Sync 호출 예외: ${e.message}`);
+  // 브라우저 뒤로가기(←) 버튼 감지 리스너
+  window.addEventListener('popstate', function(event) {
+    if (event.state && event.state.tab) {
+      switchMainTab(event.state.tab, false);
+      if (event.state.sub && typeof switchSubTab === 'function') {
+        switchSubTab(event.state.sub, false);
       }
-
-      await handleRefresh(false);
+    } else {
+      switchMainTab('monitor', false);
     }
+  });
 
-    async function handleRefresh(isSilent = false) {
-      if (!isAppInForeground && isSilent) return;
+  // 날짜 클릭 시 해당 일간 주행 기록으로 이동
+  function jumpToDrivingDate(dateStr) {
+    switchMainTab('monitor');
+    switchSubTab('driving');
+    if (typeof setFilterMode === 'function') setFilterMode('daily');
 
-      const indicator = document.getElementById('sync-status-indicator');
-      if (indicator && !isSilent) {
-        indicator.innerText = "⏳ 갱신 중...";
+    setTimeout(() => {
+      const subSelect = document.getElementById('ctrl-sub-select');
+      if (subSelect) {
+        subSelect.value = dateStr;
+        if (typeof renderDrivingData === 'function') renderDrivingData();
       }
+    }, 50);
+  }
 
-      await loadAllData(isSilent);
+  // 단일 주행 클릭 시 해당 주행 지도로 이동
+  function jumpToSingleTrip(tripId) {
+    switchMainTab('monitor');
+    switchSubTab('driving');
+    if (typeof setFilterMode === 'function') setFilterMode('single');
 
-      if (indicator && isAppInForeground) {
-        indicator.innerText = "🅿️ 대기";
+    setTimeout(() => {
+      const select = document.getElementById('ctrl-select');
+      if (select) {
+        select.value = tripId;
+        if (typeof renderDrivingData === 'function') renderDrivingData();
       }
-    }
+    }, 50);
+  }
 
-    // 디버깅 및 테슬라 모니터 통합 로그 출력
-    function addLog(msg) {
-      const logBox = document.getElementById('tmLogBox');
-      if (!logBox) return;
-      const time = new Date().toLocaleTimeString();
-      const entry = document.createElement('div');
-      entry.className = 'tm-log-entry';
-      entry.innerText = `[${time}] ${msg}`;
-      logBox.appendChild(entry);
-      logBox.scrollTop = logBox.scrollHeight;
-    }
+  // 로컬 캐시 데이터 즉시 로드
+  function loadCachedDataFirst() {
+    try {
+      const cachedVehicle = localStorage.getItem('tesla_cached_vehicle');
+      const cachedTrips = localStorage.getItem('tesla_cached_trips');
 
-    function clearLogBox() {
-      const logBox = document.getElementById('tmLogBox');
-      if (logBox) logBox.innerHTML = '<div class="tm-log-entry">[시스템] 로그 초기화됨</div>';
-    }
-
-    function renderAccessTokenUI(token) {
-      const el = document.getElementById('displayAccessToken');
-      if (el) {
-        el.innerText = token || "토큰 정보 없음";
+      if (cachedVehicle) {
+        vehicleRows = JSON.parse(cachedVehicle);
+        if (typeof loadVehicleData === 'function') loadVehicleData();
       }
-    }
-
-    function copyAccessToken() {
-      if (!accessToken) {
-        alert("복사할 Access Token이 없습니다.");
-        return;
+      if (cachedTrips) {
+        allTrips = JSON.parse(cachedTrips);
+        switchMainTab(currentMainTab);
       }
-      navigator.clipboard.writeText(accessToken).then(() => {
-        addLog('📋 Tesla Access Token 클립보드 복사 완료');
-        alert("✅ Tesla Access Token이 클립보드에 복사되었습니다!");
-      }).catch(err => {
-        alert("복사 실패: " + err);
+    } catch (e) {
+      console.error("캐시 로드 중 예외 발생:", e);
+    }
+  }
+
+  // Vercel sync.js 수동 동기화 요청
+  async function handleUnifiedSync() {
+    if (typeof addLog === 'function') addLog('⚡ Vercel /api/sync.js 동기화 및 최신 데이터 갱신 요청 중...');
+    const indicator = document.getElementById('sync-status-indicator');
+    if (indicator) indicator.innerText = "⏳ 동기화 중...";
+
+    try {
+      const res = await fetch('https://my-tesla-app-six.vercel.app/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: accessToken, vehicleId: configObj.vehicleId })
       });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (typeof addLog === 'function') addLog('✅ Vercel Sync 완료!');
+      } else {
+        if (typeof addLog === 'function') addLog(`⚠️ Sync 백엔드 응답: ${JSON.stringify(data)}`);
+      }
+    } catch(e) {
+      if (typeof addLog === 'function') addLog(`⚠️ Vercel Sync 호출 예외: ${e.message}`);
     }
 
-    function updateGuardianStatusUI(statusType, text) {
-      const badge = document.getElementById('vehicleStatusBadge');
-      const timeText = document.getElementById('guardianLastCheck');
-      if (!badge) return;
+    await handleRefresh(false);
+  }
 
-      let badgeClasses = "px-3 py-1 text-xs font-bold rounded-full border ";
-      if (statusType === 'sentry') badgeClasses += "bg-red-900/40 text-red-300 border-red-500/50 animate-pulse shadow-lg shadow-red-900/30";
-      else if (statusType === 'driving') badgeClasses += "bg-blue-900/40 text-blue-300 border-blue-500/50";
-      else if (statusType === 'charging') badgeClasses += "bg-emerald-900/40 text-emerald-300 border-emerald-500/50";
-      else badgeClasses += "bg-gray-800 text-gray-400 border-gray-700";
+  // 화면 새로고침/갱신 통합
+  async function handleRefresh(isSilent = false) {
+    if (!isAppInForeground && isSilent) return;
 
-      badge.className = badgeClasses;
-      badge.innerText = text;
-      if (timeText) timeText.innerText = `마지막 확인: ${new Date().toLocaleTimeString()}`;
+    const indicator = document.getElementById('sync-status-indicator');
+    if (indicator && !isSilent) {
+      indicator.innerText = "⏳ 갱신 중...";
     }
 
-// [추가] 1단계와 2단계에서 동일하게 사용할 Redirect URI 생성 함수 (끝 슬래시 제거)
-function getRedirectUri() {
+    if (typeof loadAllData === 'function') {
+      await loadAllData(isSilent);
+    }
+
+    if (indicator && isAppInForeground) {
+      indicator.innerText = "🅿️ 대기";
+    }
+  }
+
+  // 디버깅 및 가디언 로그 출력
+  function addLog(msg) {
+    const logBox = document.getElementById('tmLogBox');
+    if (!logBox) return;
+    const time = new Date().toLocaleTimeString();
+    const entry = document.createElement('div');
+    entry.className = 'tm-log-entry';
+    entry.innerText = `[${time}] ${msg}`;
+    logBox.appendChild(entry);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  function clearLogBox() {
+    const logBox = document.getElementById('tmLogBox');
+    if (logBox) logBox.innerHTML = '<div class="tm-log-entry">[시스템] 로그 초기화됨</div>';
+  }
+
+  function renderAccessTokenUI(token) {
+    const el = document.getElementById('displayAccessToken');
+    if (el) {
+      el.innerText = token || "토큰 정보 없음";
+    }
+  }
+
+  function copyAccessToken() {
+    if (!accessToken) {
+      alert("복사할 Access Token이 없습니다.");
+      return;
+    }
+    navigator.clipboard.writeText(accessToken).then(() => {
+      if (typeof addLog === 'function') addLog('📋 Tesla Access Token 클립보드 복사 완료');
+      alert("✅ Tesla Access Token이 클립보드에 복사되었습니다!");
+    }).catch(err => {
+      alert("복사 실패: " + err);
+    });
+  }
+
+  function updateGuardianStatusUI(statusType, text) {
+    const badge = document.getElementById('vehicleStatusBadge');
+    const timeText = document.getElementById('guardianLastCheck');
+    if (!badge) return;
+
+    let badgeClasses = "px-3 py-1 text-xs font-bold rounded-full border ";
+    if (statusType === 'sentry') badgeClasses += "bg-red-900/40 text-red-300 border-red-500/50 animate-pulse shadow-lg shadow-red-900/30";
+    else if (statusType === 'driving') badgeClasses += "bg-blue-900/40 text-blue-300 border-blue-500/50";
+    else if (statusType === 'charging') badgeClasses += "bg-emerald-900/40 text-emerald-300 border-emerald-500/50";
+    else badgeClasses += "bg-gray-800 text-gray-400 border-gray-700";
+
+    badge.className = badgeClasses;
+    badge.innerText = text;
+    if (timeText) timeText.innerText = `마지막 확인: ${new Date().toLocaleTimeString()}`;
+  }
+
+  // Redirect URI 생성 함수
+  function getRedirectUri() {
     let uri = window.location.origin + window.location.pathname;
     if (uri.endsWith('/')) {
-        uri = uri.slice(0, -1); // 맨 뒤 '/'를 잘라내어 항상 https://mdkdw1-ui.github.io/tesla-dash 로 통일
+      uri = uri.slice(0, -1);
     }
     return uri;
-}
+  }
 
-
-function startTeslaLogin() {
-
-// getRedirectUri() 함수 사용으로 2단계와 주소 100% 일치시킴
+  function startTeslaLogin() {
     const REDIRECT_URI = encodeURIComponent(getRedirectUri());
-    
     const SCOPE = encodeURIComponent("openid offline_access vehicle_device_data vehicle_cmds vehicle_charging_cmds");
     const STATE = Math.random().toString(36).substring(2, 15);
     
     const teslaAuthUrl = `https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=${SCOPE}&state=${STATE}`;
 
-    addLog(`🔐 이동 주소: ${teslaAuthUrl}`);
+    if (typeof addLog === 'function') addLog(`🔐 이동 주소: ${teslaAuthUrl}`);
 
-    if (CLIENT_ID === "본인의_실제_TESLA_CLIENT_ID" || !CLIENT_ID) {
-        alert("코드 안의 CLIENT_ID를 테슬라 개발자 콘솔에서 발급받은 값으로 변경해주세요.");
-        return;
+    if (!CLIENT_ID || CLIENT_ID === "본인의_실제_TESLA_CLIENT_ID") {
+      alert("코드 안의 CLIENT_ID를 테슬라 개발자 콘솔에서 발급받은 값으로 변경해주세요.");
+      return;
     }
 
     setTimeout(() => {
-        window.location.href = teslaAuthUrl;
+      window.location.href = teslaAuthUrl;
     }, 500);
-}
-    
-   
-    
+  }
 
-
-
-async function exchangeTeslaToken(code) {
-    // 가짜 경고창을 띄우지 않고, 7~8번 조각에 정의된 Vercel 연동 함수를 직접 실행하도록 토스합니다.
+  async function exchangeTeslaToken(code) {
     if (typeof exchangeCodeWithBackend === 'function') {
-        exchangeCodeWithBackend(code);
+      exchangeCodeWithBackend(code);
     } else {
-        addLog('⚠️ 토큰 교환 실행 함수를 찾을 수 없습니다.');
+      if (typeof addLog === 'function') addLog('⚠️ 토큰 교환 실행 함수를 찾을 수 없습니다.');
     }
-}
+  }
+
+  async function fetchTeslaVehicles(token, isSilent = false) {
+    if (!isSilent && typeof addLog === 'function') addLog('📡 차량 목록 및 VIN/ID 동기화 중...');
     
+    if (vehicleRows && vehicleRows.length > 0) {
+      const latest = vehicleRows[0];
+      let rawObj = latest.raw_data;
+      if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
 
-    async function fetchTeslaVehicles(token, isSilent = false) {
-      if (!isSilent) addLog('📡 차량 목록 및 VIN/ID 동기화 중...');
-      
-      if (vehicleRows && vehicleRows.length > 0) {
-        const latest = vehicleRows[0];
-        let rawObj = latest.raw_data;
-        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
+      const vId = latest.vehicle_id || latest.id || rawObj?.id || rawObj?.vehicle_id;
+      const vin = latest.vin || rawObj?.vin || "정보 없음";
 
-        const vId = latest.vehicle_id || latest.id || rawObj?.id || rawObj?.vehicle_id;
-        const vin = latest.vin || rawObj?.vin || "정보 없음";
-
-        if (vId) {
-          if (!isSilent) addLog(`✅ DB에서 차량 정보 감지! (VIN: ${vin}, ID: ${vId})`);
-          updateVehicleInfoUI(vin, vId);
-          if (!configObj.vehicleId) { 
-            configObj.vehicleId = String(vId); 
-            localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
-          }
-          return { vin, vId };
+      if (vId) {
+        if (!isSilent && typeof addLog === 'function') addLog(`✅ DB에서 차량 정보 감지! (VIN: ${vin}, ID: ${vId})`);
+        updateVehicleInfoUI(vin, vId);
+        if (!configObj.vehicleId) { 
+          configObj.vehicleId = String(vId); 
+          localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
         }
-      }
-
-      if (configObj.vehicleId) {
-        updateVehicleInfoUI("설정됨", configObj.vehicleId);
-        return { vin: "설정됨", vId: configObj.vehicleId };
-      }
-
-      return null;
-    }
-
-    function updateVehicleInfoUI(vin, vId) {
-      const vinEl = document.getElementById('displayVin');
-      const idEl = document.getElementById('displayVehicleId');
-      if (vinEl) vinEl.innerText = `VIN: ${vin || '-'}`;
-      if (idEl) idEl.innerText = `Vehicle ID: ${vId || configObj.vehicleId || '-'}`;
-    }
-
-    async function autoFetchVehicleId() {
-      if (!accessToken) { 
-        alert('테슬라 로그인이 먼저 필요합니다.'); 
-        return; 
-      }
-      const res = await fetchTeslaVehicles(accessToken);
-      if (res && res.vId) {
-        document.getElementById('input-vehicle-id').value = res.vId;
-        addLog(`✅ 차량 ID 자동조회 완료: ${res.vId}`);
-        alert(`차량 ID 로드 성공: ${res.vId}`);
-      } else { 
-        alert('차량 정보를 불러오지 못했습니다.'); 
+        return { vin, vId };
       }
     }
 
-     async function handleToggleChange(checkbox) {
-  const labelText = document.getElementById('toggleLabelText');
+    if (configObj.vehicleId) {
+      updateVehicleInfoUI("설정됨", configObj.vehicleId);
+      return { vin: "설정됨", vId: configObj.vehicleId };
+    }
 
-  if (checkbox.checked) {
-    addLog('🔍 차량 감시 모드(Sentry Mode) 상태 진단 중...');
-    const sentryResult = await checkIsVehicleSentryActiveWithDebug();
+    return null;
+  }
 
-    if (sentryResult.isActive) {
-      if (labelText) {
-        labelText.innerText = '기능 ON';
-        labelText.style.color = '#10b981';
-      }
-      addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언 서비스를 시작합니다.');
+  function updateVehicleInfoUI(vin, vId) {
+    const vinEl = document.getElementById('displayVin');
+    const idEl = document.getElementById('displayVehicleId');
+    if (vinEl) vinEl.innerText = `VIN: ${vin || '-'}`;
+    if (idEl) idEl.innerText = `Vehicle ID: ${vId || configObj.vehicleId || '-'}`;
+  }
 
-      // 💡 일반 브라우저와 안드로이드 앱 공통으로 첫 화면을 즉시 렌더링합니다.
-      checkGuardianVehicleState();
+  async function autoFetchVehicleId() {
+    if (!accessToken) { 
+      alert('테슬라 로그인이 먼저 필요합니다.'); 
+      return; 
+    }
+    const res = await fetchTeslaVehicles(accessToken);
+    if (res && res.vId) {
+      document.getElementById('input-vehicle-id').value = res.vId;
+      if (typeof addLog === 'function') addLog(`✅ 차량 ID 자동조회 완료: ${res.vId}`);
+      alert(`차량 ID 로드 성공: ${res.vId}`);
+    } else { 
+      alert('차량 정보를 불러오지 못했습니다.'); 
+    }
+  }
 
-      if (window.AndroidBridge) {
-        const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) || 5;
-        const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
-       
-        const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '';
+  async function handleToggleChange(checkbox) {
+    const labelText = document.getElementById('toggleLabelText');
 
-        if (validToken) {
-          window.AndroidBridge.startGuardianService(accessToken, configObj.vehicleId || '3744141651867089', interval, topic);
-          startMonitoring();
-        } else {
-          checkbox.checked = false;
-          if (labelText) {
-            labelText.innerText = '기능 OFF';
-            labelText.style.color = '#aaa';
+    if (checkbox.checked) {
+      if (typeof addLog === 'function') addLog('🔍 차량 감시 모드(Sentry Mode) 상태 진단 중...');
+      const sentryResult = await checkIsVehicleSentryActiveWithDebug();
+
+      if (sentryResult.isActive) {
+        if (labelText) {
+          labelText.innerText = '기능 ON';
+          labelText.style.color = '#10b981';
+        }
+        if (typeof addLog === 'function') addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언 서비스를 시작합니다.');
+
+        if (typeof checkGuardianVehicleState === 'function') {
+          checkGuardianVehicleState();
+        }
+
+        if (window.AndroidBridge) {
+          const interval = parseInt(document.getElementById('guardianPollInterval')?.value, 10) || 5;
+          const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
+          const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '';
+
+          if (validToken) {
+            window.AndroidBridge.startGuardianService(accessToken, configObj.vehicleId || '3744141651867089', interval, topic);
+            if (typeof startMonitoring === 'function') startMonitoring();
+          } else {
+            checkbox.checked = false;
+            if (labelText) {
+              labelText.innerText = '기능 OFF';
+              labelText.style.color = '#aaa';
+            }
+            console.warn('⚠️ 유효한 테슬라 Access Token이 없어 가디언 서비스를 시작할 수 없습니다.');
+            alert('테슬라 로그인이 먼저 필요합니다.');
           }
-          console.warn('⚠️ 유효한 테슬라 Access Token이 없어 가디언 서비스를 시작할 수 없습니다.');
-          alert('테슬라 로그인이 먼저 필요합니다.');
+        } else {
+          if (typeof startMonitoring === 'function') startMonitoring();
         }
       } else {
-        // 💡 일반 PC/모바일 웹 브라우저 환경에서도 실시간 감시 타이머를 시작합니다.
-        startMonitoring();
+        checkbox.checked = false;
+        if (labelText) {
+          labelText.innerText = '기능 OFF';
+          labelText.style.color = '#aaa';
+        }
+        if (typeof stopMonitoring === 'function') stopMonitoring();
+
+        if (window.AndroidBridge) {
+          window.AndroidBridge.stopGuardianService();
+        }
+
+        if (typeof addLog === 'function') addLog(`🛑 [감시모드 중단] 사유: ${sentryResult.errorMessage}`);
+        alert(`차량 감시 모드를 활성화할 수 없습니다.\n${sentryResult.errorMessage}`);
       }
     } else {
-      checkbox.checked = false;
       if (labelText) {
         labelText.innerText = '기능 OFF';
         labelText.style.color = '#aaa';
       }
-      stopMonitoring();
 
       if (window.AndroidBridge) {
         window.AndroidBridge.stopGuardianService();
       }
 
-      addLog(`🛑 [감시모드 중단] 사유: ${sentryResult.errorMessage}`);
-      alert(`차량 감시 모드를 활성화할 수 없습니다.\n${sentryResult.errorMessage}`);
+      if (typeof stopMonitoring === 'function') stopMonitoring();
+      updateGuardianStatusUI('sleep', '❓ 로그인/데이터 필요');
     }
-  } else {
-    if (labelText) {
-      labelText.innerText = '기능 OFF';
-      labelText.style.color = '#aaa';
-    }
-
-    if (window.AndroidBridge) {
-      window.AndroidBridge.stopGuardianService();
-    }
-
-    stopMonitoring();
-   
-    // 💡 스위치를 끌 때 UI 배지도 대기 상태로 깔끔하게 리셋합니다.
-    updateGuardianStatusUI('sleep', '❓ 로그인/데이터 필요');
   }
-}
 
-    async function checkIsVehicleSentryActiveWithDebug() {
-      try {
-        addLog('📡 1단계: Vercel 백엔드 Sentry API 확인 중...');
-        const res = await fetch('https://my-tesla-app-six.vercel.app/api/sentry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: accessToken, vehicleId: configObj.vehicleId })
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          if (data.sentry_mode === true) {
-            addLog('✅ Vercel API: Sentry Mode [ON] 확인됨');
-            return { isActive: true, errorMessage: '성공' };
-          } else if (data.sentry_mode === false) {
-            return { isActive: false, errorMessage: '차량의 실제 감시 모드가 꺼져 있습니다.' };
-          }
-        }
-      } catch(e) {
-        addLog(`⚠️ Vercel 통신 예외 발생: ${e.message}`);
-      }
-
-      addLog('📡 2단계: DB 최신 차량 상태 확인 중...');
-      if (vehicleRows && vehicleRows.length > 0) {
-        const latest = vehicleRows[0];
-        let rawObj = latest.raw_data;
-        if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
-
-        if (latest.sentry_mode === true || latest.is_sentry === true || rawObj?.vehicle_state?.sentry_mode === true) {
-          addLog('✅ Supabase DB: Sentry Mode [ON]');
+  async function checkIsVehicleSentryActiveWithDebug() {
+    try {
+      if (typeof addLog === 'function') addLog('📡 1단계: Vercel 백엔드 Sentry API 확인 중...');
+      const res = await fetch('https://my-tesla-app-six.vercel.app/api/sentry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: accessToken, vehicleId: configObj.vehicleId })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.sentry_mode === true) {
+          if (typeof addLog === 'function') addLog('✅ Vercel API: Sentry Mode [ON] 확인됨');
           return { isActive: true, errorMessage: '성공' };
+        } else if (data.sentry_mode === false) {
+          return { isActive: false, errorMessage: '차량의 실제 감시 모드가 꺼져 있습니다.' };
         }
       }
-
-      return { isActive: false, errorMessage: '감시 모드가 OFF이거나 상태를 불러올 수 없습니다.' };
+    } catch(e) {
+      if (typeof addLog === 'function') addLog(`⚠️ Vercel 통신 예외 발생: ${e.message}`);
     }
 
-    function startMonitoring() {
-      const interval = parseInt(document.getElementById('guardianPollInterval').value, 10) * 1000;
-      addLog('▶️ 감시 가디언 가동 시작');
-      checkGuardianVehicleState();
-      
-      if (monitorTimer) clearInterval(monitorTimer);
-      monitorTimer = setInterval(checkGuardianVehicleState, interval);
+    if (typeof addLog === 'function') addLog('📡 2단계: DB 최신 차량 상태 확인 중...');
+    if (vehicleRows && vehicleRows.length > 0) {
+      const latest = vehicleRows[0];
+      let rawObj = latest.raw_data;
+      if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
+
+      if (latest.sentry_mode === true || latest.is_sentry === true || rawObj?.vehicle_state?.sentry_mode === true) {
+        if (typeof addLog === 'function') addLog('✅ Supabase DB: Sentry Mode [ON]');
+        return { isActive: true, errorMessage: '성공' };
+      }
     }
 
-    function stopMonitoring() {
-      if (monitorTimer) clearInterval(monitorTimer);
-      addLog('⏹️ 감시 가디언 정지됨');
-    }
+    return { isActive: false, errorMessage: '감시 모드가 OFF이거나 상태를 불러올 수 없습니다.' };
+  }
 
-    async function checkGuardianVehicleState() {
-      const vehicleId = configObj.vehicleId;
-      if (!vehicleId) return;
 
-      try {
-        const res = await fetch('https://my-tesla-app-six.vercel.app/api/sentry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: accessToken, vehicleId: vehicleId })
-        });
+  // 가디언 실시간 모니터링 시작
+  function startMonitoring() {
+    const inputEl = document.getElementById('guardianPollInterval');
+    const intervalSec = inputEl ? (parseInt(inputEl.value, 10) || 5) : 5;
+    const intervalMs = intervalSec * 1000;
 
-        if (!res.ok) { 
-          updateGuardianStatusUI('sleep', '🌙 응답 대기/오프라인'); 
-          return; 
-        }
+    if (typeof addLog === 'function') addLog('▶️ 감시 가디언 가동 시작');
+    checkGuardianVehicleState();
+    
+    if (monitorTimer) clearInterval(monitorTimer);
+    monitorTimer = setInterval(checkGuardianVehicleState, intervalMs);
+  }
 
-        const data = await res.json();
-        if (data.success) {
-          const sentryActive = data.sentry_mode;
-          const isLocked = data.locked ?? true;
+  // 가디언 실시간 모니터링 정지
+  function stopMonitoring() {
+    if (monitorTimer) clearInterval(monitorTimer);
+    if (typeof addLog === 'function') addLog('⏹️ 감시 가디언 정지됨');
+  }
 
-          if (!sentryActive) {
-            addLog('⚠️ 감시 모드 OFF 전환 감지. 가디언을 정지합니다.');
-            const toggle = document.getElementById('appMainToggle');
-            if (toggle) { toggle.checked = false; handleToggleChange(toggle); }
-            return;
+  // 가디언 차량 상태 주기적 검사
+  async function checkGuardianVehicleState() {
+    const vehicleId = (typeof configObj !== 'undefined' && configObj) ? configObj.vehicleId : null;
+    if (!vehicleId) return;
+
+    try {
+      const res = await fetch('https://my-tesla-app-six.vercel.app/api/sentry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: (typeof accessToken !== 'undefined' ? accessToken : ''), vehicleId: vehicleId })
+      });
+
+      if (!res.ok) { 
+        if (typeof updateGuardianStatusUI === 'function') updateGuardianStatusUI('sleep', '🌙 응답 대기/오프라인'); 
+        return; 
+      }
+
+      const data = await res.json();
+      if (data.success) {
+        const sentryActive = data.sentry_mode;
+        const isLocked = data.locked ?? true;
+
+        if (!sentryActive) {
+          if (typeof addLog === 'function') addLog('⚠️ 감시 모드 OFF 전환 감지. 가디언을 정지합니다.');
+          const toggle = document.getElementById('appMainToggle');
+          if (toggle) { 
+            toggle.checked = false; 
+            if (typeof handleToggleChange === 'function') handleToggleChange(toggle); 
           }
-
-          updateGuardianStatusUI('sentry', '🛡️ 가디언 가동 중');
-
-          const isDoorOpen = data.doors_open && (data.doors_open.df || data.doors_open.dr || data.doors_open.pf || data.doors_open.pr);
-          const isTrunkOpen = data.trunks_open && (data.trunks_open.ft || data.trunks_open.rt);
-
-          if (isLocked && (isDoorOpen || isTrunkOpen)) {
-            const targetName = isDoorOpen && isTrunkOpen ? '문/트렁크' : isDoorOpen ? '도어' : '트렁크';
-            addLog(`🚨 [경고] 잠금 상태에서 ${targetName} 무단 열림 감지!`);
-            await sendNtfyNotification(`🚨 테슬라 ${targetName} 무단 열림`, `차량이 잠긴 상태에서 ${targetName}가 열렸습니다!`, 'high');
-          }
-
-          if (data.sentry_mode_type === 'Panic' || data.sentry_mode_type === 'Alarm') {
-            addLog(`🚨🚨 [비상] 차량 충격/위협 경보 발생! (${data.sentry_mode_type})`);
-            await flashLights();
-            await sendNtfyNotification('‼️ 테슬라 긴급 충격 경보', '차량 충격 또는 경보 이벤트가 감지되었습니다!', 'urgent');
-          }
-
-          lastSentryState = sentryActive;
+          return;
         }
-      } catch (err) { 
-        addLog(`❌ 가디언 에러: ${err.message}`); 
-      }
-    }
 
-    async function flashLights() {
-      if (!configObj.vehicleId || !accessToken) {
-        addLog('⚠️ 차량 ID 또는 Access Token이 설정되어 있지 않습니다.');
-        return;
-      }
-      try {
-        addLog('⚡ Vercel API (headlights) 전조등 점멸 요청 중...');
-        const res = await fetch('https://my-tesla-app-six.vercel.app/api/headlights', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: accessToken, vehicleId: configObj.vehicleId })
-        });
-        const data = await res.json();
-        if (res.ok && (data.success || data.response?.result)) {
-          addLog('⚡ [자동] 전조등 점멸 실행 완료');
-        } else {
-          addLog(`❌ 전조등 실행 실패: ${data.error || data.reason || JSON.stringify(data)}`);
+        if (typeof updateGuardianStatusUI === 'function') updateGuardianStatusUI('sentry', '🛡️ 가디언 가동 중');
+
+        const isDoorOpen = data.doors_open && (data.doors_open.df || data.doors_open.dr || data.doors_open.pf || data.doors_open.pr);
+        const isTrunkOpen = data.trunks_open && (data.trunks_open.ft || data.trunks_open.rt);
+
+        if (isLocked && (isDoorOpen || isTrunkOpen)) {
+          const targetName = isDoorOpen && isTrunkOpen ? '문/트렁크' : isDoorOpen ? '도어' : '트렁크';
+          if (typeof addLog === 'function') addLog(`🚨 [경고] 잠금 상태에서 ${targetName} 무단 열림 감지!`);
+          await sendNtfyNotification(`🚨 테슬라 ${targetName} 무단 열림`, `차량이 잠긴 상태에서 ${targetName}가 열렸습니다!`, 'high');
         }
-      } catch (err) { 
-        addLog(`❌ 전조등 실행 실패: ${err.message}`); 
+
+        if (data.sentry_mode_type === 'Panic' || data.sentry_mode_type === 'Alarm') {
+          if (typeof addLog === 'function') addLog(`🚨🚨 [비상] 차량 충격/위협 경보 발생! (${data.sentry_mode_type})`);
+          await flashLights();
+          await sendNtfyNotification('‼️ 테슬라 긴급 충격 경보', '차량 충격 또는 경보 이벤트가 감지되었습니다!', 'urgent');
+        }
+
+        lastSentryState = sentryActive;
       }
+    } catch (err) { 
+      if (typeof addLog === 'function') addLog(`❌ 가디언 에러: ${err.message}`); 
     }
+  }
 
-    async function sendNtfyNotification(title, message, priority = 'high') {
-      const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
-      try {
-        const res = await fetch(`https://ntfy.sh/${topic}`, {
-          method: 'POST',
-          headers: { 'Title': title, 'Priority': priority, 'Tags': 'car,warning' },
-          body: message
-        });
-        if (res.ok) addLog('📱 [자동] ntfy 푸시 알림 발송 완료');
-      } catch (err) { addLog(`❌ ntfy 알림 오류: ${err.message}`); }
-    }
+  // 전조등 점멸 제어 API
+  async function flashLights() {
+    const vId = (typeof configObj !== 'undefined' && configObj) ? configObj.vehicleId : null;
+    const token = (typeof accessToken !== 'undefined') ? accessToken : null;
 
-    function testFlashLights() { if(accessToken) flashLights(); else alert('테슬라 로그인을 진행해 주세요.'); }
-    function testNtfy() { sendNtfyNotification('Tesla Guardian Test', 'This is a test notification.'); }
-
-    function initDashboard() {
-  try {
-  
-  
-      
-
-
-  
-  
-    if (typeof configObj === 'undefined' || !configObj.kakaoKey) {
-      console.warn("⚠️ configObj 또는 카카오 키가 설정되지 않았습니다.");
+    if (!vId || !token) {
+      if (typeof addLog === 'function') addLog('⚠️ 차량 ID 또는 Access Token이 설정되어 있지 않습니다.');
       return;
     }
-    
-    loadKakaoSdk(configObj.kakaoKey, () => {
-      try {
-        initMap();
-        handleRefresh(false);
-      } catch (err) {
-        console.error("지도 초기화 또는 데이터 갱신 중 에러 발생:", err);
-      }
-    });
-  } catch (err) {
-    console.error("대시보드 초기화 예외:", err);
-  }
-}
-
-
-    function loadKakaoSdk(appKey, callback) {
-      if (window.kakao && window.kakao.maps) { kakao.maps.load(() => { geocoder = new kakao.maps.services.Geocoder(); callback(); }); return; }
-      const script = document.createElement('script');
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false&libraries=services`;
-      script.onload = () => { kakao.maps.load(() => { geocoder = new kakao.maps.services.Geocoder(); callback(); }); };
-      document.head.appendChild(script);
-    }
-
-    function initMap() {
-      map = new kakao.maps.Map(document.getElementById('map'), { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 5 });
-    }
-
-    async function fetchSupabaseTable(queryPath) {
-      if (!configObj.url || !configObj.key) return [];
-      try {
-        const cleanUrl = configObj.url.replace(/\/$/, "");
-        const res = await fetch(`${cleanUrl}/rest/v1/${queryPath}`, {
-          headers: { 
-            'apikey': configObj.key, 
-            'Authorization': `Bearer ${configObj.key}`, 
-            'Range': '0-9999' 
-          }
-        });
-        if (!res.ok) return [];
-        return await res.json();
-      } catch (err) { return []; }
-    }
-
-    function cleanAddress(addr) {
-      if (!addr || typeof addr !== 'string') return '';
-      return addr
-        .replace(/^서울특별시\s*/, '')
-        .replace(/^경기도\s*/, '')
-        .replace(/고양시\s*/, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
-
-    function formatAddressString(region1, region2, region3) {
-      return cleanAddress(`${(region2 || "").trim()} ${(region3 || "").trim()}`);
-    }
-
-    function getNeighborhood(lat, lng) {
-      return new Promise((resolve) => {
-        if (!lat || !lng || !geocoder) { resolve("위치 미상"); return; }
-        const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
-        if (addressCache[key]) { resolve(addressCache[key]); return; }
-
-        geocoder.coord2RegionCode(lng, lat, (result, status) => {
-          if (status === kakao.maps.services.Status.OK) {
-            for (let i = 0; i < result.length; i++) {
-              if (result[i].region_type === 'H' || result[i].region_type === 'B') {
-                const item = result[i];
-                const formatted = formatAddressString(item.region_1depth_name, item.region_2depth_name, item.region_3depth_name);
-                addressCache[key] = formatted;
-                try { localStorage.setItem('tesla_address_cache', JSON.stringify(addressCache)); } catch(e){}
-                resolve(formatted);
-                return;
-              }
-            }
-          }
-          resolve("확인불가");
-        });
+    try {
+      if (typeof addLog === 'function') addLog('⚡ Vercel API (headlights) 전조등 점멸 요청 중...');
+      const res = await fetch('https://my-tesla-app-six.vercel.app/api/headlights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token, vehicleId: vId })
       });
+      const data = await res.json();
+      if (res.ok && (data.success || data.response?.result)) {
+        if (typeof addLog === 'function') addLog('⚡ [자동] 전조등 점멸 실행 완료');
+      } else {
+        if (typeof addLog === 'function') addLog(`❌ 전조등 실행 실패: ${data.error || data.reason || JSON.stringify(data)}`);
+      }
+    } catch (err) { 
+      if (typeof addLog === 'function') addLog(`❌ 전조등 실행 실패: ${err.message}`); 
     }
+  }
 
-    function parseDrivingTimeToMinutes(r) {
-      if (!r) return 1;
+  // ntfy 푸시 알림 전송
+  async function sendNtfyNotification(title, message, priority = 'high') {
+    const topic = (typeof configObj !== 'undefined' && configObj && configObj.ntfyTopic) ? configObj.ntfyTopic : 'MJYAz6ZyjXiujaTDpJ';
+    try {
+      const res = await fetch(`https://ntfy.sh/${topic}`, {
+        method: 'POST',
+        headers: { 'Title': title, 'Priority': priority, 'Tags': 'car,warning' },
+        body: message
+      });
+      if (res.ok && typeof addLog === 'function') addLog('📱 [자동] ntfy 푸시 알림 발송 완료');
+    } catch (err) { 
+      if (typeof addLog === 'function') addLog(`❌ ntfy 알림 오류: ${err.message}`); 
+    }
+  }
 
-      let val = r.duration_min ?? r.driving_time ?? r.drivingTime ?? r.duration;
+  // 테스트 헬퍼 함수
+  function testFlashLights() { 
+    if (typeof accessToken !== 'undefined' && accessToken) flashLights(); 
+    else alert('테슬라 로그인을 진행해 주세요.'); 
+  }
+  
+  function testNtfy() { 
+    sendNtfyNotification('Tesla Guardian Test', 'This is a test notification.'); 
+  }
 
-      if (typeof val === 'number' && !isNaN(val) && val > 0) {
-        return Math.round(val);
+  // 대시보드 초기화
+  function initDashboard() {
+    try {
+      if (typeof configObj === 'undefined' || !configObj || !configObj.kakaoKey) {
+        console.warn("⚠️ configObj 또는 카카오 키가 설정되지 않았증니다.");
+        return;
       }
       
-      if (typeof val === 'string' && val.trim() !== '' && val.trim().toUpperCase() !== 'NULL') {
-        let str = val.trim();
-        let hours = 0, mins = 0;
-        
-        const hourMatch = str.match(/(\d+)\s*시간/);
-        if (hourMatch) hours = parseInt(hourMatch[1], 10);
-        
-        const minMatch = str.match(/(\d+)\s*분/);
-        if (minMatch) mins = parseInt(minMatch[1], 10);
-        
-        if (hourMatch || minMatch) {
-          return hours * 60 + mins;
+      loadKakaoSdk(configObj.kakaoKey, () => {
+        try {
+          initMap();
+          if (typeof handleRefresh === 'function') handleRefresh(false);
+        } catch (err) {
+          console.error("지도 초기화 또는 데이터 갱신 중 에러 발생:", err);
         }
-
-        const numOnly = parseFloat(str);
-        if (!isNaN(numOnly) && numOnly > 0) return Math.round(numOnly);
-      }
-
-      const sTime = r.start_time || r.started_at;
-      const eTime = r.end_time || r.ended_at || r.created_at;
-      if (sTime && eTime) {
-        const diffMs = new Date(eTime).getTime() - new Date(sTime).getTime();
-        if (!isNaN(diffMs) && diffMs > 0) {
-          return Math.round(diffMs / 60000);
-        }
-      }
-
-      return 1;
-    }
-
-    async function loadAllData(isSilent = false) {
-      const [drivingRes, vehicleRes] = await Promise.all([
-        fetchSupabaseTable('driving?order=created_at.desc'),
-        fetchSupabaseTable('vehicle?order=updated_at.desc&limit=5000')
-      ]);
-
-      allTrips = (drivingRes || []).map(r => {
-        let pathData = r.location_list || r.path || [];
-        if (typeof pathData === 'string') { try { pathData = JSON.parse(pathData); } catch(e) { pathData = []; } }
-        
-        const dMin = parseDrivingTimeToMinutes(r);
-
-        return {
-          id: r.id,
-          timestamp: new Date(r.created_at || r.start_time || Date.now()).getTime(),
-          moveKM: Number(r.move_km || r.distance || r.km || 0),
-          useBattery: Number(r.use_battery || r.battery_used || 0),
-          startBat: r.start_battery || r.start_battery_level,
-          endBat: r.end_battery || r.end_battery_level,
-          odometer: r.odometer || r.end_odometer,
-          outsideTemp: r.outside_temp ?? r.temp,
-          durationMin: dMin,
-          path: pathData,
-          startDong: cleanAddress(r.start_address || r.start_location || "조회중"),
-          endDong: cleanAddress(r.end_address || r.end_location || "조회중")
-        };
       });
-
-      vehicleRows = vehicleRes || [];
-
-      if (vehicleRows.length > 0) {
-        localStorage.setItem('tesla_cached_vehicle', JSON.stringify(vehicleRows.slice(0, 50)));
-      }
-      if (allTrips.length > 0) {
-        localStorage.setItem('tesla_cached_trips', JSON.stringify(allTrips.slice(0, 50)));
-      }
-
-      switchMainTab(currentMainTab);
-      if (!isSilent) setFilterMode('daily');
-      loadVehicleData();
-
-      for (let t of allTrips) {
-        if ((t.startDong === "조회중" || t.endDong === "조회중") && t.path && t.path.length > 0) {
-          const firstPt = t.path[0], lastPt = t.path[t.path.length - 1];
-          const fLat = firstPt.lat || firstPt.latitude || firstPt[0], fLng = firstPt.lng || firstPt.longitude || firstPt[1];
-          const lLat = lastPt.lat || lastPt.latitude || lastPt[0], lLng = lastPt.lng || lastPt.longitude || lastPt[1];
-
-          if (t.startDong === "조회중") t.startDong = await getNeighborhood(fLat, fLng);
-          if (t.endDong === "조회중") t.endDong = await getNeighborhood(lLat, lLng);
-        }
-      }
+    } catch (err) {
+      console.error("대시보드 초기화 예외:", err);
     }
-
-    function updateDynamicVehicleCard(stateObj) {
-      const card = document.getElementById('card-state-duration');
-      const icon = document.getElementById('v-state-icon');
-      const title = document.getElementById('v-state-duration-title');
-      const sub = document.getElementById('v-state-start-time');
-      const extra = document.getElementById('v-state-extra-info');
-      const dot = document.getElementById('v-status-dot');
-      const statusText = document.getElementById('v-status-text');
-
-      if (!card || !title) return;
-
-      if (stateObj.isDriving) {
-        card.className = "glass-card card-border-blue p-4 rounded-2xl flex items-center justify-between transition-all shadow-xl";
-        icon.innerText = "🚘";
-        title.className = "text-sm font-extrabold text-blue-400";
-        title.innerText = "주행 중";
-        sub.innerText = `현재 속도: ${stateObj.speed || 0} km/h`;
-        extra.innerText = "📍 실시간 동기화";
-        if (dot) dot.className = "w-3 h-3 rounded-full bg-blue-500 animate-pulse shadow-lg shadow-blue-500/50";
-        if (statusText) statusText.innerText = `현재: 주행 중 (${stateObj.speed || 0} km/h)`;
-      } else if (stateObj.isCharging) {
-        card.className = "glass-card card-border-green p-4 rounded-2xl flex items-center justify-between transition-all shadow-xl";
-        icon.innerText = "⚡";
-        title.className = "text-sm font-extrabold text-emerald-400";
-        title.innerText = "충전 중";
-        sub.innerText = `충전 전력: ${stateObj.chargePower || 0} kW`;
-        extra.innerText = `🔋 ${stateObj.batteryLevel || '-'}%`;
-        if (dot) dot.className = "w-3 h-3 rounded-full bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50";
-        if (statusText) statusText.innerText = `현재: 충전 중 (${stateObj.chargePower || 0} kW)`;
-      } else if (stateObj.isSentry) {
-        card.className = "glass-card card-border-red p-4 rounded-2xl flex items-center justify-between transition-all shadow-xl";
-        icon.innerText = "🛡️";
-        title.className = "text-sm font-extrabold text-red-400";
-        title.innerText = "감시 모드 작동 중";
-        sub.innerText = "실시간 모니터링 활성화";
-        extra.innerText = "🔒 가디언 활성";
-        if (dot) dot.className = "w-3 h-3 rounded-full bg-red-500 animate-ping shadow-lg shadow-red-500/50";
-        if (statusText) statusText.innerText = "현재: 감시 모드 작동 중";
-      } else {
-        card.className = "glass-card card-border-amber p-4 rounded-2xl flex items-center justify-between transition-all shadow-xl";
-        icon.innerText = "🅿️";
-        title.className = "text-sm font-extrabold text-amber-500";
-        if (dot) dot.className = "w-3 h-3 rounded-full bg-amber-500 shadow-lg shadow-amber-500/50";
-        if (statusText) statusText.innerText = "현재: 주차 중";
-      }
-    }
-
-    function buildSequentialRouteHtml(tripsArray) {
-      if (!tripsArray || tripsArray.length === 0) return "";
-      const sorted = [...tripsArray].sort((a, b) => a.timestamp - b.timestamp);
-      let routePoints = [];
-      sorted.forEach((trip, idx) => {
-        if (idx === 0) routePoints.push(cleanAddress(trip.startDong));
-        routePoints.push(cleanAddress(trip.endDong));
-      });
-      let uniqueRoute = [];
-      routePoints.forEach((pt, i) => {
-        if (i === 0 || pt !== routePoints[i - 1]) uniqueRoute.push(pt);
-      });
-
-      return uniqueRoute
-        .map(p => `<span class="address-tag font-bold text-gray-200">${p}</span>`)
-        .join(' <span class="text-indigo-400 font-extrabold">→</span> ');
-    }
-
-    function loadVehicleData() {
-  if (!vehicleRows || vehicleRows.length === 0) return;
-
-  const latest = vehicleRows[0];
-  const batVal = latest.battery_level ?? 0;
-  const odoVal = Math.round(latest.odometer ?? 0);
-  const updateDate = new Date(latest.updated_at || Date.now());
-
-  const timeEl = document.getElementById('v-last-time');
-  const batEl = document.getElementById('v-battery-val');
-  const odoEl = document.getElementById('v-odometer-val');
-
-  if (timeEl) timeEl.innerText = `${String(updateDate.getHours()).padStart(2,'0')}:${String(updateDate.getMinutes()).padStart(2,'0')} 기준 🔄`;
-  if (batEl) batEl.innerText = `${batVal}%`;
-  if (odoEl) odoEl.innerText = `${odoVal.toLocaleString()} km`;
-
-  let rawObj = latest.raw_data;
-  if (typeof rawObj === 'string') { 
-    try { rawObj = JSON.parse(rawObj); } catch(e){ rawObj = {}; } 
-  } else { 
-    rawObj = rawObj || {}; 
   }
 
-  // 외기 온도 소수점 절삭 적용
-  const outsideTemp = latest.outside_temp ?? rawObj?.climate_state?.outside_temp;
-  if (outsideTemp !== undefined && outsideTemp !== null) {
-    const tempEl = document.getElementById('v-outside-temp');
-    if (tempEl) tempEl.innerText = `🌡️ 외기: ${Math.round(outsideTemp)}°C`;
+  // 카카오 지도 SDK 동적 로드
+  function loadKakaoSdk(appKey, callback) {
+    if (window.kakao && window.kakao.maps) { 
+      kakao.maps.load(() => { 
+        geocoder = new kakao.maps.services.Geocoder(); 
+        callback(); 
+      }); 
+      return; 
+    }
+    const script = document.createElement('script');
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false&libraries=services`;
+    script.onload = () => { 
+      kakao.maps.load(() => { 
+        geocoder = new kakao.maps.services.Geocoder(); 
+        callback(); 
+      }); 
+    };
+    document.head.appendChild(script);
   }
 
-  // TPMS 공기압
-  let fl = latest.tpms_fl || rawObj?.vehicle_state?.tpms_pressure_fl || rawObj?.tpms?.fl || rawObj?.tpms_pressure_fl || 42;
-  let fr = latest.tpms_fr || rawObj?.vehicle_state?.tpms_pressure_fr || rawObj?.tpms?.fr || rawObj?.tpms_pressure_fr || 42;
-  let rl = latest.tpms_rl || rawObj?.vehicle_state?.tpms_pressure_rl || rawObj?.tpms?.rl || rawObj?.tpms_pressure_rl || 41;
-  let rr = latest.tpms_rr || rawObj?.vehicle_state?.tpms_pressure_rr || rawObj?.tpms?.rr || rawObj?.tpms_pressure_rr || 41;
-
-  const toPsi = (v) => (v > 0 && v < 10) ? Math.round(v * 14.5038) : Math.round(v);
-
-  if (document.getElementById('tpms-fl')) document.getElementById('tpms-fl').innerText = `${toPsi(fl)} psi`;
-  if (document.getElementById('tpms-fr')) document.getElementById('tpms-fr').innerText = `${toPsi(fr)} psi`;
-  if (document.getElementById('tpms-rl')) document.getElementById('tpms-rl').innerText = `${toPsi(rl)} psi`;
-  if (document.getElementById('tpms-rr')) document.getElementById('tpms-rr').innerText = `${toPsi(rr)} psi`;
-
-  // 차량 동적 상태 카드 업데이트
-  const isRecentDriving = (allTrips.length > 0 && (Date.now() - allTrips[0].timestamp < 5 * 60 * 1000));
-  const isCharging = rawObj?.charge_state?.charging_state === 'Charging' || (rawObj?.charge_state?.charger_power || 0) > 0;
-  const isSentry = latest.sentry_mode === true || latest.is_sentry === true || rawObj?.vehicle_state?.sentry_mode === true;
-  const currentSpeed = rawObj?.drive_state?.speed || 0;
-
-  if (isRecentDriving || currentSpeed > 0) {
-    updateDynamicVehicleCard({ isDriving: true, speed: currentSpeed });
-  } else if (isCharging) {
-    updateDynamicVehicleCard({ isCharging: true, chargePower: rawObj?.charge_state?.charger_power, batteryLevel: batVal });
-  } else if (isSentry) {
-    updateDynamicVehicleCard({ isSentry: true });
-  } else {
-    let lastTripEndMs = allTrips.length > 0 ? allTrips[0].timestamp : updateDate.getTime();
-    let parkingBaseMs = Math.max(lastTripEndMs, updateDate.getTime());
-    const parkDiffMs = Math.max(0, Date.now() - parkingBaseMs);
-    const pHours = Math.floor(parkDiffMs / 3600000);
-    const pMins = Math.floor((parkDiffMs % 3600000) / 60000);
-
-    updateDynamicVehicleCard({ isDriving: false, isCharging: false, isSentry: false });
-    const durTitle = document.getElementById('v-state-duration-title');
-    const startTime = document.getElementById('v-state-start-time');
-    if (durTitle) durTitle.innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
-    if (startTime) startTime.innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
+  // 지도 생성
+  function initMap() {
+    const mapContainer = document.getElementById('map');
+    if (!mapContainer) return;
+    map = new kakao.maps.Map(mapContainer, { 
+      center: new kakao.maps.LatLng(37.5665, 126.9780), 
+      level: 5 
+    });
   }
-  
-  
-// 💡 AM/PM 시간 포맷 헬퍼 함수
-function formatTimeAmPm(dateObj) {
-  if (!dateObj || isNaN(dateObj.getTime())) return '-';
-  let hours = dateObj.getHours();
-  const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12;
-  hours = hours ? hours : 12;
-  return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
-}
+
+  // Supabase 테이블 REST API 직접 조회
+  async function fetchSupabaseTable(queryPath) {
+    if (typeof configObj === 'undefined' || !configObj.url || !configObj.key) return [];
+    try {
+      const cleanUrl = configObj.url.replace(/\/$/, "");
+      const res = await fetch(`${cleanUrl}/rest/v1/${queryPath}`, {
+        headers: { 
+          'apikey': configObj.key, 
+          'Authorization': `Bearer ${configObj.key}`, 
+          'Range': '0-9999' 
+        }
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (err) { 
+      return []; 
+    }
+  }
+
+  // 주소 정제 함수
+  function cleanAddress(addr) {
+    if (!addr || typeof addr !== 'string') return '';
+    return addr
+      .replace(/^서울특별시\s*/, '')
+      .replace(/^경기도\s*/, '')
+      .replace(/고양시\s*/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function formatAddressString(region1, region2, region3) {
+    return cleanAddress(`${(region2 || "").trim()} ${(region3 || "").trim()}`);
+  }
+
+  // 좌표 -> 행정동 변환 (역지오코딩)
+  function getNeighborhood(lat, lng) {
+    return new Promise((resolve) => {
+      if (!lat || !lng || typeof geocoder === 'undefined' || !geocoder) { 
+        resolve("위치 미상"); 
+        return; 
+      }
+      
+      if (typeof addressCache === 'undefined') window.addressCache = {};
+      
+      const key = `${Number(lat).toFixed(3)},${Number(lng).toFixed(3)}`;
+      if (addressCache[key]) { 
+        resolve(addressCache[key]); 
+        return; 
+      }
+
+      geocoder.coord2RegionCode(lng, lat, (result, status) => {
+        if (status === kakao.maps.services.Status.OK) {
+          for (let i = 0; i < result.length; i++) {
+            if (result[i].region_type === 'H' || result[i].region_type === 'B') {
+              const item = result[i];
+              const formatted = formatAddressString(item.region_1depth_name, item.region_2depth_name, item.region_3depth_name);
+              addressCache[key] = formatted;
+              try { localStorage.setItem('tesla_address_cache', JSON.stringify(addressCache)); } catch(e){}
+              resolve(formatted);
+              return;
+            }
+          }
+        }
+        resolve("확인불가");
+      });
+    });
+  }
+
+  // 주행 시간(분) 파싱
+  function parseDrivingTimeToMinutes(r) {
+    if (!r) return 1;
+
+    let val = r.duration_min ?? r.driving_time ?? r.drivingTime ?? r.duration;
+
+    if (typeof val === 'number' && !isNaN(val) && val > 0) {
+      return Math.round(val);
+    }
+    
+    if (typeof val === 'string' && val.trim() !== '' && val.trim().toUpperCase() !== 'NULL') {
+      let str = val.trim();
+      let hours = 0, mins = 0;
+      
+      const hourMatch = str.match(/(\d+)\s*시간/);
+      if (hourMatch) hours = parseInt(hourMatch[1], 10);
+      
+      const minMatch = str.match(/(\d+)\s*분/);
+      if (minMatch) mins = parseInt(minMatch[1], 10);
+      
+      if (hourMatch || minMatch) {
+        return hours * 60 + mins;
+      }
+
+      const numOnly = parseFloat(str);
+      if (!isNaN(numOnly) && numOnly > 0) return Math.round(numOnly);
+    }
+
+    const sTime = r.start_time || r.started_at;
+    const eTime = r.end_time || r.ended_at || r.created_at;
+    if (sTime && eTime) {
+      const diffMs = new Date(eTime).getTime() - new Date(sTime).getTime();
+      if (!isNaN(diffMs) && diffMs > 0) {
+        return Math.round(diffMs / 60000);
+      }
+    }
+
+    return 1;
+  }
+
+  // 전체 데이터 로드 및 가공
+  async function loadAllData(isSilent = false) {
+    const [drivingRes, vehicleRes] = await Promise.all([
+      fetchSupabaseTable('driving?order=created_at.desc'),
+      fetchSupabaseTable('vehicle?order=updated_at.desc&limit=5000')
+    ]);
+
+    allTrips = (drivingRes || []).map(r => {
+      let pathData = r.location_list || r.path || [];
+      if (typeof pathData === 'string') { 
+        try { pathData = JSON.parse(pathData); } catch(e) { pathData = []; } 
+      }
+      
+      const dMin = parseDrivingTimeToMinutes(r);
+
+      return {
+        id: r.id,
+        timestamp: new Date(r.created_at || r.start_time || Date.now()).getTime(),
+        moveKM: Number(r.move_km || r.distance || r.km || 0),
+        useBattery: Number(r.use_battery || r.battery_used || 0),
+        startBat: r.start_battery || r.start_battery_level,
+        endBat: r.end_battery || r.end_battery_level,
+        odometer: r.odometer || r.end_odometer,
+        outsideTemp: r.outside_temp ?? r.temp,
+        durationMin: dMin,
+        path: pathData,
+        startDong: cleanAddress(r.start_address || r.start_location || "조회중"),
+        endDong: cleanAddress(r.end_address || r.end_location || "조회중")
+      };
+    });
+
+    vehicleRows = vehicleRes || [];
+
+    if (vehicleRows.length > 0) {
+      localStorage.setItem('tesla_cached_vehicle', JSON.stringify(vehicleRows.slice(0, 50)));
+    }
+    if (allTrips.length > 0) {
+      localStorage.setItem('tesla_cached_trips', JSON.stringify(allTrips.slice(0, 50)));
+    }
+
+    if (typeof switchMainTab === 'function') switchMainTab(currentMainTab);
+    if (!isSilent && typeof setFilterMode === 'function') setFilterMode('daily');
+    loadVehicleData();
+
+    for (let t of allTrips) {
+      if ((t.startDong === "조회중" || t.endDong === "조회중") && t.path && t.path.length > 0) {
+        const firstPt = t.path[0], lastPt = t.path[t.path.length - 1];
+        const fLat = firstPt.lat || firstPt.latitude || firstPt[0], fLng = firstPt.lng || firstPt.longitude || firstPt[1];
+        const lLat = lastPt.lat || lastPt.latitude || lastPt[0], lLng = lastPt.lng || lastPt.longitude || lastPt[1];
+
+        if (t.startDong === "조회중") t.startDong = await getNeighborhood(fLat, fLng);
+        if (t.endDong === "조회중") t.endDong = await getNeighborhood(lLat, lLng);
+      }
+    }
+  }
+
+  // 대시보드 차량 동적 상태 카드 업데이트
+  function updateDynamicVehicleCard(stateObj) {
+    const card = document.getElementById('card-state-duration');
+    const icon = document.getElementById('v-state-icon');
+    const title = document.getElementById('v-state-duration-title');
+    const sub = document.getElementById('v-state-start-time');
+    const extra = document.getElementById('v-state-extra-info');
+    const dot = document.getElementById('v-status-dot');
+    const statusText = document.getElementById('v-status-text');
+
+    if (!card || !title) return;
+
+    if (stateObj.isDriving) {
+      card.className = "glass-card card-border-blue p-4 rounded-2xl flex items-center justify-between transition-all shadow-xl";
+      if (icon) icon.innerText = "🚘";
+      title.className = "text-sm font-extrabold text-blue-400";
+      title.innerText = "주행 중";
+      if (sub) sub.innerText = `현재 속도: ${stateObj.speed || 0} km/h`;
+      if (extra) extra.innerText = "📍 실시간 동기화";
+      if (dot) dot.className = "w-3 h-3 rounded-full bg-blue-500 animate-pulse shadow-lg shadow-blue-500/50";
+      if (statusText) statusText.innerText = `현재: 주행 중 (${stateObj.speed || 0} km/h)`;
+    } else if (stateObj.isCharging) {
+      card.className = "glass-card card-border-green p-4 rounded-2xl flex items-center justify-between transition-all shadow-xl";
+      if (icon) icon.innerText = "⚡";
+      title.className = "text-sm font-extrabold text-emerald-400";
+      title.innerText = "충전 중";
+      if (sub) sub.innerText = `충전 전력: ${stateObj.chargePower || 0} kW`;
+      if (extra) extra.innerText = `🔋 ${stateObj.batteryLevel || '-'}%`;
+      if (dot) dot.className = "w-3 h-3 rounded-full bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50";
+      if (statusText) statusText.innerText = `현재: 충전 중 (${stateObj.chargePower || 0} kW)`;
+    } else if (stateObj.isSentry) {
+      card.className = "glass-card card-border-red p-4 rounded-2xl flex items-center justify-between transition-all shadow-xl";
+      if (icon) icon.innerText = "🛡️";
+      title.className = "text-sm font-extrabold text-red-400";
+      title.innerText = "감시 모드 작동 중";
+      if (sub) sub.innerText = "실시간 모니터링 활성화";
+      if (extra) extra.innerText = "🔒 가디언 활성";
+      if (dot) dot.className = "w-3 h-3 rounded-full bg-red-500 animate-ping shadow-lg shadow-red-500/50";
+      if (statusText) statusText.innerText = "현재: 감시 모드 작동 중";
+    } else {
+      card.className = "glass-card card-border-amber p-4 rounded-2xl flex items-center justify-between transition-all shadow-xl";
+      if (icon) icon.innerText = "🅿️";
+      title.className = "text-sm font-extrabold text-amber-500";
+      if (dot) dot.className = "w-3 h-3 rounded-full bg-amber-500 shadow-lg shadow-amber-500/50";
+      if (statusText) statusText.innerText = "현재: 주차 중";
+    }
+  }
+
+  // 순차 주행 경로 HTML 생성
+  function buildSequentialRouteHtml(tripsArray) {
+    if (!tripsArray || tripsArray.length === 0) return "";
+    const sorted = [...tripsArray].sort((a, b) => a.timestamp - b.timestamp);
+    let routePoints = [];
+    sorted.forEach((trip, idx) => {
+      if (idx === 0) routePoints.push(cleanAddress(trip.startDong));
+      routePoints.push(cleanAddress(trip.endDong));
+    });
+    let uniqueRoute = [];
+    routePoints.forEach((pt, i) => {
+      if (i === 0 || pt !== routePoints[i - 1]) uniqueRoute.push(pt);
+    });
+
+    return uniqueRoute
+      .map(p => `<span class="address-tag font-bold text-gray-200">${p}</span>`)
+      .join(' <span class="text-indigo-400 font-extrabold">→</span> ');
+  }
+
+  // 차량 데이터 UI 반영
+  function loadVehicleData() {
+    if (!vehicleRows || vehicleRows.length === 0) return;
+
+    const latest = vehicleRows[0];
+    const batVal = latest.battery_level ?? 0;
+    const odoVal = Math.round(latest.odometer ?? 0);
+    const updateDate = new Date(latest.updated_at || Date.now());
+
+    const timeEl = document.getElementById('v-last-time');
+    const batEl = document.getElementById('v-battery-val');
+    const odoEl = document.getElementById('v-odometer-val');
+
+    if (timeEl) timeEl.innerText = `${String(updateDate.getHours()).padStart(2,'0')}:${String(updateDate.getMinutes()).padStart(2,'0')} 기준 🔄`;
+    if (batEl) batEl.innerText = `${batVal}%`;
+    if (odoEl) odoEl.innerText = `${odoVal.toLocaleString()} km`;
+
+    let rawObj = latest.raw_data;
+    if (typeof rawObj === 'string') { 
+      try { rawObj = JSON.parse(rawObj); } catch(e){ rawObj = {}; } 
+    } else { 
+      rawObj = rawObj || {}; 
+    }
+
+    // 외기 온도 소수점 절삭 적용
+    const outsideTemp = latest.outside_temp ?? rawObj?.climate_state?.outside_temp;
+    if (outsideTemp !== undefined && outsideTemp !== null) {
+      const tempEl = document.getElementById('v-outside-temp');
+      if (tempEl) tempEl.innerText = `🌡️ 외기: ${Math.round(outsideTemp)}°C`;
+    }
+
+    // TPMS 공기압
+    let fl = latest.tpms_fl || rawObj?.vehicle_state?.tpms_pressure_fl || rawObj?.tpms?.fl || rawObj?.tpms_pressure_fl || 42;
+    let fr = latest.tpms_fr || rawObj?.vehicle_state?.tpms_pressure_fr || rawObj?.tpms?.fr || rawObj?.tpms_pressure_fr || 42;
+    let rl = latest.tpms_rl || rawObj?.vehicle_state?.tpms_pressure_rl || rawObj?.tpms?.rl || rawObj?.tpms_pressure_rl || 41;
+    let rr = latest.tpms_rr || rawObj?.vehicle_state?.tpms_pressure_rr || rawObj?.tpms?.rr || rawObj?.tpms_pressure_rr || 41;
+
+    const toPsi = (v) => (v > 0 && v < 10) ? Math.round(v * 14.5038) : Math.round(v);
+
+    if (document.getElementById('tpms-fl')) document.getElementById('tpms-fl').innerText = `${toPsi(fl)} psi`;
+    if (document.getElementById('tpms-fr')) document.getElementById('tpms-fr').innerText = `${toPsi(fr)} psi`;
+    if (document.getElementById('tpms-rl')) document.getElementById('tpms-rl').innerText = `${toPsi(rl)} psi`;
+    if (document.getElementById('tpms-rr')) document.getElementById('tpms-rr').innerText = `${toPsi(rr)} psi`;
+
+    // 차량 동적 상태 카드 업데이트
+    const isRecentDriving = (allTrips.length > 0 && (Date.now() - allTrips[0].timestamp < 5 * 60 * 1000));
+    const isCharging = rawObj?.charge_state?.charging_state === 'Charging' || (rawObj?.charge_state?.charger_power || 0) > 0;
+    const isSentry = latest.sentry_mode === true || latest.is_sentry === true || rawObj?.vehicle_state?.sentry_mode === true;
+    const currentSpeed = rawObj?.drive_state?.speed || 0;
+
+    if (isRecentDriving || currentSpeed > 0) {
+      updateDynamicVehicleCard({ isDriving: true, speed: currentSpeed });
+    } else if (isCharging) {
+      updateDynamicVehicleCard({ isCharging: true, chargePower: rawObj?.charge_state?.charger_power, batteryLevel: batVal });
+    } else if (isSentry) {
+      updateDynamicVehicleCard({ isSentry: true });
+    } else {
+      let lastTripEndMs = allTrips.length > 0 ? allTrips[0].timestamp : updateDate.getTime();
+      let parkingBaseMs = Math.max(lastTripEndMs, updateDate.getTime());
+      const parkDiffMs = Math.max(0, Date.now() - parkingBaseMs);
+      const pHours = Math.floor(parkDiffMs / 3600000);
+      const pMins = Math.floor((parkDiffMs % 3600000) / 60000);
+
+      updateDynamicVehicleCard({ isDriving: false, isCharging: false, isSentry: false });
+      const durTitle = document.getElementById('v-state-duration-title');
+      const startTime = document.getElementById('v-state-start-time');
+      if (durTitle) durTitle.innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
+      if (startTime) startTime.innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
+    }
+  }
+
+  // AM/PM 시간 포맷 헬퍼 함수
+  function formatTimeAmPm(dateObj) {
+    if (!dateObj || isNaN(dateObj.getTime())) return '-';
+    let hours = dateObj.getHours();
+    const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+  }
+
 
 // 💡 스마트 도착지-캘린더 매칭 함수 (도로명/번지수 가산점 기반 정밀 교정 버전)
 function matchCalendarToTrip(trip, dayEvents, usedEventIds = new Set()) {
@@ -1907,7 +1930,7 @@ if (typeof allTrips !== 'undefined' && allTrips && allTrips.length > 0) {
       `);
     }
 
-    // 이미 매칭된 캘린더 ID 추적용 Set (동교리 순대국 / 워크업 중복 매칭 방지)
+    // 이미 매칭된 캘린더 ID 추적용 Set
     const usedEventIds = new Set();
 
     // 개별 경로 + 도착지 캘린더 정밀 매칭
@@ -1950,259 +1973,267 @@ if (typeof allTrips !== 'undefined' && allTrips && allTrips.length > 0) {
     });
   }
 
+  // ==========================================
+  // [2] 최근 상태 히스토리 타임라인 (줄바꿈 방지 & AM/PM 적용)
+  // ==========================================
+  const timelineBox = document.getElementById('timeline-container');
+  if (timelineBox) {
+    timelineBox.innerHTML = '';
 
-// ==========================================
-// [2] 최근 상태 히스토리 타임라인 (줄바꿈 방지 & AM/PM 적용)
-// ==========================================
-const timelineBox = document.getElementById('timeline-container');
-if (timelineBox) {
-  timelineBox.innerHTML = '';
+    let eventsGrouped = {};
+    let validEventsCount = 0;
 
-  let eventsGrouped = {};
-  let validEventsCount = 0;
+    if (typeof vehicleRows !== 'undefined' && vehicleRows && vehicleRows.length > 1) {
+      for (let i = 0; i < vehicleRows.length - 1 && validEventsCount < 20; i++) {
+        const cur = vehicleRows[i], prev = vehicleRows[i+1];
+        const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
+        const odoDiff = Math.round((cur.odometer || 0) - (prev.odometer || 0));
 
-  if (typeof vehicleRows !== 'undefined' && vehicleRows && vehicleRows.length > 1) {
-    for (let i = 0; i < vehicleRows.length - 1 && validEventsCount < 20; i++) {
-      const cur = vehicleRows[i], prev = vehicleRows[i+1];
-      const batDiff = (cur.battery_level || 0) - (prev.battery_level || 0);
-      const odoDiff = Math.round((cur.odometer || 0) - (prev.odometer || 0));
+        if (odoDiff >= 2 || batDiff > 0) {
+          const curDate = new Date(cur.updated_at);
+          const dateKey = `${curDate.getFullYear()}-${String(curDate.getMonth() + 1).padStart(2,'0')}-${String(curDate.getDate()).padStart(2,'0')}`;
 
-      if (odoDiff >= 2 || batDiff > 0) {
-        const curDate = new Date(cur.updated_at);
-        const dateKey = `${curDate.getFullYear()}-${String(curDate.getMonth() + 1).padStart(2,'0')}-${String(curDate.getDate()).padStart(2,'0')}`;
+          if (!eventsGrouped[dateKey]) eventsGrouped[dateKey] = [];
 
-        if (!eventsGrouped[dateKey]) eventsGrouped[dateKey] = [];
+          const isDrive = odoDiff >= 2;
+          const matchedTrip = isDrive ? (typeof allTrips !== 'undefined' && allTrips ? allTrips.find(t => Math.abs(t.timestamp - curDate.getTime()) < 3600000) : null) : null;
+          let rawCur = cur.raw_data;
+          if (typeof rawCur === 'string') { try { rawCur = JSON.parse(rawCur); } catch(e){} }
+          const evtTemp = cur.outside_temp ?? rawCur?.climate_state?.outside_temp ?? matchedTrip?.outsideTemp;
 
-        const isDrive = odoDiff >= 2;
-        const matchedTrip = isDrive ? (typeof allTrips !== 'undefined' && allTrips ? allTrips.find(t => Math.abs(t.timestamp - curDate.getTime()) < 3600000) : null) : null;
-        let rawCur = cur.raw_data;
-        if (typeof rawCur === 'string') { try { rawCur = JSON.parse(rawCur); } catch(e){} }
-        const evtTemp = cur.outside_temp ?? rawCur?.climate_state?.outside_temp ?? matchedTrip?.outsideTemp;
+          // 🕒 AM / PM 시간 포맷 변환 (외부 formatTimeAmPm 사용)
+          const timeAmPmStr = typeof formatTimeAmPm === 'function' ? formatTimeAmPm(curDate) : curDate.toLocaleTimeString();
 
-        // 🕒 AM / PM 시간 포맷 변환
-        const timeAmPmStr = formatTimeAmPm(curDate);
-
-        eventsGrouped[dateKey].push({
-          isDrive: isDrive,
-          tripId: matchedTrip ? matchedTrip.id : null,
-          timeStr: timeAmPmStr,
-          odoDiff: odoDiff,
-          batDiff: batDiff,
-          startDong: matchedTrip ? cleanAddress(matchedTrip.startDong) : "출발지",
-          endDong: matchedTrip ? cleanAddress(matchedTrip.endDong) : "도착지",
-          durationMin: matchedTrip ? matchedTrip.durationMin : null,
-          startBat: matchedTrip ? matchedTrip.startBat : null,
-          endBat: matchedTrip ? matchedTrip.endBat : null,
-          bat: cur.battery_level,
-          odo: Math.round(cur.odometer || 0),
-          outsideTemp: evtTemp
-        });
-        validEventsCount++;
+          eventsGrouped[dateKey].push({
+            isDrive: isDrive,
+            tripId: matchedTrip ? matchedTrip.id : null,
+            timeStr: timeAmPmStr,
+            odoDiff: odoDiff,
+            batDiff: batDiff,
+            startDong: matchedTrip ? (typeof cleanAddress === 'function' ? cleanAddress(matchedTrip.startDong) : matchedTrip.startDong) : "출발지",
+            endDong: matchedTrip ? (typeof cleanAddress === 'function' ? cleanAddress(matchedTrip.endDong) : matchedTrip.endDong) : "도착지",
+            durationMin: matchedTrip ? matchedTrip.durationMin : null,
+            startBat: matchedTrip ? matchedTrip.startBat : null,
+            endBat: matchedTrip ? matchedTrip.endBat : null,
+            bat: cur.battery_level,
+            odo: Math.round(cur.odometer || 0),
+            outsideTemp: evtTemp
+          });
+          validEventsCount++;
+        }
       }
     }
-  }
 
-  const groupKeys = Object.keys(eventsGrouped);
+    const groupKeys = Object.keys(eventsGrouped);
 
-  if (groupKeys.length === 0) {
-    timelineBox.innerHTML = `
-      <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 text-center text-xs text-gray-500">
-        최근 주행 및 충전 상태 히스토리 기록이 없습니다.
-      </div>
-    `;
-  } else {
-    groupKeys.forEach(dateHeader => {
-      let groupHtml = `
-        <div class="glass-card p-3.5 rounded-2xl space-y-2.5 shadow-lg overflow-hidden">
-          <div onclick="jumpToDrivingDate('${dateHeader}')" class="flex items-center justify-between border-b border-gray-800 pb-2 cursor-pointer hover:opacity-80 transition">
-            <span class="text-xs font-black text-indigo-400 bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/50">📅 ${dateHeader}</span>
-            <span class="text-[10px] text-gray-500 underline font-medium">해당 날짜 전체 지도 보기 ▶</span>
-          </div>
-          <div class="space-y-2 pt-1">
+    if (groupKeys.length === 0) {
+      timelineBox.innerHTML = `
+        <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 text-center text-xs text-gray-500">
+          최근 주행 및 충전 상태 히스토리 기록이 없습니다.
+        </div>
       `;
+    } else {
+      groupKeys.forEach(dateHeader => {
+        let groupHtml = `
+          <div class="glass-card p-3.5 rounded-2xl space-y-2.5 shadow-lg overflow-hidden">
+            <div onclick="jumpToDrivingDate('${dateHeader}')" class="flex items-center justify-between border-b border-gray-800 pb-2 cursor-pointer hover:opacity-80 transition">
+              <span class="text-xs font-black text-indigo-400 bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/50">📅 ${dateHeader}</span>
+              <span class="text-[10px] text-gray-500 underline font-medium">해당 날짜 전체 지도 보기 ▶</span>
+            </div>
+            <div class="space-y-2 pt-1">
+        `;
 
-      eventsGrouped[dateHeader].forEach(evt => {
-        const badgeClass = evt.isDrive ? "bg-blue-600/30 text-blue-300 border-blue-500/40" : "bg-emerald-600/30 text-emerald-300 border-emerald-500/40";
-        const icon = evt.isDrive ? "🚗" : "⚡";
-        const tempText = evt.outsideTemp !== undefined && evt.outsideTemp !== null ? `${Math.round(evt.outsideTemp)}°C` : '-';
+        eventsGrouped[dateHeader].forEach(evt => {
+          const badgeClass = evt.isDrive ? "bg-blue-600/30 text-blue-300 border-blue-500/40" : "bg-emerald-600/30 text-emerald-300 border-emerald-500/40";
+          const icon = evt.isDrive ? "🚗" : "⚡";
+          const tempText = evt.outsideTemp !== undefined && evt.outsideTemp !== null ? `${Math.round(evt.outsideTemp)}°C` : '-';
 
-        if (evt.isDrive) {
-          let batDetail = `${Math.abs(evt.batDiff)}%`;
-          if (evt.startBat && evt.endBat) batDetail += ` (${evt.startBat}% → ${evt.endBat}%)`;
+          if (evt.isDrive) {
+            let batDetail = `${Math.abs(evt.batDiff)}%`;
+            if (evt.startBat && evt.endBat) batDetail += ` (${evt.startBat}% → ${evt.endBat}%)`;
 
-          const clickHandler = evt.tripId ? `onclick="jumpToSingleTrip('${evt.tripId}')"` : `onclick="jumpToDrivingDate('${dateHeader}')"`;
+            const clickHandler = evt.tripId ? `onclick="jumpToSingleTrip('${evt.tripId}')"` : `onclick="jumpToDrivingDate('${dateHeader}')"`;
 
-          groupHtml += `
-            <div ${clickHandler} class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800/90 space-y-1 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99] overflow-hidden">
-              <div class="font-bold text-gray-100 flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
-                <span class="px-1.5 py-0.5 rounded-md text-[9px] font-bold border shrink-0 ${badgeClass}">${icon} 주행</span>
-                <span class="text-gray-400 text-[10px] font-mono shrink-0">${evt.timeStr}</span>
-                <div class="flex items-center gap-1 truncate text-xs min-w-0">
-                  <span class="address-tag text-blue-300 font-bold truncate">${evt.startDong}</span>
-                  <span class="text-indigo-400 font-extrabold shrink-0">→</span>
-                  <span class="address-tag text-emerald-300 font-bold truncate">${evt.endDong}</span>
+            groupHtml += `
+              <div ${clickHandler} class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800/90 space-y-1 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99] overflow-hidden">
+                <div class="font-bold text-gray-100 flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
+                  <span class="px-1.5 py-0.5 rounded-md text-[9px] font-bold border shrink-0 ${badgeClass}">${icon} 주행</span>
+                  <span class="text-gray-400 text-[10px] font-mono shrink-0">${evt.timeStr}</span>
+                  <div class="flex items-center gap-1 truncate text-xs min-w-0">
+                    <span class="address-tag text-blue-300 font-bold truncate">${evt.startDong}</span>
+                    <span class="text-indigo-400 font-extrabold shrink-0">→</span>
+                    <span class="address-tag text-emerald-300 font-bold truncate">${evt.endDong}</span>
+                  </div>
+                </div>
+                <div class="text-gray-400 text-[11px] leading-relaxed flex justify-between items-center whitespace-nowrap">
+                  <span>주행 ${evt.odoDiff}km (${evt.durationMin ? evt.durationMin + '분' : '-'}) | 🔋 ${batDetail}</span>
+                  <span class="text-amber-400 font-bold shrink-0 ml-1">🌡️ ${tempText}</span>
                 </div>
               </div>
-              <div class="text-gray-400 text-[11px] leading-relaxed flex justify-between items-center whitespace-nowrap">
-                <span>주행 ${evt.odoDiff}km (${evt.durationMin ? evt.durationMin + '분' : '-'}) | 🔋 ${batDetail}</span>
-                <span class="text-amber-400 font-bold shrink-0 ml-1">🌡️ ${tempText}</span>
+            `;
+          } else {
+            groupHtml += `
+              <div class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800/90 flex justify-between items-center text-xs shadow-md whitespace-nowrap overflow-hidden">
+                <div class="flex items-center space-x-2 shrink-0">
+                  <span class="px-1.5 py-0.5 rounded-md text-[9px] font-bold border ${badgeClass}">${icon} 충전</span>
+                  <span class="text-gray-400 text-[10px] font-mono">${evt.timeStr}</span>
+                </div>
+                <div class="text-right truncate min-w-0">
+                  <span class="font-bold text-emerald-400 text-[11px]">충전 +${evt.batDiff}% (+${((evt.batDiff/100)*60).toFixed(1)}kWh)</span>
+                  <span class="text-[10px] text-gray-500 block truncate">🔋 ${evt.bat}% | 📍 ${evt.odo.toLocaleString()}km | 🌡️ ${tempText}</span>
+                </div>
               </div>
-            </div>
-          `;
-        } else {
-          groupHtml += `
-            <div class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800/90 flex justify-between items-center text-xs shadow-md whitespace-nowrap overflow-hidden">
-              <div class="flex items-center space-x-2 shrink-0">
-                <span class="px-1.5 py-0.5 rounded-md text-[9px] font-bold border ${badgeClass}">${icon} 충전</span>
-                <span class="text-gray-400 text-[10px] font-mono">${evt.timeStr}</span>
-              </div>
-              <div class="text-right truncate min-w-0">
-                <span class="font-bold text-emerald-400 text-[11px]">충전 +${evt.batDiff}% (+${((evt.batDiff/100)*60).toFixed(1)}kWh)</span>
-                <span class="text-[10px] text-gray-500 block truncate">🔋 ${evt.bat}% | 📍 ${evt.odo.toLocaleString()}km | 🌡️ ${tempText}</span>
-              </div>
-            </div>
-          `;
-        }
-      });
+            `;
+          }
+        });
 
-      groupHtml += `</div></div>`;
-      timelineBox.insertAdjacentHTML('beforeend', groupHtml);
-    });
+        groupHtml += `</div></div>`;
+        timelineBox.insertAdjacentHTML('beforeend', groupHtml);
+      });
+    }
   }
 }
 
+// ==========================================
+// [3] 필터 제어 함수 모음
+// ==========================================
+function setFilterMode(mode) {
+  currentFilterMode = mode;
+  ['single', 'daily', 'weekly', 'monthly', 'quarterly', 'half', 'yearly'].forEach(m => {
+    const btn = document.getElementById(`btn-mode-${m}`);
+    if (btn) btn.className = m === mode ? "px-3 py-1.5 rounded-xl bg-blue-600 text-white font-bold whitespace-nowrap shadow-md" : "px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 hover:text-white font-bold whitespace-nowrap";
+  });
+
+  const container = document.getElementById('dynamicFilterControls');
+  if (!allTrips || allTrips.length === 0) { container.innerHTML = `<span class="text-xs text-gray-500">데이터가 없습니다.</span>`; return; }
+
+  const years = [...new Set(allTrips.map(t => new Date(t.timestamp).getFullYear()))].sort().reverse();
+  if (years.length === 0) years.push(2026, 2025);
+  const yearOpts = years.map(y => `<option value="${y}">${y}년</option>`).join('');
+
+  if (mode === 'single') {
+    const opts = allTrips.map(t => `<option value="${t.id}">${new Date(t.timestamp).toLocaleString('ko-KR')} (${t.moveKM.toFixed(1)}km)</option>`).join('');
+    container.innerHTML = `<select id="ctrl-select" onchange="renderDrivingData()" class="w-full bg-gray-900 text-white rounded-xl p-2.5 text-xs border border-gray-800 font-bold focus:border-blue-500 outline-none">${opts}</select>`;
+  } else if (mode === 'daily') {
+    const days = [...new Set(allTrips.map(t => {
+      const d = new Date(t.timestamp);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }))];
+    const opts = days.map(d => `<option value="${d}">${d}</option>`).join('');
+    container.innerHTML = `<select id="ctrl-sub-select" onchange="renderDrivingData()" class="w-full bg-gray-900 text-white rounded-xl p-2.5 text-xs border border-gray-800 font-extrabold focus:border-blue-500 outline-none">${opts}</select>`;
+  } else if (mode === 'weekly') {
+    const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
+    container.innerHTML = `
+      <div class="flex gap-2 text-xs">
+        <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
+        <select id="ctrl-month" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${monthOpts}</select>
+        <select id="ctrl-week" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">
+          <option value="1">1주차</option><option value="2">2주차</option><option value="3">3주차</option><option value="4">4주차</option><option value="5">5주차</option>
+        </select>
+      </div>
+    `;
+    if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = new Date(allTrips[0].timestamp).getMonth() + 1;
+  } else if (mode === 'monthly') {
+    const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
+    container.innerHTML = `
+      <div class="flex gap-2 text-xs">
+        <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
+        <select id="ctrl-month" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${monthOpts}</select>
+      </div>
+    `;
+    if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = new Date(allTrips[0].timestamp).getMonth() + 1;
+  } else if (mode === 'quarterly') {
+    container.innerHTML = `
+      <div class="flex gap-2 text-xs">
+        <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
+        <select id="ctrl-quarter" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">
+          <option value="1">1분기 (1~3월)</option><option value="2">2분기 (4~6월)</option><option value="3">3분기 (7~9월)</option><option value="4">4분기 (10~12월)</option>
+        </select>
+      </div>
+    `;
+  } else if (mode === 'half') {
+    container.innerHTML = `
+      <div class="flex gap-2 text-xs">
+        <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
+        <select id="ctrl-half" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">
+          <option value="1">상반기 (1~6월)</option><option value="2">하반기 (7~12월)</option>
+        </select>
+      </div>
+    `;
+  } else if (mode === 'yearly') {
+    container.innerHTML = `<select id="ctrl-year" onchange="renderDrivingData()" class="w-full bg-gray-900 text-white rounded-xl p-2.5 text-xs border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>`;
+  }
+  renderDrivingData();
 }
-    
 
-    function setFilterMode(mode) {
-      currentFilterMode = mode;
-      ['single', 'daily', 'weekly', 'monthly', 'quarterly', 'half', 'yearly'].forEach(m => {
-        const btn = document.getElementById(`btn-mode-${m}`);
-        if (btn) btn.className = m === mode ? "px-3 py-1.5 rounded-xl bg-blue-600 text-white font-bold whitespace-nowrap shadow-md" : "px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 hover:text-white font-bold whitespace-nowrap";
-      });
-
-      const container = document.getElementById('dynamicFilterControls');
-      if (!allTrips || allTrips.length === 0) { container.innerHTML = `<span class="text-xs text-gray-500">데이터가 없습니다.</span>`; return; }
-
-      const years = [...new Set(allTrips.map(t => new Date(t.timestamp).getFullYear()))].sort().reverse();
-      if (years.length === 0) years.push(2026, 2025);
-      const yearOpts = years.map(y => `<option value="${y}">${y}년</option>`).join('');
-
-      if (mode === 'single') {
-        const opts = allTrips.map(t => `<option value="${t.id}">${new Date(t.timestamp).toLocaleString('ko-KR')} (${t.moveKM.toFixed(1)}km)</option>`).join('');
-        container.innerHTML = `<select id="ctrl-select" onchange="renderDrivingData()" class="w-full bg-gray-900 text-white rounded-xl p-2.5 text-xs border border-gray-800 font-bold focus:border-blue-500 outline-none">${opts}</select>`;
-      } else if (mode === 'daily') {
-        const days = [...new Set(allTrips.map(t => {
-          const d = new Date(t.timestamp);
-          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        }))];
-        const opts = days.map(d => `<option value="${d}">${d}</option>`).join('');
-        container.innerHTML = `<select id="ctrl-sub-select" onchange="renderDrivingData()" class="w-full bg-gray-900 text-white rounded-xl p-2.5 text-xs border border-gray-800 font-extrabold focus:border-blue-500 outline-none">${opts}</select>`;
-      } else if (mode === 'weekly') {
-        const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
-        container.innerHTML = `
-          <div class="flex gap-2 text-xs">
-            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
-            <select id="ctrl-month" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${monthOpts}</select>
-            <select id="ctrl-week" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">
-              <option value="1">1주차</option><option value="2">2주차</option><option value="3">3주차</option><option value="4">4주차</option><option value="5">5주차</option>
-            </select>
-          </div>
-        `;
-        if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = new Date(allTrips[0].timestamp).getMonth() + 1;
-      } else if (mode === 'monthly') {
-        const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
-        container.innerHTML = `
-          <div class="flex gap-2 text-xs">
-            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
-            <select id="ctrl-month" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${monthOpts}</select>
-          </div>
-        `;
-        if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = new Date(allTrips[0].timestamp).getMonth() + 1;
-      } else if (mode === 'quarterly') {
-        container.innerHTML = `
-          <div class="flex gap-2 text-xs">
-            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
-            <select id="ctrl-quarter" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">
-              <option value="1">1분기 (1~3월)</option><option value="2">2분기 (4~6월)</option><option value="3">3분기 (7~9월)</option><option value="4">4분기 (10~12월)</option>
-            </select>
-          </div>
-        `;
-      } else if (mode === 'half') {
-        container.innerHTML = `
-          <div class="flex gap-2 text-xs">
-            <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
-            <select id="ctrl-half" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">
-              <option value="1">상반기 (1~6월)</option><option value="2">하반기 (7~12월)</option>
-            </select>
-          </div>
-        `;
-      } else if (mode === 'yearly') {
-        container.innerHTML = `<select id="ctrl-year" onchange="renderDrivingData()" class="w-full bg-gray-900 text-white rounded-xl p-2.5 text-xs border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>`;
-      }
-      renderDrivingData();
+function shiftDrivingFilter(offset) {
+  if (currentFilterMode === 'daily') {
+    const sel = document.getElementById('ctrl-sub-select');
+    if (sel && sel.selectedIndex !== -1) {
+      const nextIdx = sel.selectedIndex - offset;
+      if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
     }
+  } else if (currentFilterMode === 'weekly') {
+    const ySel = document.getElementById('ctrl-year'), mSel = document.getElementById('ctrl-month'), wSel = document.getElementById('ctrl-week');
+    if (!ySel || !mSel || !wSel) return;
+    let y = Number(ySel.value), m = Number(mSel.value), w = Number(wSel.value) + offset;
 
-    function shiftDrivingFilter(offset) {
-      if (currentFilterMode === 'daily') {
-        const sel = document.getElementById('ctrl-sub-select');
-        if (sel && sel.selectedIndex !== -1) {
-          const nextIdx = sel.selectedIndex - offset;
-          if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
-        }
-      } else if (currentFilterMode === 'weekly') {
-        const ySel = document.getElementById('ctrl-year'), mSel = document.getElementById('ctrl-month'), wSel = document.getElementById('ctrl-week');
-        if (!ySel || !mSel || !wSel) return;
-        let y = Number(ySel.value), m = Number(mSel.value), w = Number(wSel.value) + offset;
+    if (w < 1) { m -= 1; if (m < 1) { m = 12; y -= 1; } w = 5; }
+    else if (w > 5) { m += 1; if (m > 12) { m = 1; y += 1; } w = 1; }
 
-        if (w < 1) { m -= 1; if (m < 1) { m = 12; y -= 1; } w = 5; }
-        else if (w > 5) { m += 1; if (m > 12) { m = 1; y += 1; } w = 1; }
+    if (ySel) ySel.value = y; if (mSel) mSel.value = m; if (wSel) wSel.value = w;
+    renderDrivingData();
+  } else if (currentFilterMode === 'monthly') {
+    const ySel = document.getElementById('ctrl-year'), mSel = document.getElementById('ctrl-month');
+    if (!ySel || !mSel) return;
+    let y = Number(ySel.value), m = Number(mSel.value) + offset;
 
-        if (ySel) ySel.value = y; if (mSel) mSel.value = m; if (wSel) wSel.value = w;
-        renderDrivingData();
-      } else if (currentFilterMode === 'monthly') {
-        const ySel = document.getElementById('ctrl-year'), mSel = document.getElementById('ctrl-month');
-        if (!ySel || !mSel) return;
-        let y = Number(ySel.value), m = Number(mSel.value) + offset;
+    if (m < 1) { m = 12; y -= 1; } else if (m > 12) { m = 1; y += 1; }
+    if (ySel) ySel.value = y; if (mSel) mSel.value = m;
+    renderDrivingData();
+  } else if (currentFilterMode === 'quarterly') {
+    const ySel = document.getElementById('ctrl-year'), qSel = document.getElementById('ctrl-quarter');
+    if (!ySel || !qSel) return;
+    let y = Number(ySel.value), q = Number(qSel.value) + offset;
 
-        if (m < 1) { m = 12; y -= 1; } else if (m > 12) { m = 1; y += 1; }
-        if (ySel) ySel.value = y; if (mSel) mSel.value = m;
-        renderDrivingData();
-      } else if (currentFilterMode === 'quarterly') {
-        const ySel = document.getElementById('ctrl-year'), qSel = document.getElementById('ctrl-quarter');
-        if (!ySel || !qSel) return;
-        let y = Number(ySel.value), q = Number(qSel.value) + offset;
+    if (q < 1) { q = 4; y -= 1; } else if (q > 4) { q = 1; y += 1; }
+    if (ySel) ySel.value = y; if (qSel) qSel.value = q;
+    renderDrivingData();
+  } else if (currentFilterMode === 'half') {
+    const ySel = document.getElementById('ctrl-year'), hSel = document.getElementById('ctrl-half');
+    if (!ySel || !hSel) return;
+    let y = Number(ySel.value), h = Number(hSel.value);
 
-        if (q < 1) { q = 4; y -= 1; } else if (q > 4) { q = 1; y += 1; }
-        if (ySel) ySel.value = y; if (qSel) qSel.value = q;
-        renderDrivingData();
-      } else if (currentFilterMode === 'half') {
-        const ySel = document.getElementById('ctrl-year'), hSel = document.getElementById('ctrl-half');
-        if (!ySel || !hSel) return;
-        let y = Number(ySel.value), h = Number(hSel.value);
+    if (offset === -1) { if (h === 1) { h = 2; y -= 1; } else { h = 1; } } 
+    else { if (h === 2) { h = 1; y += 1; } else { h = 2; } }
 
-        if (offset === -1) { if (h === 1) { h = 2; y -= 1; } else { h = 1; } } 
-        else { if (h === 2) { h = 1; y += 1; } else { h = 2; } }
-
-        if (ySel) ySel.value = y; if (hSel) hSel.value = h;
-        renderDrivingData();
-      } else if (currentFilterMode === 'yearly' || currentFilterMode === 'single') {
-        const sel = document.getElementById(currentFilterMode === 'yearly' ? 'ctrl-year' : 'ctrl-select');
-        if (sel && sel.selectedIndex !== -1) {
-          const nextIdx = sel.selectedIndex - offset;
-          if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
-        }
-      }
+    if (ySel) ySel.value = y; if (hSel) hSel.value = h;
+    renderDrivingData();
+  } else if (currentFilterMode === 'yearly' || currentFilterMode === 'single') {
+    const sel = document.getElementById(currentFilterMode === 'yearly' ? 'ctrl-year' : 'ctrl-select');
+    if (sel && sel.selectedIndex !== -1) {
+      const nextIdx = sel.selectedIndex - offset;
+      if (nextIdx >= 0 && nextIdx < sel.options.length) { sel.selectedIndex = nextIdx; renderDrivingData(); }
     }
+  }
+}
 
-    function clearMapPolylines() {
-      currentPolylines.forEach(p => p.setMap(null));
-      currentPolylines = [];
-      if (currentInfoWindow) currentInfoWindow.close();
-    }
+function clearMapPolylines() {
+  if (typeof currentPolylines !== 'undefined' && Array.isArray(currentPolylines)) {
+    currentPolylines.forEach(p => p.setMap(null));
+    currentPolylines = [];
+  }
+  if (typeof currentInfoWindow !== 'undefined' && currentInfoWindow) {
+    currentInfoWindow.close();
+  }
+}
 
+
+// 전역 인포윈도우 참조 안전성 확보
+currentInfoWindow = currentInfoWindow || null;
+
+// [6]
 function highlightSingleTripOnMap(tripId) {
-  // 1. 데이터와 지도 객체 존재 여부 방어 코드
   if (!allTrips || allTrips.length === 0) return;
   
   const targetTrip = allTrips.find(t => t.id === tripId);
@@ -2237,10 +2268,10 @@ function highlightSingleTripOnMap(tripId) {
   polyline.setMap(map);
   currentPolylines.push(polyline);
 
-  // 2. IIFE 클로저를 통한 스코프 오염 방지
+  // IIFE 클로저를 통한 스코프 오염 방지
   (function(currentTrip) {
     kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
-      if (typeof currentInfoWindow !== 'undefined' && currentInfoWindow) {
+      if (currentInfoWindow) {
         currentInfoWindow.close();
       }
 
@@ -2248,7 +2279,10 @@ function highlightSingleTripOnMap(tripId) {
       if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
       let resolvedTemp = currentTrip.outside_temp ?? currentTrip.outsideTemp ?? rawT?.climate_state?.outside_temp ?? rawT?.outside_temp;
       
-      const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp)) ? `${Math.round(Number(resolvedTemp))}°C` : '-';
+      // 0°C 정상 출력을 위한 조건 수정
+      const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp)) 
+        ? `${Math.round(Number(resolvedTemp))}°C` 
+        : '-';
       const timeStr = new Date(currentTrip.timestamp).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
       const kwh = ((currentTrip.useBattery / 100) * 60);
       const eff = kwh > 0 ? (currentTrip.moveKM / kwh).toFixed(2) : "0.00";
@@ -2280,6 +2314,82 @@ function highlightSingleTripOnMap(tripId) {
 }
 
 
+// ============================================================
+// 📅 [1] 날짜 선택 및 과거 데이터 자동 로딩 핸들러
+// ============================================================
+
+async function handleTripDateSelect(selectedDateStr) {
+  if (!selectedDateStr) return false;
+
+  const targetDate = new Date(selectedDateStr);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  // 30일 이전 날짜이고 메모리(allTrips)에 데이터가 없는 경우
+  if (targetDate < thirtyDaysAgo) {
+    const hasData = allTrips.some(trip => {
+      const timeStr = trip.start_time || trip.timestamp;
+      if (!timeStr) return false;
+      const d = new Date(timeStr);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}` === selectedDateStr;
+    });
+
+    if (!hasData && typeof supabaseClient !== 'undefined' && supabaseClient) {
+      console.log(`📜 ${selectedDateStr} 과거 기록 자동 조회 중...`);
+      
+      // KST 타임존 고려 ISO 범위 생성
+      const startOfDay = new Date(`${selectedDateStr}T00:00:00+09:00`).toISOString();
+      const endOfDay = new Date(`${selectedDateStr}T23:59:59+09:00`).toISOString();
+
+      const { data, error } = await supabaseClient
+        .from('tesla_trips')
+        .select('*')
+        .gte('start_time', startOfDay)
+        .lte('start_time', endOfDay)
+        .order('start_time', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        const existingIds = new Set(allTrips.map(t => t.id || t.start_time));
+        let addedCount = 0;
+        data.forEach(item => {
+          if (!existingIds.has(item.id || item.start_time)) {
+            allTrips.push(item);
+            addedCount++;
+          }
+        });
+        return addedCount > 0;
+      }
+    }
+  }
+  return false;
+}
+
+async function onSubSelectDateChange(e) {
+  const selectedDate = e?.target?.value;
+  if (!selectedDate) return;
+  
+  await handleTripDateSelect(selectedDate);
+  renderDrivingData();
+}
+
+async function jumpToDrivingDate(dateStr) {
+  currentFilterMode = 'daily';
+  const subSelect = document.getElementById('ctrl-sub-select');
+  if (subSelect) {
+    subSelect.value = dateStr;
+  }
+  
+  await handleTripDateSelect(dateStr);
+  renderDrivingData();
+}
+
+
+// ============================================================
+// 📊 [2] 메인 렌더링 함수
+// ============================================================
 function renderDrivingData() {
   clearMapPolylines();
   let matched = [];
@@ -2326,8 +2436,6 @@ function renderDrivingData() {
   // 📅 당일 캘린더 데이터 준비
   const selectedDay = document.getElementById('ctrl-sub-select')?.value || '';
   const dayEvents = (typeof calendarEventsMap !== 'undefined' && calendarEventsMap && selectedDay) ? (calendarEventsMap[selectedDay] || []) : [];
-  
-  // 상단 캘린더 뱃지 (주소 없이 깔끔하게 출력)
   const calBadge = (currentFilterMode === 'daily' && typeof getCalendarBadgeHtml === 'function') ? getCalendarBadgeHtml(selectedDay) : '';
 
   // 상단 날짜 선택 드롭다운 부모 요소에 뱃지 주입
@@ -2352,7 +2460,7 @@ function renderDrivingData() {
   const dailyCount = document.getElementById('daily-trips-count');
 
   if (currentFilterMode === 'daily') {
-    dailyContainer.classList.remove('hidden');
+    if (dailyContainer) dailyContainer.classList.remove('hidden');
 
     if (dailyTitle) {
       dailyTitle.innerHTML = `
@@ -2364,254 +2472,253 @@ function renderDrivingData() {
     }
     if (dailyCount) dailyCount.innerText = `${matched.length}건`;
 
-    if (matched.length === 0) {
-      dailyList.innerHTML = `<span class="text-gray-500">해당 일자의 운행 기록이 없습니다.</span>`;
-    } else {
-      // 🎯 중복 매칭 방지용 Set
-      const usedEventIds = new Set();
+    if (dailyList) {
+      if (matched.length === 0) {
+        dailyList.innerHTML = `<span class="text-gray-500">해당 일자의 운행 기록이 없습니다.</span>`;
+      } else {
+        const usedEventIds = new Set();
 
-      dailyList.innerHTML = matched.map((t, idx) => {
-        const tripDate = new Date(t.timestamp);
-        const timeStr = typeof formatTimeAmPm === 'function' 
-          ? formatTimeAmPm(tripDate) 
-          : tripDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        dailyList.innerHTML = matched.map((t, idx) => {
+          const tripDate = new Date(t.timestamp);
+          const timeStr = typeof formatTimeAmPm === 'function' 
+            ? formatTimeAmPm(tripDate) 
+            : tripDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 
-        const kwh = ((t.useBattery / 100) * 60);
-        const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
+          const kwh = ((t.useBattery / 100) * 60);
+          const eff = kwh > 0 ? (t.moveKM / kwh).toFixed(2) : "0.00";
 
-        let rawT = t.raw_data;
-        if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
+          let rawT = t.raw_data;
+          if (typeof rawT === 'string') { try { rawT = JSON.parse(rawT); } catch(e){} }
 
-        let resolvedTemp = 
-          t.outside_temp ?? 
-          t.outsideTemp ?? 
-          rawT?.climate_state?.outside_temp ?? 
-          rawT?.outside_temp;
+          let resolvedTemp = 
+            t.outside_temp ?? 
+            t.outsideTemp ?? 
+            rawT?.climate_state?.outside_temp ?? 
+            rawT?.outside_temp;
 
-        if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
-          const tripTime = tripDate.getTime();
-          if (!isNaN(tripTime)) {
-            let validVehicles = vehicleRows.filter(v => v.outside_temp !== null && v.outside_temp !== undefined);
-            if (validVehicles.length > 0) {
-              let closestVehicle = validVehicles.reduce((prev, curr) => {
-                const prevDiff = Math.abs(new Date(prev.updated_at).getTime() - tripTime);
-                const currDiff = Math.abs(new Date(curr.updated_at).getTime() - tripTime);
-                return currDiff < prevDiff ? curr : prev;
-              });
+          if ((resolvedTemp === undefined || resolvedTemp === null || isNaN(resolvedTemp)) && typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
+            const tripTime = tripDate.getTime();
+            if (!isNaN(tripTime)) {
+              let validVehicles = vehicleRows.filter(v => v.outside_temp !== null && v.outside_temp !== undefined);
+              if (validVehicles.length > 0) {
+                let closestVehicle = validVehicles.reduce((prev, curr) => {
+                  const prevDiff = Math.abs(new Date(prev.updated_at).getTime() - tripTime);
+                  const currDiff = Math.abs(new Date(curr.updated_at).getTime() - tripTime);
+                  return currDiff < prevDiff ? curr : prev;
+                });
 
-              if (closestVehicle) {
-                resolvedTemp = closestVehicle.outside_temp;
+                if (closestVehicle) {
+                  resolvedTemp = closestVehicle.outside_temp;
+                }
               }
             }
           }
-        }
 
-        const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp) && Number(resolvedTemp) !== 0) 
-          ? `${Math.round(Number(resolvedTemp))}°C` 
-          : '-';
+          // 0°C 정상 표기를 위해 조건 수정
+          const tempStr = (resolvedTemp !== undefined && resolvedTemp !== null && !isNaN(resolvedTemp)) 
+            ? `${Math.round(Number(resolvedTemp))}°C` 
+            : '-';
 
-        let batText = `${t.useBattery.toFixed(1)}%`;
-        if (t.startBat !== undefined && t.endBat !== undefined) {
-          batText += ` (${t.startBat}% → ${t.endBat}%)`;
-        }
+          let batText = `${t.useBattery.toFixed(1)}%`;
+          if (t.startBat !== undefined && t.endBat !== undefined) {
+            batText += ` (${t.startBat}% → ${t.endBat}%)`;
+          }
 
-        // 📍 도착지 장소 정밀 매칭 (주소 제외, 일정 이름만 사용)
-        const matchedEvt = (typeof matchCalendarToTrip === 'function') 
-          ? matchCalendarToTrip(t, dayEvents, usedEventIds) 
-          : null;
+          const matchedEvt = (typeof matchCalendarToTrip === 'function') 
+            ? matchCalendarToTrip(t, dayEvents, usedEventIds) 
+            : null;
 
-        return `
-          <div onclick="highlightSingleTripOnMap('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-blue-500/60 transition shadow-md text-xs active:scale-[0.99] overflow-hidden">
-            <div class="flex justify-between items-center border-b border-gray-800/80 pb-1">
-              <span class="font-extrabold text-blue-400">#${idx + 1} 운행 (${timeStr} 출발)</span>
-              <span class="font-bold text-gray-200">${t.moveKM.toFixed(1)} km / ${t.durationMin}분</span>
-            </div>
-            <div class="text-gray-200 font-medium break-keep leading-relaxed flex items-center gap-1.5 flex-wrap">
-              <span class="bg-gray-800/80 px-2 py-0.5 rounded text-blue-300 font-bold">${typeof cleanAddress === 'function' ? cleanAddress(t.startDong) : t.startDong}</span>
-              <span class="text-indigo-400 font-extrabold">→</span>
-              <span class="bg-gray-800/80 px-2 py-0.5 rounded text-emerald-300 font-bold">${typeof cleanAddress === 'function' ? cleanAddress(t.endDong) : t.endDong}</span>
-            </div>
-            <div class="text-[11px] text-gray-400 flex justify-between items-center pt-0.5">
-              <span>🔋 소모: ${batText} | 🌡️ 외기: ${tempStr}</span>
-              <span class="font-bold text-indigo-400">⚡ 전비: ${eff} km/kWh</span>
-            </div>
-
-            <!-- 📍 매칭된 도착지 일정 표시 (주소 제거 버전) -->
-            ${matchedEvt ? `
-              <div class="mt-2 pt-1.5 border-t border-purple-500/30 flex items-center gap-1.5 text-xs text-purple-200 bg-purple-950/60 p-2 rounded-lg">
-                <span class="shrink-0">📍 도착지 일정:</span>
-                <span class="font-bold text-purple-300 truncate">${matchedEvt.summary}</span>
+          return `
+            <div onclick="highlightSingleTripOnMap('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-blue-500/60 transition shadow-md text-xs active:scale-[0.99] overflow-hidden">
+              <div class="flex justify-between items-center border-b border-gray-800/80 pb-1">
+                <span class="font-extrabold text-blue-400">#${idx + 1} 운행 (${timeStr} 출발)</span>
+                <span class="font-bold text-gray-200">${t.moveKM.toFixed(1)} km / ${t.durationMin}분</span>
               </div>
-            ` : ''}
-          </div>
-        `;
-      }).join('');
+              <div class="text-gray-200 font-medium break-keep leading-relaxed flex items-center gap-1.5 flex-wrap">
+                <span class="bg-gray-800/80 px-2 py-0.5 rounded text-blue-300 font-bold">${typeof cleanAddress === 'function' ? cleanAddress(t.startDong) : t.startDong}</span>
+                <span class="text-indigo-400 font-extrabold">→</span>
+                <span class="bg-gray-800/80 px-2 py-0.5 rounded text-emerald-300 font-bold">${typeof cleanAddress === 'function' ? cleanAddress(t.endDong) : t.endDong}</span>
+              </div>
+              <div class="text-[11px] text-gray-400 flex justify-between items-center pt-0.5">
+                <span>🔋 소모: ${batText} | 🌡️ 외기: ${tempStr}</span>
+                <span class="font-bold text-indigo-400">⚡ 전비: ${eff} km/kWh</span>
+              </div>
+
+              ${matchedEvt ? `
+                <div class="mt-2 pt-1.5 border-t border-purple-500/30 flex items-center gap-1.5 text-xs text-purple-200 bg-purple-950/60 p-2 rounded-lg">
+                  <span class="shrink-0">📍 도착지 일정:</span>
+                  <span class="font-bold text-purple-300 truncate">${matchedEvt.summary}</span>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('');
+      }
     }
   } else {
-    dailyContainer.classList.add('hidden');
+    if (dailyContainer) dailyContainer.classList.add('hidden');
+  }
+
+  // 주/월/분기/반년/년 TOP 5 렌더링
+  const top5Container = document.getElementById('top5-container');
+  const top5List = document.getElementById('top5-list');
+  if (currentFilterMode !== 'single' && currentFilterMode !== 'daily') {
+    if (top5Container) top5Container.classList.remove('hidden');
+
+    let dailyGroup = {};
+    matched.forEach(t => {
+      const d = new Date(t.timestamp);
+      const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      if (!dailyGroup[dayKey]) dailyGroup[dayKey] = { dateStr: dayKey, totalDist: 0, trips: [] };
+      dailyGroup[dayKey].totalDist += t.moveKM;
+      dailyGroup[dayKey].trips.push(t);
+    });
+
+    const dailyArray = Object.values(dailyGroup).sort((a,b) => b.totalDist - a.totalDist).slice(0, 5);
+
+    if (top5List) {
+      if (dailyArray.length === 0) {
+        top5List.innerHTML = `<span class="text-gray-500">해당 기간 데이터가 없습니다.</span>`;
+      } else {
+        top5List.innerHTML = dailyArray.map((item, idx) => {
+          const formattedDist = item.totalDist.toFixed(1);
+          const routeSummary = typeof buildSequentialRouteHtml === 'function' 
+            ? buildSequentialRouteHtml(item.trips) 
+            : '';
+          return `
+            <div onclick="jumpToDrivingDate('${item.dateStr}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-amber-500/50 transition shadow-md active:scale-[0.99]">
+              <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-2">
+                  <span class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-extrabold text-[10px] flex items-center justify-center border border-amber-500/30">${idx + 1}</span>
+                  <span class="font-bold text-gray-200">${item.dateStr}</span>
+                  <span class="text-[10px] text-gray-400">(${item.trips.length}회 운행)</span>
+                </div>
+                <span class="font-black text-amber-400 text-sm">${formattedDist} km</span>
+              </div>
+              <div class="text-[11px] text-gray-300 break-keep leading-relaxed bg-black/40 p-2 rounded-lg border border-gray-800/60 shadow-inner">
+                ${routeSummary}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+  } else {
+    if (top5Container) top5Container.classList.add('hidden');
+  }
+
+  // 통계 수치 업데이트
+  const totalCount = matched.length;
+  const totalDist = matched.reduce((sum, t) => sum + t.moveKM, 0);
+  const totalBat = matched.reduce((sum, t) => sum + t.useBattery, 0);
+  const totalKwh = (totalBat / 100) * 60;
+  const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
+
+  const statCount = document.getElementById('stat-count');
+  const statDist = document.getElementById('stat-distance');
+  const statEnergy = document.getElementById('stat-energy');
+  const statEff = document.getElementById('stat-efficiency');
+
+  if (statCount) statCount.innerText = `${totalCount} 건`;
+  if (statDist) statDist.innerText = `${totalDist.toFixed(1)} km`;
+  if (statEnergy) statEnergy.innerText = `-${totalBat.toFixed(1)}% (${totalKwh.toFixed(1)}kWh)`;
+  if (statEff) statEff.innerText = `${avgEff} km/kWh`;
+
+  // 지도 통계 패널 구글 캘린더 일정
+  const statCalEl = document.getElementById('map-stat-calendar');
+  if (statCalEl) {
+    if (matched.length > 0 && typeof getCalendarBadgeHtml === 'function') {
+      const d = new Date(matched[0].timestamp);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      statCalEl.innerHTML = getCalendarBadgeHtml(dateStr);
+    } else {
+      statCalEl.innerHTML = '';
+    }
+  }
+
+  // 지도 폴리라인 렌더링
+  if (matched.length > 0 && typeof map !== 'undefined' && map && window.kakao && kakao.maps) {
+    const bounds = new kakao.maps.LatLngBounds();
+    let pointCount = 0;
+
+    matched.forEach(t => {
+      if (t.path && t.path.length > 0) {
+        const pathPoints = t.path.map(pt => {
+          const lat = pt.lat || pt.latitude || pt[0];
+          const lng = pt.lng || pt.longitude || pt[1];
+          const loc = new kakao.maps.LatLng(lat, lng);
+          bounds.extend(loc);
+          pointCount++;
+          return loc;
+        });
+
+        const polyline = new kakao.maps.Polyline({
+          path: pathPoints,
+          strokeWeight: 5,
+          strokeColor: '#3b82f6',
+          strokeOpacity: 0.85,
+          strokeStyle: 'solid'
+        });
+
+        polyline.setMap(map);
+        currentPolylines.push(polyline);
+
+        kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
+          if (currentInfoWindow) {
+            currentInfoWindow.close();
+          }
+
+          const tripDate = new Date(t.timestamp).toLocaleString();
+          const startText = typeof cleanAddress === 'function' ? cleanAddress(t.startDong || '출발지') : (t.startDong || '출발지');
+          const endText = typeof cleanAddress === 'function' ? cleanAddress(t.endDong || '도착지') : (t.endDong || '도착지');
+          const distText = t.moveKM ? `${t.moveKM.toFixed(1)} km` : '-';
+          const timeText = t.durationMin ? `${t.durationMin}분` : '-';
+          const batText = t.useBattery ? `-${t.useBattery.toFixed(1)}%` : '-';
+
+          const content = `
+            <div style="padding:14px; background:#0f172a; color:#f3f4f6; border:1px solid rgba(59,130,246,0.5); border-radius:12px; font-size:12px; min-width:240px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.5);">
+              <div style="font-weight:bold; color:#60a5fa; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+                <span>🚗 주행 상세 정보</span>
+                <span style="font-size:10px; color:#9ca3af;">${tripDate}</span>
+              </div>
+              <div style="margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><b>출발:</b> ${startText}</div>
+              <div style="margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><b>도착:</b> ${endText}</div>
+              <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; background:rgba(255,255,255,0.05); padding:8px; border-radius:8px; text-align:center;">
+                <div>
+                  <div style="font-size:10px; color:#9ca3af; margin-bottom:2px;">거리</div>
+                  <div style="font-weight:bold; font-size:11px; white-space:nowrap;">${distText}</div>
+                </div>
+                <div>
+                  <div style="font-size:10px; color:#9ca3af; margin-bottom:2px;">시간</div>
+                  <div style="font-weight:bold; font-size:11px; white-space:nowrap;">${timeText}</div>
+                </div>
+                <div>
+                  <div style="font-size:10px; color:#9ca3af; margin-bottom:2px;">소모량</div>
+                  <div style="font-weight:bold; font-size:11px; color:#f87171; white-space:nowrap;">${batText}</div>
+                </div>
+              </div>
+            </div>
+          `;
+
+          currentInfoWindow = new kakao.maps.InfoWindow({
+            content: content,
+            removable: true
+          });
+
+          currentInfoWindow.setPosition(mouseEvent.latLng);
+          currentInfoWindow.open(map);
+        });
+      }
+    });
+
+    if (pointCount > 0) {
+      map.setBounds(bounds);
+    }
   }
 }
 
 
-
-
-
-      // 주/월/분기/반년/년 TOP 5 렌더링
-      const top5Container = document.getElementById('top5-container');
-      const top5List = document.getElementById('top5-list');
-      if (currentFilterMode !== 'single' && currentFilterMode !== 'daily') {
-        top5Container.classList.remove('hidden');
-
-        let dailyGroup = {};
-        matched.forEach(t => {
-          const d = new Date(t.timestamp);
-          const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-          if (!dailyGroup[dayKey]) dailyGroup[dayKey] = { dateStr: dayKey, totalDist: 0, trips: [] };
-          dailyGroup[dayKey].totalDist += t.moveKM;
-          dailyGroup[dayKey].trips.push(t);
-        });
-
-        const dailyArray = Object.values(dailyGroup).sort((a,b) => b.totalDist - a.totalDist).slice(0, 5);
-
-        if (dailyArray.length === 0) {
-          top5List.innerHTML = `<span class="text-gray-500">해당 기간 데이터가 없습니다.</span>`;
-        } else {
-          top5List.innerHTML = dailyArray.map((item, idx) => {
-            const formattedDist = item.totalDist.toFixed(1);
-            const routeSummary = buildSequentialRouteHtml(item.trips);
-            return `
-              <div onclick="jumpToDrivingDate('${item.dateStr}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-amber-500/50 transition shadow-md active:scale-[0.99]">
-                <div class="flex justify-between items-center">
-                  <div class="flex items-center space-x-2">
-                    <span class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-extrabold text-[10px] flex items-center justify-center border border-amber-500/30">${idx + 1}</span>
-                    <span class="font-bold text-gray-200">${item.dateStr}</span>
-                    <span class="text-[10px] text-gray-400">(${item.trips.length}회 운행)</span>
-                  </div>
-                  <span class="font-black text-amber-400 text-sm">${formattedDist} km</span>
-                </div>
-                <div class="text-[11px] text-gray-300 break-keep leading-relaxed bg-black/40 p-2 rounded-lg border border-gray-800/60 shadow-inner">
-                  ${routeSummary}
-                </div>
-              </div>
-            `;
-          }).join('');
-        }
-      } else {
-        top5Container.classList.add('hidden');
-      }
-
-      const totalCount = matched.length;
-      const totalDist = matched.reduce((sum, t) => sum + t.moveKM, 0);
-      const totalBat = matched.reduce((sum, t) => sum + t.useBattery, 0);
-      const totalKwh = (totalBat / 100) * 60;
-      const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
-
-            document.getElementById('stat-count').innerText = `${totalCount} 건`;
-      document.getElementById('stat-distance').innerText = `${totalDist.toFixed(1)} km`;
-      document.getElementById('stat-energy').innerText = `-${totalBat.toFixed(1)}% (${totalKwh.toFixed(1)}kWh)`;
-      document.getElementById('stat-efficiency').innerText = `${avgEff} km/kWh`;
-
-      // ★ 통계 패널 상단(map-stat-calendar)에 구글 캘린더 일정 출력
-      const statCalEl = document.getElementById('map-stat-calendar');
-      if (statCalEl) {
-        if (matched.length > 0) {
-          // matched 배열의 첫 번째 항목 날짜(YYYY-MM-DD) 추출
-          const d = new Date(matched[0].timestamp);
-          const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-          statCalEl.innerHTML = getCalendarBadgeHtml(dateStr);
-        } else {
-          statCalEl.innerHTML = '';
-        }
-      }
-
-            if (matched.length > 0 && map && window.kakao && kakao.maps) {
-        const bounds = new kakao.maps.LatLngBounds();
-        let pointCount = 0;
-
-        matched.forEach(t => {
-          if (t.path && t.path.length > 0) {
-            const pathPoints = t.path.map(pt => {
-              const lat = pt.lat || pt.latitude || pt[0];
-              const lng = pt.lng || pt.longitude || pt[1];
-              const loc = new kakao.maps.LatLng(lat, lng);
-              bounds.extend(loc);
-              pointCount++;
-              return loc;
-            });
-
-            const polyline = new kakao.maps.Polyline({
-              path: pathPoints,
-              strokeWeight: 5,
-              strokeColor: '#3b82f6',
-              strokeOpacity: 0.85,
-              strokeStyle: 'solid'
-            });
-
-            polyline.setMap(map);
-            currentPolylines.push(polyline);
-
-            // [추가 기능] 주행 경로 클릭 시 팝업(인포윈도우) 표시
-            kakao.maps.event.addListener(polyline, 'click', function(mouseEvent) {
-              // 기존에 열려 있는 인포윈도우가 있다면 닫기
-              if (currentInfoWindow) {
-                currentInfoWindow.close();
-              }
-
-              // 날짜 포맷 정리
-              const tripDate = new Date(t.timestamp).toLocaleString();
-              const startText = cleanAddress(t.startDong || '출발지');
-              const endText = cleanAddress(t.endDong || '도착지');
-              const distText = t.moveKM ? `${t.moveKM.toFixed(1)} km` : '-';
-              const timeText = t.durationMin ? `${t.durationMin}분` : '-';
-              const batText = t.useBattery ? `-${t.useBattery.toFixed(1)}%` : '-';
-
-              // 팝업 내부 HTML 디자인 (다크 모드 감성)
-                            const content = `
-                <div style="padding:14px; background:#0f172a; color:#f3f4f6; border:1px solid rgba(59,130,246,0.5); border-radius:12px; font-size:12px; min-width:240px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.5);">
-                  <div style="font-weight:bold; color:#60a5fa; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
-                    <span>🚗 주행 상세 정보</span>
-                    <span style="font-size:10px; color:#9ca3af;">${tripDate}</span>
-                  </div>
-                  <div style="margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><b>출발:</b> ${startText}</div>
-                  <div style="margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><b>도착:</b> ${endText}</div>
-                  <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; background:rgba(255,255,255,0.05); padding:8px; border-radius:8px; text-align:center;">
-                    <div>
-                      <div style="font-size:10px; color:#9ca3af; margin-bottom:2px;">거리</div>
-                      <div style="font-weight:bold; font-size:11px; white-space:nowrap;">${distText}</div>
-                    </div>
-                    <div>
-                      <div style="font-size:10px; color:#9ca3af; margin-bottom:2px;">시간</div>
-                      <div style="font-weight:bold; font-size:11px; white-space:nowrap;">${timeText}</div>
-                    </div>
-                    <div>
-                      <div style="font-size:10px; color:#9ca3af; margin-bottom:2px;">소모량</div>
-                      <div style="font-weight:bold; font-size:11px; color:#f87171; white-space:nowrap;">${batText}</div>
-                    </div>
-                  </div>
-                </div>
-              `;
-
-
-              // 클릭한 지점(또는 경로 중간 지점)에 인포윈도우 생성
-              currentInfoWindow = new kakao.maps.InfoWindow({
-                content: content,
-                removable: true
-              });
-
-              // 클릭한 마우스 위치 좌표에 팝업 띄우기
-              currentInfoWindow.setPosition(mouseEvent.latLng);
-              currentInfoWindow.open(map);
-            });
-          }
-        });
-
-        if (pointCount > 0) {
-          map.setBounds(bounds);
-        }
-      }
-
-    }
-
+// [7]
 // 1-3. 월간 리포트 기능군 (원본 보장 + Supabase chargingRows 완벽 연동)
 function initMonthlyDropdowns() {
   const yearSel = document.getElementById('m-select-year');
@@ -2621,14 +2728,20 @@ function initMonthlyDropdowns() {
   // 1. allTrips 및 chargingRows에서 연도 데이터 추출
   const yearsSet = new Set();
   
-  if (typeof allTrips !== 'undefined' && allTrips.length > 0) {
-    allTrips.forEach(t => { if (t.timestamp) yearsSet.add(new Date(t.timestamp).getFullYear()); });
+  if (typeof allTrips !== 'undefined' && Array.isArray(allTrips)) {
+    allTrips.forEach(t => { 
+      const timeVal = t.timestamp || t.date || t.start_time;
+      if (timeVal) yearsSet.add(new Date(timeVal).getFullYear()); 
+    });
   }
-  if (typeof chargingRows !== 'undefined' && chargingRows.length > 0) {
-    chargingRows.forEach(c => { if (c.date) yearsSet.add(new Date(c.date).getFullYear()); });
+  if (typeof chargingRows !== 'undefined' && Array.isArray(chargingRows)) {
+    chargingRows.forEach(c => { 
+      const timeVal = c.date || c.created_at;
+      if (timeVal) yearsSet.add(new Date(timeVal).getFullYear()); 
+    });
   }
 
-  let years = Array.from(yearsSet).sort((a, b) => b - a);
+  let years = Array.from(yearsSet).filter(y => !isNaN(y)).sort((a, b) => b - a);
   const currentYear = new Date().getFullYear();
   if (years.length === 0) years = [currentYear, currentYear - 1];
 
@@ -2639,13 +2752,17 @@ function initMonthlyDropdowns() {
   // 3. 기본 선택값 설정 (최신 데이터 날짜 기준)
   const now = new Date();
   if (typeof allTrips !== 'undefined' && allTrips.length > 0) {
-    const latestDate = new Date(allTrips[0].timestamp || allTrips[0].date);
-    yearSel.value = latestDate.getFullYear();
-    monthSel.value = latestDate.getMonth() + 1;
+    const latestDate = new Date(allTrips[0].timestamp || allTrips[0].date || allTrips[0].start_time);
+    yearSel.value = !isNaN(latestDate.getFullYear()) ? latestDate.getFullYear() : now.getFullYear();
+    monthSel.value = !isNaN(latestDate.getMonth()) ? latestDate.getMonth() + 1 : now.getMonth() + 1;
   } else {
     yearSel.value = now.getFullYear();
     monthSel.value = now.getMonth() + 1;
   }
+
+  // 4. 이벤트 리스너 바인딩 (드롭다운 변경 시 자동 갱신)
+  yearSel.onchange = onMonthlyDropdownChange;
+  monthSel.onchange = onMonthlyDropdownChange;
 
   // ★ 필수: 초기화 완료 후 첫 화면 렌더링 자동 실행
   renderMonthlyTop5();
@@ -2664,7 +2781,6 @@ function shiftMonthlyDropdown(offset) {
   if (m < 1) { m = 12; y -= 1; }
   else if (m > 12) { m = 1; y += 1; }
 
-  // 연도 존재 여부 확인 후 적용
   const exists = Array.from(ySel.options).some(opt => Number(opt.value) === y);
   if (exists) {
     ySel.value = y;
@@ -2680,7 +2796,7 @@ function selectPrevMonth() {
 // 차량 수집 로그 및 Supabase charging 테이블 기반 충전 연산
 function calculateMonthlyChargingStats(selY, selM) {
   // ① 1순위: Supabase charging 테이블 데이터 활용 (가장 정확함)
-  if (typeof chargingRows !== 'undefined' && chargingRows.length > 0) {
+  if (typeof chargingRows !== 'undefined' && Array.isArray(chargingRows) && chargingRows.length > 0) {
     const monthCharges = chargingRows.filter(c => {
       const d = new Date(c.date || c.created_at);
       return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
@@ -2688,13 +2804,16 @@ function calculateMonthlyChargingStats(selY, selM) {
 
     if (monthCharges.length > 0) {
       const count = monthCharges.length;
-      const kwh = monthCharges.reduce((sum, c) => sum + (Number(c.added_charging) || 0), 0);
+      const kwh = monthCharges.reduce((sum, c) => {
+        const added = Number(c.added_charging ?? c.charging_kwh ?? c.kwh) || 0;
+        return sum + added;
+      }, 0);
       return { count, kwh };
     }
   }
 
   // ② 2순위 (폴백): 기존 vehicleRows 로그 기반 추정 로직
-  if (!vehicleRows || vehicleRows.length === 0) return { count: 0, kwh: 0 };
+  if (typeof vehicleRows === 'undefined' || !vehicleRows || vehicleRows.length === 0) return { count: 0, kwh: 0 };
 
   const monthLogs = vehicleRows.filter(v => {
     const d = new Date(v.updated_at || v.date);
@@ -2740,7 +2859,7 @@ function renderMonthlyTop5() {
   const selY = Number(ySel.value);
   const selM = Number(mSel.value);
 
-  const trips = (typeof allTrips !== 'undefined') ? allTrips : [];
+  const trips = (typeof allTrips !== 'undefined' && Array.isArray(allTrips)) ? allTrips : [];
 
   const matchedTrips = trips.filter(t => {
     const d = new Date(t.timestamp || t.date || t.start_time);
@@ -2756,18 +2875,23 @@ function renderMonthlyTop5() {
 
   const chargeStats = calculateMonthlyChargingStats(selY, selM);
   const effectiveKwh = chargeStats.kwh > 0 ? chargeStats.kwh : totalKwh;
-  const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준 적용
+  const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준
   const co2Saved = Math.round(totalDist * 0.12); // km당 0.12kg 절감
 
-  // UI 데이터 출력
-  document.getElementById('m-stat-distance').innerText = `${totalDist.toFixed(1)} km`;
-  document.getElementById('m-stat-days').innerText = `${activeDays} 일`;
-  document.getElementById('m-stat-charge-count').innerText = `${chargeStats.count} 회`;
-  document.getElementById('m-stat-charge-kwh').innerText = `${chargeStats.kwh.toFixed(1)} kWh`;
-  document.getElementById('m-stat-cost').innerText = `₩${estimatedCost.toLocaleString()}`;
-  document.getElementById('m-stat-co2').innerText = `${co2Saved.toLocaleString()} kg`;
-  document.getElementById('m-stat-avg-eff').innerText = `${avgEff} km/kWh`;
-  document.getElementById('m-stat-avg-trip-km').innerText = `${avgTripKm}km`;
+  // 안전한 DOM 텍스트 설정 헬퍼
+  const setText = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = text;
+  };
+
+  setText('m-stat-distance', `${totalDist.toFixed(1)} km`);
+  setText('m-stat-days', `${activeDays} 일`);
+  setText('m-stat-charge-count', `${chargeStats.count} 회`);
+  setText('m-stat-charge-kwh', `${chargeStats.kwh.toFixed(1)} kWh`);
+  setText('m-stat-cost', `₩${estimatedCost.toLocaleString()}`);
+  setText('m-stat-co2', `${co2Saved.toLocaleString()} kg`);
+  setText('m-stat-avg-eff', `${avgEff} km/kWh`);
+  setText('m-stat-avg-trip-km', `${avgTripKm}km`);
 
   const safeCleanAddress = typeof cleanAddress === 'function' ? cleanAddress : (addr => addr || '-');
 
@@ -2778,7 +2902,7 @@ function renderMonthlyTop5() {
     timeListEl.innerHTML = topTimeTrips.map((t, idx) => `
       <div onclick="${typeof jumpToSingleTrip === 'function' ? `jumpToSingleTrip('${t.id}')` : ''}" class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-blue-500/50 transition">
         <div>
-          <span class="font-bold text-gray-200">#${idx+1} ${new Date(t.timestamp || t.date).toLocaleDateString()}</span>
+          <span class="font-bold text-gray-200">#${idx+1} ${new Date(t.timestamp || t.date || t.start_time).toLocaleDateString()}</span>
           <span class="text-[10px] text-gray-400 block">${safeCleanAddress(t.startDong)} → ${safeCleanAddress(t.endDong)}</span>
         </div>
         <span class="font-extrabold text-blue-400">${t.durationMin || 0}분 (${(t.moveKM || 0).toFixed(1)}km)</span>
@@ -2786,14 +2910,14 @@ function renderMonthlyTop5() {
     `).join('') || `<span class="text-gray-500">데이터가 없습니다.</span>`;
   }
 
-  // 최장 운행 거리 TOP 5
-  const topDistTrips = [...matchedTrips].sort((a,b) => (a.moveKM || 0) < (b.moveKM || 0) ? 1 : -1).slice(0, 5);
+  // 최장 운행 거리 TOP 5 (정렬 산술 연산 방식으로 수정)
+  const topDistTrips = [...matchedTrips].sort((a,b) => (b.moveKM || 0) - (a.moveKM || 0)).slice(0, 5);
   const distListEl = document.getElementById('m-top5-dist-list');
   if (distListEl) {
     distListEl.innerHTML = topDistTrips.map((t, idx) => `
       <div onclick="${typeof jumpToSingleTrip === 'function' ? `jumpToSingleTrip('${t.id}')` : ''}" class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-green-500/50 transition">
         <div>
-          <span class="font-bold text-gray-200">#${idx+1} ${new Date(t.timestamp || t.date).toLocaleDateString()}</span>
+          <span class="font-bold text-gray-200">#${idx+1} ${new Date(t.timestamp || t.date || t.start_time).toLocaleDateString()}</span>
           <span class="text-[10px] text-gray-400 block">${safeCleanAddress(t.startDong)} → ${safeCleanAddress(t.endDong)}</span>
         </div>
         <span class="font-extrabold text-green-400">${(t.moveKM || 0).toFixed(1)} km</span>
@@ -2805,18 +2929,15 @@ function renderMonthlyTop5() {
 
 // 1-4. 프리미엄 배터리 차트 & KPI 렌더링 (chargingRows 정밀 연동 버전)
 function renderBatteryCharts() {
-  // 1. chargingRows 우선 사용, 없으면 vehicleRows 폴백
-  const sourceRows = (typeof chargingRows !== 'undefined' && chargingRows.length > 0) 
+  const sourceRows = (typeof chargingRows !== 'undefined' && Array.isArray(chargingRows) && chargingRows.length > 0) 
     ? chargingRows 
-    : (typeof vehicleRows !== 'undefined' ? vehicleRows : []);
+    : (typeof vehicleRows !== 'undefined' && Array.isArray(vehicleRows) ? vehicleRows : []);
 
   if (!sourceRows || sourceRows.length === 0) return;
 
-  // 차량 초기 기준 스펙값 (기본값: 62.5 kWh / 400 km)
   const initKwh = parseFloat(document.getElementById('input-init-kwh')?.value || 62.5);
   const certRange = parseFloat(document.getElementById('input-cert-range')?.value || 400);
 
-  // 날짜 오름차순(오래된 순) 정렬 후 최근 30개 산출
   const sortedRows = [...sourceRows].sort((a, b) => new Date(a.date || a.updated_at) - new Date(b.date || b.updated_at));
   const recentData = sortedRows.slice(-30);
 
@@ -2829,17 +2950,19 @@ function renderBatteryCharts() {
 
   recentData.forEach(v => {
     const d = new Date(v.date || v.updated_at);
+    if (isNaN(d.getTime())) return;
+
     const dateStr = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
 
     const rangeAdded = Number(v.added_battery_range) || 0;
     const levelAdded = Number(v.added_battery_level) || 0;
-    const chargingAdded = Number(v.added_charging) || 0;
+    const chargingAdded = Number(v.added_charging ?? v.charging_kwh ?? v.kwh) || 0;
 
     let maxRange = 0;
     let usableCap = 0;
 
-    // ① charging 테이블 정밀 연산
-    if (rangeAdded > 0 && levelAdded >= 3) { // 3% 이상 충전 데이터만 필터링 (오차 방지)
+    // ① charging 테이블 연산 (levelAdded >= 3 조건 및 NaN/Infinity 처리)
+    if (rangeAdded > 0 && levelAdded >= 3) {
       maxRange = Math.round((rangeAdded / levelAdded) * 100);
       usableCap = parseFloat(((chargingAdded / levelAdded) * 100).toFixed(1));
     } 
@@ -2853,9 +2976,9 @@ function renderBatteryCharts() {
       }
     }
 
-    if (maxRange > 0 && usableCap > 0) {
-      // SoH (%) 역산 (최대 100% 캡핑)
+    if (maxRange > 0 && usableCap > 0 && isFinite(usableCap) && initKwh > 0) {
       let soh = parseFloat(((usableCap / initKwh) * 100).toFixed(1));
+      if (isNaN(soh)) soh = 100.0;
       if (soh > 100) soh = 100.0;
 
       labels.push(dateStr);
@@ -2863,7 +2986,6 @@ function renderBatteryCharts() {
       capacityData.push(usableCap);
       sohData.push(soh);
 
-      // 완속(AC) vs 급속(DC) 충전 카운트 (20kWh 이상 급속 간주)
       if (chargingAdded > 20) {
         dcCount++;
       } else {
@@ -2874,26 +2996,36 @@ function renderBatteryCharts() {
 
   if (labels.length === 0) return;
 
-  // 2. 상단 KPI 요약 카드 수치 실시간 업데이트
+  // 2. KPI 요약 카드 수치 업데이트
   const lastSoh = sohData[sohData.length - 1];
   const lastMaxRange = maxRangeData[maxRangeData.length - 1];
   const lastCap = capacityData[capacityData.length - 1];
   const degradation = (100 - lastSoh).toFixed(1);
 
-  if (document.getElementById('b-soh-val')) document.getElementById('b-soh-val').innerText = lastSoh;
-  if (document.getElementById('b-degradation-val')) document.getElementById('b-degradation-val').innerText = `-${degradation}%`;
-  if (document.getElementById('b-max-range-val')) document.getElementById('b-max-range-val').innerText = lastMaxRange;
+  const setText = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = text;
+  };
+
+  setText('b-soh-val', lastSoh);
+  setText('b-degradation-val', `-${degradation}%`);
+  setText('b-max-range-val', lastMaxRange);
+  
   if (document.getElementById('b-range-diff-val')) {
     const diff = lastMaxRange - certRange;
     document.getElementById('b-range-diff-val').innerText = `${diff >= 0 ? '+' : ''}${diff} km`;
   }
-  if (document.getElementById('b-capacity-val')) document.getElementById('b-capacity-val').innerText = lastCap;
-  if (document.getElementById('b-init-cap-text')) document.getElementById('b-init-cap-text').innerText = `${initKwh} kWh`;
+  
+  setText('b-capacity-val', lastCap);
+  setText('b-init-cap-text', `${initKwh} kWh`);
 
-  const totalChargeCount = acCount + dcCount || 1;
+  const totalChargeCount = (acCount + dcCount) || 1;
   const acRatio = Math.round((acCount / totalChargeCount) * 100);
   const dcRatio = 100 - acRatio;
-  if (document.getElementById('b-ac-ratio-val')) document.getElementById('b-ac-ratio-val').innerText = `${acRatio}:${dcRatio}`;
+  setText('b-ac-ratio-val', `${acRatio}:${dcRatio}`);
+
+  // 차트 생성 Guard (Chart.js 라이브러리 탑재 여부 검사)
+  if (typeof Chart === 'undefined') return;
 
   // -------------------------------------------------------------
   // 차트 1: 배터리 건강도 (SoH %) 추이
@@ -3018,21 +3150,27 @@ function renderBatteryCharts() {
   }
 }
 
+// 브라우저 뒤로가기(←) 버튼 감지 리스너
+window.addEventListener('popstate', function(event) {
+  if (event.state && event.state.tab) {
+    if (event.state.sub) {
+      currentSubTab = event.state.sub;
+    }
+    if (typeof switchMainTab === 'function') {
+      switchMainTab(event.state.tab, false);
+    }
+  } else {
+    currentSubTab = 'vehicle';
+    if (typeof switchMainTab === 'function') {
+      switchMainTab('monitor', false);
+    }
+  }
+});
 
 
-    // ✅ 브라우저 뒤로가기(←) 버튼 감지 리스너는 스크립트 하단 전역에 배치
-    window.addEventListener('popstate', function(event) {
-      if (event.state && event.state.tab) {
-        // 💡 두 번째 인자에 false를 주어 히스토리 중복 적체를 막고, 서브탭은 전역 변수를 거쳐 스위칭합니다.
-        if (event.state.sub) {
-          currentSubTab = event.state.sub;
-        }
-        switchMainTab(event.state.tab, false);
-      } else {
-        currentSubTab = 'vehicle';
-        switchMainTab('monitor', false);
-      }
-    });
+// ==========================================
+// [8] Supabase 캘린더 연동, 내비게이션 & 주행거리/전비 모듈 (최적화 완결판)
+// ==========================================
 
 // 1. 단일 운행 클릭 시 주행 지도 탭 이동 및 해당 경로 강조
 function jumpToSingleTrip(tripId) {
@@ -3041,7 +3179,11 @@ function jumpToSingleTrip(tripId) {
   if (typeof setFilterMode === 'function') setFilterMode('single');
   
   const sel = document.getElementById('ctrl-select');
-  if (sel) sel.value = tripId;
+  if (sel) {
+    sel.value = tripId;
+    // select 변경 이벤트가 있을 경우 수동 발화
+    sel.dispatchEvent(new Event('change'));
+  }
   
   if (typeof highlightSingleTripOnMap === 'function') {
     highlightSingleTripOnMap(tripId);
@@ -3066,23 +3208,90 @@ function selectNextMonth() {
   if (typeof shiftMonthlyDropdown === 'function') shiftMonthlyDropdown(1);
 }
 
-
-// ==========================================
-// [8] Supabase 캘린더 연동 모듈 (최종 완결본)
-// ==========================================
-
-// 📅 Supabase 캘린더 연동 모듈
+// 📅 Supabase 캘린더 데이터 저장소
 let calendarEventsMap = {};
 
+// 4. 상호명 괄호 및 상세 주소 정제 헬퍼 함수
+function cleanLocationTitle(text) {
+  if (!text) return '';
+  const cleaned = text.replace(/\s*\([^)]*\)/g, '').trim();
+  return cleaned || text;
+}
+
+// 5. 목적지 상호명 및 신사동 집/캘린더 판별 핵심 함수
+function getTripDestinationName(trip, isFirstTripOfDay, isLastTripOfDay) {
+  if (!trip) return '목적지 정보 없음';
+
+  const endLoc = cleanLocationTitle(trip.end_location || trip.destination || '');
+  const endAddr = trip.end_address || ''; // GPS 기반 상세 도로명/지번 주소
+
+  const isShinSa = (str) => str.includes('신사1동') || str.includes('신사동');
+  const isMyHomeGps = (str) => str.includes('응암역') || str.includes('효성해링턴');
+
+  // A. 도착지가 '신사1동' 계열인 경우
+  if (isShinSa(endLoc)) {
+    // 당일 마지막 도착지이거나 당일 첫 출발지인 경우 -> 무조건 '신사동 집'
+    if (isLastTripOfDay || isFirstTripOfDay) {
+      return '신사동 집';
+    }
+
+    // 중간 도착지가 신사1동인 경우
+    // 1) 당일 캘린더에 신사동 관련 다른 장소/일정이 있는지 확인
+    const matchedEvent = findCalendarEventForTrip(trip);
+    if (matchedEvent) return cleanLocationTitle(matchedEvent.summary);
+
+    // 2) GPS 상세 주소가 집(응암역 효성해링턴)과 다르면 도로명/장소 표기
+    if (endAddr && !isMyHomeGps(endAddr)) {
+      return cleanLocationTitle(endAddr);
+    }
+
+    return '신사동 집';
+  }
+
+  // B. 당일 첫/끝 출발·도착지가 신사1동이 아닌 경우 (호텔, 1박2일 숙소, 타지역 일정)
+  const matchedEvent = findCalendarEventForTrip(trip);
+  if (matchedEvent) {
+    return cleanLocationTitle(matchedEvent.summary);
+  }
+
+  // C. 일반 도착지 (상호명만 깨끗하게 반환)
+  return endLoc || '알 수 없는 목적지';
+}
+
+// 6. 주행 기록에 맞는 캘린더 일정 추적 함수
+function findCalendarEventForTrip(trip) {
+  if (!trip) return null;
+  const timeStr = trip.start_time || trip.end_time || trip.timestamp || '';
+  if (!timeStr) return null;
+
+  const dateKey = String(timeStr).slice(0, 10);
+  const events = calendarEventsMap[dateKey] || [];
+  if (events.length === 0) return null;
+
+  const endLoc = trip.end_location || trip.destination || '';
+  
+  // 장소명/제목 연관성 비교 (호텔/숙소 키워드 포함)
+  for (const evt of events) {
+    const summary = evt.summary || '';
+    const location = evt.location || '';
+    
+    if (summary.includes('호텔') || summary.includes('리조트') || summary.includes('숙소') ||
+        (location && endLoc && (location.includes(endLoc) || endLoc.includes(location)))) {
+      return evt;
+    }
+  }
+
+  return events[0]; // 특별한 매칭 없으면 당일 대표 일정 반환
+}
+
+// 7. Supabase 캘린더 데이터 로드 (속도 최적화 및 안정성 보장)
 async function loadGoogleCalendarEvents() {
   try {
-    // 💡 supabaseClient 인스턴스와 .from 메소드가 정상 존재하는지 확인
-    if (!supabaseClient || typeof supabaseClient.from !== 'function') {
+    if (typeof supabaseClient === 'undefined' || !supabaseClient || typeof supabaseClient.from !== 'function') {
       console.warn('⚠️ Supabase 클라이언트가 준비되지 않아 캘린더 조회를 건너뜁니다.');
       return;
     }
 
-    // 💡 window.supabase가 아닌 생성된 인스턴스(supabaseClient)에서 .from()을 호출합니다.
     const { data, error } = await supabaseClient
       .from('calendar_events')
       .select('uid, summary, location, start_time, end_time');
@@ -3104,7 +3313,10 @@ async function loadGoogleCalendarEvents() {
       let curr = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
       const last = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
 
-      while (curr <= last) {
+      // 무한 루프 방지용 계수 제한 (최대 31일 범위로 제한)
+      let safetyCounter = 0;
+      while (curr <= last && safetyCounter < 31) {
+        safetyCounter++;
         const yyyy = curr.getFullYear();
         const mm = String(curr.getMonth() + 1).padStart(2, '0');
         const dd = String(curr.getDate()).padStart(2, '0');
@@ -3129,16 +3341,17 @@ async function loadGoogleCalendarEvents() {
 
     console.log('📅 Supabase 캘린더 로드 완료! (등록 날짜 수:', Object.keys(calendarEventsMap).length, ')');
 
+    // UI 및 카드 업데이트
     if (typeof renderDrivingData === 'function') renderDrivingData();
     if (typeof renderTrips === 'function') renderTrips();
+    updateEstimatedRangeCard();
 
   } catch (err) {
     console.error('❌ Supabase 캘린더 로딩 에러:', err.message);
   }
 }
 
-
-// 2. 날짜 뱃지 HTML 생성 (상호명만 깔끔하게 출력)
+// 8. 날짜 뱃지 HTML 생성 (상호명만 출력)
 function getCalendarBadgeHtml(targetDate) {
   if (!targetDate) return '';
 
@@ -3156,8 +3369,7 @@ function getCalendarBadgeHtml(targetDate) {
   if (!events || events.length === 0) return '';
 
   return events.map(e => {
-    // 괄호 및 괄호 안 주소 제거 (상호명만 표시)
-    const cleanSummary = (e.summary || '').replace(/\(.*?\)/g, '').trim();
+    const cleanSummary = cleanLocationTitle(e.summary);
     return `
       <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-900/80 border border-purple-500/50 text-purple-200 text-xs font-bold shadow-sm">
         📅 ${cleanSummary}
@@ -3166,56 +3378,115 @@ function getCalendarBadgeHtml(targetDate) {
   }).join(' ');
 }
 
-// 3. 최하단 자동 실행 이벤트
-document.addEventListener('DOMContentLoaded', () => {
-  loadGoogleCalendarEvents();
-  if (typeof updateEstimatedRangeCard === 'function') {
-    updateEstimatedRangeCard();
+// 9. 내 누적 주행 기록(allTrips) 기반 실제 평균 전비(km/kWh) 계산
+function calculateMyAvgEfficiency() {
+  if (typeof allTrips === 'undefined' || !Array.isArray(allTrips) || allTrips.length === 0) {
+    return 5.5; // 주행 기록이 없을 때 기본 전비
   }
-});
 
+  const batteryCapacity = window.configObj?.batteryCapacity || 60; // 기본 배터리 용량 (kWh)
+  let totalDistanceKm = 0;
+  let totalUsedKwh = 0;
 
-// 1. 스크립트 상단 (헬퍼 함수 영역)에 함수 정의 배치
+  for (let i = 0; i < allTrips.length; i++) {
+    const trip = allTrips[i];
+    const dist = Number(trip.moveKM ?? trip.distance_km ?? trip.distance ?? 0);
+    
+    let usedKwh = Number(trip.used_kwh ?? trip.energy_used ?? 0);
+    
+    if (!usedKwh && trip.useBattery !== undefined) {
+      usedKwh = (Number(trip.useBattery) / 100) * batteryCapacity;
+    } else if (!usedKwh && trip.startBat !== undefined && trip.endBat !== undefined) {
+      const usedPercent = Number(trip.startBat) - Number(trip.endBat);
+      if (usedPercent > 0) {
+        usedKwh = (usedPercent / 100) * batteryCapacity;
+      }
+    }
+
+    if (dist > 0.5 && usedKwh > 0) {
+      totalDistanceKm += dist;
+      totalUsedKwh += usedKwh;
+    }
+  }
+
+  if (totalUsedKwh > 0 && totalDistanceKm > 0) {
+    const myAvgEff = totalDistanceKm / totalUsedKwh;
+    return Math.round(myAvgEff * 100) / 100;
+  }
+
+  return 5.5; // Fallback
+}
+
+// 10. 주행 가능 거리 UI 렌더링 함수
 function renderEstimatedRange(batteryPercent, avgEfficiency) {
   const container = document.getElementById('vehicle-range-card');
   if (!container) return;
 
-  const batteryCapacity = window.configObj?.batteryCapacity || 60;
+  const batteryCapacity = window.configObj?.batteryCapacity || 60; 
   const remainingKwh = (batteryPercent / 100) * batteryCapacity;
-  const estRange = Math.round(remainingKwh * (avgEfficiency || 5.5));
+  
+  // 잔여 kWh × 내 실제 통계 전비 = 예상 남은 거리
+  const estRange = Math.round(remainingKwh * avgEfficiency);
 
   container.innerHTML = `
     <div class="bg-gray-800/80 p-3 rounded-xl border border-emerald-500/30 flex items-center justify-between shadow-md">
       <div>
-        <div class="text-xs text-gray-400">최근 연비 기준 예상 주행거리</div>
+        <div class="text-xs text-gray-400">📊 내 실제 주행 통계 기준 예상 주행거리</div>
         <div class="text-xl font-extrabold text-emerald-400 mt-0.5">
           약 ${estRange} km
         </div>
       </div>
       <div class="text-right text-[11px] text-gray-500">
-        <div>잔여 전력: ${(remainingKwh).toFixed(1)} kWh</div>
-        <div>적용 전비: ${avgEfficiency || 5.5} km/kWh</div>
+        <div>잔여 전력: ${remainingKwh.toFixed(1)} kWh (${batteryPercent}%)</div>
+        <div>내 통계 평균전비: <span class="text-emerald-300 font-bold">${avgEfficiency} km/kWh</span></div>
       </div>
     </div>
   `;
 }
 
-// 3. 주행가능 거리 카드 안전 렌더링 함수 (데이터 로드 완료 후 호출용)
+// 11. 주행 가능 거리 카드 안전 업데이트 함수
 function updateEstimatedRangeCard() {
-  if (typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
-    const currentBattery = vehicleRows[0].battery_level || 0;
-    // avgEff 안전 변환 (NaN 방지)
-    const effVal = (typeof avgEff !== 'undefined' && !isNaN(parseFloat(avgEff)) && parseFloat(avgEff) > 0) 
-      ? parseFloat(avgEff) 
-      : 5.5;
+  let currentBattery = 0;
 
-    renderEstimatedRange(currentBattery, effVal);
+  if (typeof vehicleRows !== 'undefined' && Array.isArray(vehicleRows) && vehicleRows.length > 0) {
+    currentBattery = vehicleRows[0].battery_level || vehicleRows[0].usable_battery_level || 0;
+  }
+  
+  if (!currentBattery) {
+    const batteryEl = document.getElementById('v-battery-val') || document.getElementById('display-battery-status');
+    if (batteryEl) {
+      const match = batteryEl.innerText.match(/(\d+)%/);
+      if (match) currentBattery = parseInt(match[1], 10);
+    }
+  }
+
+  if (currentBattery > 0) {
+    const myAvgEff = calculateMyAvgEfficiency();
+    renderEstimatedRange(currentBattery, myAvgEff);
   }
 }
 
+// 12. 페이지 최초 로드 스위치 및 포그라운드 전환 감지
+document.addEventListener('DOMContentLoaded', () => {
+  // 앱 화면 전환(포그라운드/백그라운드) 감지 리스너
+  if (typeof handleAppVisibilityChange === 'function') {
+    document.addEventListener('visibilitychange', handleAppVisibilityChange);
+  }
 
-
+  // 설정값 로드 여부 확인 후 대시보드 초속 병렬 로딩 시작
+  const isConfigLoaded = (typeof loadConfig === 'function') ? loadConfig() : false;
+  
+  if (isConfigLoaded) {
+    if (typeof initDashboardData === 'function') {
+      initDashboardData();
+    }
+  } else {
+    if (typeof openConfigModal === 'function') {
+      openConfigModal();
+    }
+  }
+});
 
   </script>
 </body>
-              </html>
+  </html>
