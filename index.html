@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.25</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -2885,12 +2885,11 @@ function selectNextMonth() {
 
 
 // ==========================================
-// [8] 구글 캘린더 iCal 연동 모듈 (최종 안정화 버전)
+// [8] 구글 캘린더 iCal 연동 모듈 (CORS 우회 및 디버깅 강화)
 // ==========================================
 
 let calendarEventsMap = {};
 
-// iCal URL 가져오기 (configObj -> input -> localStorage 순서로 안전하게 탐색)
 function getIcalUrl() {
   if (typeof configObj !== 'undefined' && configObj && configObj.icalUrl) {
     return configObj.icalUrl;
@@ -2902,14 +2901,13 @@ function getIcalUrl() {
   return localStorage.getItem('tesla_ical_url') || '';
 }
 
-// GitHub Pages용 고성능 프록시 수신 함수
 async function fetchIcsTextWithFallback(icalUrl) {
   const encodedUrl = encodeURIComponent(icalUrl);
   
-  // GitHub Pages에서 차단되지 않는 프록시 순서
+  // CORS 차단을 피하기 위한 최신 프록시 서버 목록
   const proxyList = [
-    `https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`,
     `https://api.allorigins.win/raw?url=${encodedUrl}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`,
     `https://corsproxy.io/?${encodedUrl}`
   ];
 
@@ -2919,22 +2917,23 @@ async function fetchIcsTextWithFallback(icalUrl) {
       if (res.ok) {
         const text = await res.text();
         if (text && text.includes('BEGIN:VCALENDAR')) {
+          console.log('✅ iCal 수신 성공 프록시:', proxyUrl);
           return text;
         }
       }
     } catch (e) {
-      console.warn(`프록시 접속 시도 실패 (${proxyUrl}):`, e);
+      console.warn(`프록시 접속 실패 (${proxyUrl}):`, e);
     }
   }
 
-  throw new Error('모든 프록시 서버에서 캘린더 수신에 실패했습니다.');
+  throw new Error('모든 프록시에서 iCal 수신에 실패했습니다. iCal 비공개 주소를 확인해 주세요.');
 }
 
-// 캘린더 불러오기 및 UI 즉시 갱신
 async function loadGoogleCalendarEvents() {
   const icalUrl = getIcalUrl();
   
   if (!icalUrl) {
+    console.log('⚠️ iCal 주소가 설정되지 않았습니다.');
     calendarEventsMap = {};
     return;
   }
@@ -2942,25 +2941,20 @@ async function loadGoogleCalendarEvents() {
   try {
     const icsText = await fetchIcsTextWithFallback(icalUrl);
     calendarEventsMap = parseIcsToMap(icsText);
-    console.log('📅 캘린더 일정 로드 성공:', calendarEventsMap);
+    
+    // 💡 불러온 전체 일정 목록 콘솔 출력
+    console.log('📅 로드된 캘린더 데이터 (날짜별):', calendarEventsMap);
 
-    // 1. 주행 지도 탭 & 월간 리포트 화면 즉시 재갱신
-    if (typeof renderDrivingData === 'function') renderDrivingData();
-    if (typeof renderMonthlyTop5 === 'function') renderMonthlyTop5();
-
-    // 2. 차량 정보 메인 카드 뱃지 갱신
-    const elCal = document.getElementById('v-latest-trip-calendar');
-    if (elCal && typeof allTrips !== 'undefined' && allTrips.length > 0) {
-      const dayDate = new Date(allTrips[0].timestamp);
-      elCal.innerHTML = getCalendarBadgeHtml(dayDate);
+    // 주행 지도 갱신
+    if (typeof renderDrivingData === 'function') {
+      renderDrivingData();
     }
 
   } catch (err) {
-    console.error('❌ 캘린더 데이터 로딩 에러:', err);
+    console.error('❌ 캘린더 로딩 최종 에러:', err);
   }
 }
 
-// ICS 데이터 파싱 (KST 시차 보정)
 function parseIcsToMap(icsText) {
   const map = {};
   if (!icsText) return map;
@@ -3009,7 +3003,6 @@ function parseIcsToMap(icsText) {
   return map;
 }
 
-// 특정 날짜 일정 뱃지 HTML 반환
 function getCalendarBadgeHtml(targetDate) {
   if (!targetDate) return '';
 
@@ -3033,7 +3026,7 @@ function getCalendarBadgeHtml(targetDate) {
   `).join(' ');
 }
 
-// 페이지 로드 후 1초 뒤 자동 실행 (설정 로딩 완료 보장)
+// 초기 로딩
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
     loadGoogleCalendarEvents();
