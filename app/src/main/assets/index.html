@@ -133,8 +133,7 @@
     <span id="v-last-time" class="text-xs font-mono text-gray-400 bg-gray-900/60 px-2.5 py-1 rounded-lg border border-gray-800">--:-- 기준 🔄</span>
   </div>
 
-  <!-- 2. 💡 [예상 주행거리 카드] 독립 배치 -->
-  <div id="vehicle-range-card"></div>
+  
 
   <!-- 3. 현재 차량 상태 요약 카드 -->
   <div class="glass-card p-4 rounded-2xl flex justify-between items-center shadow-xl">
@@ -151,7 +150,7 @@
       </div>
     </div>
   </div>
-
+<div id="vehicle-range-card" class="mt-3"></div>
   <!-- (이하 기존 차량 상태 관련 나머지 요소들) -->
 
         <!-- 주행/충전/감시 동적 카드 -->
@@ -1766,51 +1765,83 @@ function formatTimeAmPm(dateObj) {
   return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
 }
 
-// 💡 스마트 도착지-캘린더 매칭 함수 (도로명/상세주소/건물명 키워드 정밀 비교 + 중복 매칭 방지)
+// 💡 스마트 도착지-캘린더 매칭 함수 (도로명/번지수 가산점 기반 정밀 교정 버전)
 function matchCalendarToTrip(trip, dayEvents, usedEventIds = new Set()) {
   if (!trip || !dayEvents || dayEvents.length === 0) return null;
 
-  // 추출 가능한 도착지 정보 조합 (상세주소, 장소명, 동이름)
-  const fullEndText = `${trip.endAddress || ''} ${trip.endLocation || ''} ${trip.endDong || ''} ${trip.endDetail || ''}`.trim();
-  const cleanEnd = typeof cleanAddress === 'function' ? cleanAddress(fullEndText) : fullEndText;
+  // 1. 도착지 전체 주소 문자열 조합 (도로명, 지번, 건물명, 동이름)
+  const rawEndText = `${trip.endAddress || ''} ${trip.endLocation || ''} ${trip.endDong || ''} ${trip.endDetail || ''}`.toLowerCase();
+  const cleanEnd = typeof cleanAddress === 'function' ? cleanAddress(rawEndText) : rawEndText;
 
-  // 1차: 도로명/상세주소/특정 장소명 키워드 정밀 비교 (예: 호국로 56, 화합로 314, 워크업, 순대국 등)
+  let bestMatch = null;
+  let maxScore = 0;
+
+  // 행정구역 대분류 키워드 제외 목록
+  const ignoreWords = ['경기', '경기도', '포천시', '포천', '소흘읍', '의정부시', '의정부', '의정부2동', '자금동', '은평구', '신사1동', '대한민국'];
+
+  // -----------------------------------------------------------------
+  // [1차 검증] 상세 도로명, 번지수, 상호명 가점 매칭
+  // -----------------------------------------------------------------
   for (const evt of dayEvents) {
-    const evtId = evt.id || evt.summary;
+    const evtId = evt.id || `${evt.summary}_${evt.location}`;
     if (usedEventIds.has(evtId)) continue;
 
-    const evtText = `${evt.summary || ''} ${evt.location || ''}`;
-    const evtWords = evtText.split(/[\s,()]+/).filter(w => w.length >= 2);
+    const evtText = `${evt.summary || ''} ${evt.location || ''}`.toLowerCase();
+    
+    // 캘린더 일정에서 핵심 단어 추출
+    const words = evtText.replace(/[(),]/g, ' ').split(/\s+/).filter(w => w.length >= 2 && !ignoreWords.includes(w));
 
-    // 시/군/구/동 같은 일반 행정구역명을 제외한 상세 키워드 추출
-    const isSpecificMatch = evtWords.some(word => {
-      if (['경기', '경기도', '포천시', '포천', '소흘읍', '의정부시', '의정부', '의정부2동', '자금동', '은평구', '신사1동'].includes(word)) return false;
-      return cleanEnd.includes(word) || (trip.to && trip.to.includes(word));
-    });
+    let score = 0;
+    for (const word of words) {
+      if (cleanEnd.includes(word) || (trip.to && trip.to.includes(word))) {
+        // 🎯 도로명(화합로, 호국로)이나 건물 번지수(314, 56 등 숫자) 포함 시 높은 가산점(+5점) 부여
+        if (/\d/.test(word) || word.endsWith('로') || word.endsWith('길') || word.endsWith('점') || word.endsWith('국')) {
+          score += 5;
+        } else {
+          score += 2;
+        }
+      }
+    }
 
-    if (isSpecificMatch) {
-      usedEventIds.add(evtId);
-      return evt;
+    if (score > maxScore) {
+      maxScore = score;
+      bestMatch = evt;
     }
   }
 
-  // 2차: 일반 동 단위 및 순차 매칭 (중복 제외)
-  for (const evt of dayEvents) {
-    const evtId = evt.id || evt.summary;
-    if (usedEventIds.has(evtId)) continue;
+  // 매칭 점수가 있는 경우 해당 일정 반환 및 사용 등록
+  if (bestMatch && maxScore > 0) {
+    const evtId = bestMatch.id || `${bestMatch.summary}_${bestMatch.location}`;
+    usedEventIds.add(evtId);
+    return bestMatch;
+  }
 
-    const evtText = `${evt.summary || ''} ${evt.location || ''}`;
-    const endDongClean = typeof cleanAddress === 'function' ? cleanAddress(trip.endDong || '') : (trip.endDong || '');
-    const dongWords = endDongClean.split(' ').filter(w => w.length > 1);
+  // -----------------------------------------------------------------
+  // [2차 검증] 동 단위 매칭 시 남은 일정 중 순서대로 안전 매칭
+  // -----------------------------------------------------------------
+  const remainingEvents = dayEvents.filter(evt => {
+    const evtId = evt.id || `${evt.summary}_${evt.location}`;
+    return !usedEventIds.has(evtId);
+  });
 
-    if (dongWords.some(w => evtText.includes(w))) {
+  if (remainingEvents.length > 0) {
+    // 도착지 동/읍이 일치하는 첫 번째 남은 일정 선택
+    const endDongClean = (trip.endDong || '').replace(/(경기도|포천시|의정부시)/g, '').trim();
+    const fallbackMatch = remainingEvents.find(evt => {
+      const evtText = `${evt.summary || ''} ${evt.location || ''}`;
+      return endDongClean && evtText.includes(endDongClean);
+    }) || remainingEvents[0];
+
+    if (fallbackMatch) {
+      const evtId = fallbackMatch.id || `${fallbackMatch.summary}_${fallbackMatch.location}`;
       usedEventIds.add(evtId);
-      return evt;
+      return fallbackMatch;
     }
   }
 
   return null;
 }
+
 
 // ==========================================
 // [1] 당일 주행 요약 및 캘린더 뱃지 / 경로 매칭
@@ -3126,40 +3157,51 @@ async function loadGoogleCalendarEvents() {
   }
 }
 
-// 4. ICS 텍스트 날짜별 파싱
+// 4. ICS 텍스트 날짜별 파싱 (이틀 이상 연속 일정/다일 일정 완벽 지원)
 function parseIcsToMap(icsText) {
   const map = {};
   if (!icsText) return map;
 
-  const blocks = icsText.split('BEGIN:VEVENT');
+  // RFC 5545 긴 줄 바꿈(Folding) 해제
+  const cleanedText = icsText.replace(/\r?\n[ \t]/g, '');
+  const blocks = cleanedText.split('BEGIN:VEVENT');
 
   for (let i = 1; i < blocks.length; i++) {
     const block = blocks[i].split('END:VEVENT')[0];
 
-    const dtMatch = block.match(/DTSTART(;[^:]*)?:(\d{8})(T\d{6}Z?)?/);
-    if (!dtMatch) continue;
+    // 시작일(DTSTART) 및 종료일(DTEND) 추출
+    const startMatch = block.match(/DTSTART(;[^:]*)?:(\d{8})(T\d{6}Z?)?/);
+    if (!startMatch) continue;
 
-    const rawDate = dtMatch[2]; 
-    const rawTime = dtMatch[3];
+    const endMatch = block.match(/DTEND(;[^:]*)?:(\d{8})(T\d{6}Z?)?/);
 
-    let dateKey = '';
+    // 날짜 파싱 헬퍼 (KST 및 타임존 보정)
+    function parseIcsDate(dateStr, timeStr) {
+      const year = parseInt(dateStr.slice(0, 4));
+      const month = parseInt(dateStr.slice(4, 6)) - 1;
+      const day = parseInt(dateStr.slice(6, 8));
 
-    if (rawTime && rawTime.endsWith('Z')) {
-      const year = parseInt(rawDate.slice(0, 4));
-      const month = parseInt(rawDate.slice(4, 6)) - 1;
-      const day = parseInt(rawDate.slice(6, 8));
-      const hour = parseInt(rawTime.slice(1, 3));
-      const min = parseInt(rawTime.slice(3, 5));
-
-      const utcDate = new Date(Date.UTC(year, month, day, hour, min));
-      const kstY = utcDate.getFullYear();
-      const kstM = String(utcDate.getMonth() + 1).padStart(2, '0');
-      const kstD = String(utcDate.getDate()).padStart(2, '0');
-      dateKey = `${kstY}-${kstM}-${kstD}`;
-    } else {
-      dateKey = `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
+      if (timeStr && timeStr.endsWith('Z')) {
+        const hour = parseInt(timeStr.slice(1, 3));
+        const min = parseInt(timeStr.slice(3, 5));
+        return new Date(Date.UTC(year, month, day, hour, min));
+      }
+      return new Date(year, month, day);
     }
 
+    const startDate = parseIcsDate(startMatch[2], startMatch[3]);
+    // 종료일이 명시되지 않은 단일 일정은 시작일과 동일하게 처리
+    let endDate = endMatch ? parseIcsDate(endMatch[2], endMatch[3]) : new Date(startDate);
+
+    // 날짜 포맷 변환 (YYYY-MM-DD)
+    function toDateKey(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    // 제목 및 장소 추출
     const sumMatch = block.match(/SUMMARY:(.*)/);
     let summary = sumMatch ? sumMatch[1].trim() : '일정';
     summary = summary.replace(/\\,/g, ',').replace(/\\;/g, ';');
@@ -3168,14 +3210,32 @@ function parseIcsToMap(icsText) {
     let location = locMatch ? locMatch[1].trim() : '';
     location = location.replace(/\\,/g, ',').replace(/\\;/g, ';');
 
-    if (!map[dateKey]) map[dateKey] = [];
-    map[dateKey].push({ summary, location });
+    // 시작일부터 종료일까지 루프를 돌며 기간 내 모든 날짜에 일정 맵핑
+    let curr = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    let endLimit = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+    // 구글 캘린더 종일 일정(All-day)의 DTEND는 명세상 '종료일 다음날 00:00' 기준이므로 1일 차감
+    const isAllDay = !startMatch[3];
+    if (isAllDay && endLimit > curr) {
+      endLimit.setDate(endLimit.getDate() - 1);
+    }
+
+    while (curr <= endLimit) {
+      const dateKey = toDateKey(curr);
+      if (!map[dateKey]) map[dateKey] = [];
+      map[dateKey].push({ summary, location });
+
+      // 하루씩 증가
+      curr.setDate(curr.getDate() + 1);
+    }
   }
 
   return map;
 }
 
+
 // 5. 날짜 뱃지 HTML 생성
+// 2. 캘린더 뱃지에서 주소(location) 제외하고 상호명(summary)만 깔끔하게 출력
 function getCalendarBadgeHtml(targetDate) {
   if (!targetDate) return '';
 
@@ -3192,21 +3252,20 @@ function getCalendarBadgeHtml(targetDate) {
   const events = calendarEventsMap[dateKey];
   if (!events || events.length === 0) return '';
 
+  // 주소(location)는 빼고 e.summary(일정/상호명)만 출력
   return events.map(e => `
-    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-900/80 border border-purple-500/50 text-purple-200 text-[11px] font-bold shadow-sm">
-      📅 ${e.summary} ${e.location ? `<span class="text-[9px] text-purple-300">(${e.location})</span>` : ''}
+    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-900/80 border border-purple-500/50 text-purple-200 text-xs font-bold shadow-sm">
+      📅 ${e.summary}
     </span>
   `).join(' ');
 }
 
-// 6. 페이지 로드 시 자동 실행
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  setTimeout(loadGoogleCalendarEvents, 1000);
-} else {
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(loadGoogleCalendarEvents, 1000);
-  });
-}
+// ✅ 교체해서 넣을 새 코드
+document.addEventListener('DOMContentLoaded', () => {
+  loadGoogleCalendarEvents();
+  updateEstimatedRangeCard();
+});
+
 
 // 1. 스크립트 상단 (헬퍼 함수 영역)에 함수 정의 배치
 function renderEstimatedRange(batteryPercent, avgEfficiency) {
@@ -3233,14 +3292,19 @@ function renderEstimatedRange(batteryPercent, avgEfficiency) {
   `;
 }
 
-// 2. 대시보드 렌더링 로직 내부에서 실행 (예: 당일 주행 요약 또는 차량 상태 수신 시점)
-if (typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
-  const currentBattery = vehicleRows[0].battery_level || 0; // 최신 배터리 %
-  const currentEfficiency = parseFloat(avgEff) || 5.5;      // 최근 계산된 전비 (예: 5.62)
+// 3. 주행가능 거리 카드 안전 렌더링 함수 (데이터 로드 완료 후 호출용)
+function updateEstimatedRangeCard() {
+  if (typeof vehicleRows !== 'undefined' && vehicleRows.length > 0) {
+    const currentBattery = vehicleRows[0].battery_level || 0;
+    // avgEff 안전 변환 (NaN 방지)
+    const effVal = (typeof avgEff !== 'undefined' && !isNaN(parseFloat(avgEff)) && parseFloat(avgEff) > 0) 
+      ? parseFloat(avgEff) 
+      : 5.5;
 
-  // 예상 주행거리 카드 렌더링 호출
-  renderEstimatedRange(currentBattery, currentEfficiency);
+    renderEstimatedRange(currentBattery, effVal);
+  }
 }
+
 
 
 
