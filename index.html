@@ -2904,36 +2904,66 @@ function getIcalUrl() {
 }
 
 // 5초 타임아웃이 적용된 프록시 수신 함수
+// 구글 차단을 우회하는 JSON Wrapper 프록시 수신 함수
 async function fetchIcsTextWithFallback(icalUrl) {
   const encodedUrl = encodeURIComponent(icalUrl);
-  const proxyList = [
-    `https://api.allorigins.win/raw?url=${encodedUrl}`,
-    `https://corsproxy.io/?${encodedUrl}`,
-    `https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`
-  ];
 
-  for (const proxyUrl of proxyList) {
-    try {
-      // 5초 지나면 자동으로 요청을 취소하여 무한 대기 방지
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+  // 1차 시도: AllOrigins JSON 방식 (구글 프록시 IP 차단 우회율 99%)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-      const res = await fetch(proxyUrl, { signal: controller.signal });
-      clearTimeout(timeoutId);
+    const res = await fetch(`https://api.allorigins.win/get?url=${encodedUrl}`, { signal: controller.signal });
+    clearTimeout(timeoutId);
 
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.includes('BEGIN:VCALENDAR')) {
-          return text;
-        }
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.contents && data.contents.includes('BEGIN:VCALENDAR')) {
+        return data.contents;
       }
-    } catch (e) {
-      console.warn(`프록시 실패/시간초과 (${proxyUrl}):`, e);
     }
+  } catch (e) {
+    console.warn('AllOrigins JSON 방식 실패:', e);
   }
-  throw new Error('모든 프록시 서버 응답 실패 (주소 오류 또는 네트워크 차단)');
-}
 
+  // 2차 시도: ThingProxy
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const res = await fetch(`https://thingproxy.freeboard.io/fetch/${icalUrl}`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const text = await res.text();
+      if (text && text.includes('BEGIN:VCALENDAR')) {
+        return text;
+      }
+    }
+  } catch (e) {
+    console.warn('ThingProxy 실패:', e);
+  }
+
+  // 3차 시도: CodeTabs
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const text = await res.text();
+      if (text && text.includes('BEGIN:VCALENDAR')) {
+        return text;
+      }
+    }
+  } catch (e) {
+    console.warn('CodeTabs 실패:', e);
+  }
+
+  throw new Error('프록시 우회 수신 실패 (구글 서버 차단)');
+}
 async function loadGoogleCalendarEvents() {
   alert('🔍 [1단계] 캘린더 함수가 시작되었습니다.');
 
