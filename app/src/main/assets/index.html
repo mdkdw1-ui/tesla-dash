@@ -1744,17 +1744,63 @@ async function exchangeTeslaToken(code) {
     if (durTitle) durTitle.innerText = `주차 중 ${pHours > 0 ? pHours + '시간 ' : ''}${pMins}분`;
     if (startTime) startTime.innerText = `${new Date(parkingBaseMs).toLocaleString('ko-KR')} 부터 기준`;
   }
-
-// 💡 도착지 주소와 캘린더 일정 매칭 헬퍼 함수
-function matchCalendarToTrip(endDong, dayEvents) {
-  if (!endDong || !dayEvents || dayEvents.length === 0) return null;
-  const cleanLoc = typeof cleanAddress === 'function' ? cleanAddress(endDong) : endDong;
-  const words = cleanLoc.split(' ').map(w => w.trim()).filter(w => w.length > 1);
   
-  return dayEvents.find(evt => {
-    const fullText = `${evt.summary} ${evt.location || ''}`;
-    return words.some(word => fullText.includes(word));
-  });
+  
+// 💡 AM/PM 시간 포맷 헬퍼 함수
+function formatTimeAmPm(dateObj) {
+  if (!dateObj || isNaN(dateObj.getTime())) return '-';
+  let hours = dateObj.getHours();
+  const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+}
+
+// 💡 스마트 도착지-캘린더 매칭 함수 (도로명/상세주소/건물명 키워드 정밀 비교 + 중복 매칭 방지)
+function matchCalendarToTrip(trip, dayEvents, usedEventIds = new Set()) {
+  if (!trip || !dayEvents || dayEvents.length === 0) return null;
+
+  // 추출 가능한 도착지 정보 조합 (상세주소, 장소명, 동이름)
+  const fullEndText = `${trip.endAddress || ''} ${trip.endLocation || ''} ${trip.endDong || ''} ${trip.endDetail || ''}`.trim();
+  const cleanEnd = typeof cleanAddress === 'function' ? cleanAddress(fullEndText) : fullEndText;
+
+  // 1차: 도로명/상세주소/특정 장소명 키워드 정밀 비교 (예: 호국로 56, 화합로 314, 워크업, 순대국 등)
+  for (const evt of dayEvents) {
+    const evtId = evt.id || evt.summary;
+    if (usedEventIds.has(evtId)) continue;
+
+    const evtText = `${evt.summary || ''} ${evt.location || ''}`;
+    const evtWords = evtText.split(/[\s,()]+/).filter(w => w.length >= 2);
+
+    // 시/군/구/동 같은 일반 행정구역명을 제외한 상세 키워드 추출
+    const isSpecificMatch = evtWords.some(word => {
+      if (['경기', '경기도', '포천시', '포천', '소흘읍', '의정부시', '의정부', '의정부2동', '자금동', '은평구', '신사1동'].includes(word)) return false;
+      return cleanEnd.includes(word) || (trip.to && trip.to.includes(word));
+    });
+
+    if (isSpecificMatch) {
+      usedEventIds.add(evtId);
+      return evt;
+    }
+  }
+
+  // 2차: 일반 동 단위 및 순차 매칭 (중복 제외)
+  for (const evt of dayEvents) {
+    const evtId = evt.id || evt.summary;
+    if (usedEventIds.has(evtId)) continue;
+
+    const evtText = `${evt.summary || ''} ${evt.location || ''}`;
+    const endDongClean = typeof cleanAddress === 'function' ? cleanAddress(trip.endDong || '') : (trip.endDong || '');
+    const dongWords = endDongClean.split(' ').filter(w => w.length > 1);
+
+    if (dongWords.some(w => evtText.includes(w))) {
+      usedEventIds.add(evtId);
+      return evt;
+    }
+  }
+
+  return null;
 }
 
 // ==========================================
@@ -1771,25 +1817,37 @@ if (typeof allTrips !== 'undefined' && allTrips && allTrips.length > 0) {
   const totalKwh = (totalBat / 100) * 60;
   const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
 
+  // 제목 세로 찌그러짐 방지
   const tripDateEl = document.getElementById('v-latest-trip-date');
-  if (tripDateEl) tripDateEl.innerText = `${dayDate.getMonth()+1}월 ${dayDate.getDate()}일 (총 ${sameDayTrips.length}건)`;
+  if (tripDateEl) {
+    tripDateEl.innerText = `${dayDate.getMonth()+1}월 ${dayDate.getDate()}일 (총 ${sameDayTrips.length}건)`;
+    if (tripDateEl.parentElement) {
+      tripDateEl.parentElement.classList.add('flex-col', 'items-start', 'w-full');
+    }
+  }
   
-  // 📅 YYYY-MM-DD 키로 당일 캘린더 가져오기
+  // 📅 당일 캘린더 데이터 가져오기
   const kstY = dayDate.getFullYear();
   const kstM = String(dayDate.getMonth() + 1).padStart(2, '0');
   const kstD = String(dayDate.getDate()).padStart(2, '0');
   const dayKey = `${kstY}-${kstM}-${kstD}`;
   const dayEvents = (typeof calendarEventsMap !== 'undefined' && calendarEventsMap) ? (calendarEventsMap[dayKey] || []) : [];
 
-  // 상단 캘린더 뱃지 (세로 밀림 방지 적용)
+  // 캘린더 뱃지 가로 넘침 방지
   const elCal = document.getElementById('v-latest-trip-calendar');
   if (elCal) {
     if (dayEvents.length > 0) {
-      elCal.innerHTML = dayEvents.map(e => `
-        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-900/80 border border-purple-500/50 text-purple-200 text-[11px] font-bold shadow-sm whitespace-nowrap">
-          📅 ${e.summary} ${e.location ? `<span class="text-[9px] text-purple-300">(${e.location})</span>` : ''}
-        </span>
-      `).join(' ');
+      elCal.innerHTML = `
+        <div class="flex flex-col gap-1.5 w-full mt-2 overflow-hidden">
+          ${dayEvents.map(e => `
+            <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-950/80 border border-purple-500/40 text-purple-200 text-xs w-full min-w-0 shadow-sm">
+              <span class="shrink-0">📅</span>
+              <span class="font-bold truncate shrink-0 max-w-[45%]">${e.summary}</span>
+              ${e.location ? `<span class="text-[10px] text-purple-300/80 truncate min-w-0 flex-1">(${e.location})</span>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `;
     } else {
       elCal.innerHTML = '';
     }
@@ -1814,7 +1872,10 @@ if (typeof allTrips !== 'undefined' && allTrips && allTrips.length > 0) {
       `);
     }
 
-    // 개별 경로 + 도착지 캘린더 매칭
+    // 이미 매칭된 캘린더 ID 추적용 Set (동교리 순대국 / 워크업 중복 매칭 방지)
+    const usedEventIds = new Set();
+
+    // 개별 경로 + 도착지 캘린더 정밀 매칭
     sameDayTrips.forEach(t => {
       const startLoc = typeof cleanAddress === 'function' ? cleanAddress(t.startDong) : (t.startDong || '-');
       const endLoc = typeof cleanAddress === 'function' ? cleanAddress(t.endDong) : (t.endDong || '-');
@@ -1826,11 +1887,11 @@ if (typeof allTrips !== 'undefined' && allTrips && allTrips.length > 0) {
       let batDetail = `${batUsageStr}%`;
       if (t.startBat && t.endBat) batDetail += ` (${t.startBat}% → ${t.endBat}%)`;
 
-      // 📍 도착지와 캘린더 장소 매칭
-      const matchedEvt = matchCalendarToTrip(endLoc, dayEvents);
+      // 📍 정밀 매칭 실행
+      const matchedEvt = matchCalendarToTrip(t, dayEvents, usedEventIds);
 
       listContainer.insertAdjacentHTML('beforeend', `
-        <div onclick="jumpToSingleTrip('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99]">
+        <div onclick="jumpToSingleTrip('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99] overflow-hidden">
           <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
             <span class="address-tag text-blue-300 font-bold">${startLoc}</span>
             <span class="text-indigo-400 font-extrabold">→</span>
@@ -1841,12 +1902,12 @@ if (typeof allTrips !== 'undefined' && allTrips && allTrips.length > 0) {
             <span class="text-amber-400 font-bold">🌡️ ${tempStr}</span>
           </div>
 
-          <!-- 📍 도착지와 매칭된 캘린더 표시 -->
+          <!-- 📍 도착지 일정 매칭 결과 -->
           ${matchedEvt ? `
-            <div class="mt-2 pt-2 border-t border-purple-500/30 flex items-center gap-1.5 text-xs text-purple-200 bg-purple-950/50 p-2 rounded-lg">
-              <span>📍 도착지 일정:</span>
-              <span class="font-bold text-purple-300">${matchedEvt.summary}</span>
-              ${matchedEvt.location ? `<span class="text-[10px] text-purple-400">(${matchedEvt.location})</span>` : ''}
+            <div class="mt-2 pt-2 border-t border-purple-500/30 flex items-center gap-1.5 text-xs text-purple-200 bg-purple-950/60 p-2 rounded-lg overflow-hidden">
+              <span class="shrink-0">📍 도착지 일정:</span>
+              <span class="font-bold text-purple-300 truncate shrink-0 max-w-[40%]">${matchedEvt.summary}</span>
+              ${matchedEvt.location ? `<span class="text-[10px] text-purple-400/80 truncate min-w-0 flex-1">(${matchedEvt.location})</span>` : ''}
             </div>
           ` : ''}
         </div>
@@ -1856,7 +1917,7 @@ if (typeof allTrips !== 'undefined' && allTrips && allTrips.length > 0) {
 }
 
 // ==========================================
-// [2] 최근 상태 히스토리 타임라인 (예외 방지 강화)
+// [2] 최근 상태 히스토리 타임라인 (줄바꿈 방지 & AM/PM 적용)
 // ==========================================
 const timelineBox = document.getElementById('timeline-container');
 if (timelineBox) {
@@ -1883,10 +1944,13 @@ if (timelineBox) {
         if (typeof rawCur === 'string') { try { rawCur = JSON.parse(rawCur); } catch(e){} }
         const evtTemp = cur.outside_temp ?? rawCur?.climate_state?.outside_temp ?? matchedTrip?.outsideTemp;
 
+        // 🕒 AM / PM 시간 포맷 변환
+        const timeAmPmStr = formatTimeAmPm(curDate);
+
         eventsGrouped[dateKey].push({
           isDrive: isDrive,
           tripId: matchedTrip ? matchedTrip.id : null,
-          timeStr: curDate.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' }),
+          timeStr: timeAmPmStr,
           odoDiff: odoDiff,
           batDiff: batDiff,
           startDong: matchedTrip ? cleanAddress(matchedTrip.startDong) : "출발지",
@@ -1905,7 +1969,6 @@ if (timelineBox) {
 
   const groupKeys = Object.keys(eventsGrouped);
 
-  // 기록된 데이터가 없을 경우 안내 메시지 표시
   if (groupKeys.length === 0) {
     timelineBox.innerHTML = `
       <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 text-center text-xs text-gray-500">
@@ -1915,7 +1978,7 @@ if (timelineBox) {
   } else {
     groupKeys.forEach(dateHeader => {
       let groupHtml = `
-        <div class="glass-card p-3.5 rounded-2xl space-y-2.5 shadow-lg">
+        <div class="glass-card p-3.5 rounded-2xl space-y-2.5 shadow-lg overflow-hidden">
           <div onclick="jumpToDrivingDate('${dateHeader}')" class="flex items-center justify-between border-b border-gray-800 pb-2 cursor-pointer hover:opacity-80 transition">
             <span class="text-xs font-black text-indigo-400 bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/50">📅 ${dateHeader}</span>
             <span class="text-[10px] text-gray-500 underline font-medium">해당 날짜 전체 지도 보기 ▶</span>
@@ -1935,30 +1998,32 @@ if (timelineBox) {
           const clickHandler = evt.tripId ? `onclick="jumpToSingleTrip('${evt.tripId}')"` : `onclick="jumpToDrivingDate('${dateHeader}')"`;
 
           groupHtml += `
-            <div ${clickHandler} class="bg-gray-900/80 p-3 rounded-xl border border-gray-800/90 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99]">
-              <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
-                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 주행</span>
-                <span class="text-gray-400 text-[11px] font-mono mr-1">${evt.timeStr}</span>
-                <span class="address-tag text-blue-300 font-bold">${evt.startDong}</span>
-                <span class="text-indigo-400 font-extrabold">→</span>
-                <span class="address-tag text-emerald-300 font-bold">${evt.endDong}</span>
+            <div ${clickHandler} class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800/90 space-y-1 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99] overflow-hidden">
+              <div class="font-bold text-gray-100 flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
+                <span class="px-1.5 py-0.5 rounded-md text-[9px] font-bold border shrink-0 ${badgeClass}">${icon} 주행</span>
+                <span class="text-gray-400 text-[10px] font-mono shrink-0">${evt.timeStr}</span>
+                <div class="flex items-center gap-1 truncate text-xs min-w-0">
+                  <span class="address-tag text-blue-300 font-bold truncate">${evt.startDong}</span>
+                  <span class="text-indigo-400 font-extrabold shrink-0">→</span>
+                  <span class="address-tag text-emerald-300 font-bold truncate">${evt.endDong}</span>
+                </div>
               </div>
-              <div class="text-gray-400 text-[11px] leading-relaxed flex justify-between items-center">
+              <div class="text-gray-400 text-[11px] leading-relaxed flex justify-between items-center whitespace-nowrap">
                 <span>주행 ${evt.odoDiff}km (${evt.durationMin ? evt.durationMin + '분' : '-'}) | 🔋 ${batDetail}</span>
-                <span class="text-amber-400 font-bold">🌡️ ${tempText}</span>
+                <span class="text-amber-400 font-bold shrink-0 ml-1">🌡️ ${tempText}</span>
               </div>
             </div>
           `;
         } else {
           groupHtml += `
-            <div class="bg-gray-900/80 p-3 rounded-xl border border-gray-800/90 flex justify-between items-center text-xs shadow-md">
-              <div class="flex items-center space-x-2">
-                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border status-badge-1line ${badgeClass}">${icon} 충전</span>
-                <span class="text-gray-400 text-[11px] font-mono">${evt.timeStr}</span>
+            <div class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800/90 flex justify-between items-center text-xs shadow-md whitespace-nowrap overflow-hidden">
+              <div class="flex items-center space-x-2 shrink-0">
+                <span class="px-1.5 py-0.5 rounded-md text-[9px] font-bold border ${badgeClass}">${icon} 충전</span>
+                <span class="text-gray-400 text-[10px] font-mono">${evt.timeStr}</span>
               </div>
-              <div class="text-right">
+              <div class="text-right truncate min-w-0">
                 <span class="font-bold text-emerald-400 text-[11px]">충전 +${evt.batDiff}% (+${((evt.batDiff/100)*60).toFixed(1)}kWh)</span>
-                <span class="text-[10px] text-gray-500 block">🔋 ${evt.bat}% | 📍 ${evt.odo.toLocaleString()}km | 🌡️ ${tempText}</span>
+                <span class="text-[10px] text-gray-500 block truncate">🔋 ${evt.bat}% | 📍 ${evt.odo.toLocaleString()}km | 🌡️ ${tempText}</span>
               </div>
             </div>
           `;
@@ -1970,6 +2035,7 @@ if (timelineBox) {
     });
   }
 }
+
 }
     
 
@@ -3112,4 +3178,4 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 
   </script>
 </body>
-        </html>
+  </html>
