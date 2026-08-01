@@ -3570,15 +3570,61 @@ function formatDurationFromTimestamp(startTimeStr) {
 }
 
 // 🎯 초고속 대시보드 카드 동적 생성 및 데이터 업데이트 함수
+// 1. 빠른 실효 전비 계산 함수
+function calculateMyAvgEfficiencyFast() {
+  if (typeof allTrips === 'undefined' || !Array.isArray(allTrips) || allTrips.length === 0) {
+    return 5.5; 
+  }
+
+  const batteryCapacity = Number(window.VEHICLE_BATTERY_CAPACITY || 60);
+  let totalDist = 0;
+  let totalKwh = 0;
+
+  const recentTrips = allTrips.slice(0, 15);
+
+  for (let i = 0; i < recentTrips.length; i++) {
+    const trip = recentTrips[i];
+    const dist = Number(trip.moveKM ?? trip.distance ?? 0);
+    let usedKwh = Number(trip.used_kwh ?? 0);
+
+    if (!usedKwh && trip.useBattery !== undefined) {
+      usedKwh = (Number(trip.useBattery) / 100) * batteryCapacity;
+    }
+
+    if (dist > 0.5 && usedKwh > 0) {
+      totalDist += dist;
+      totalKwh += usedKwh;
+    }
+  }
+
+  return (totalKwh > 0 && totalDist > 0) ? (totalDist / totalKwh) : 5.5;
+}
+
+// 2. 상태 지속 시간 계산 함수 (기존 구현체 활용)
+function formatDurationFromTimestamp(startTimeStr) {
+  if (!startTimeStr) return '-';
+  const start = new Date(startTimeStr);
+  const now = new Date();
+  const diffMs = now - start;
+  if (isNaN(start.getTime()) || diffMs < 0) return '방금 전';
+  
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const hours = Math.floor(diffMins / 60);
+  const mins = diffMins % 60;
+  
+  if (hours > 0) return `${hours}시간 ${mins}분째`;
+  return `${mins}분째`;
+}
+
+// 3. Supabase DB 대응 대시보드 카드 동적 업데이트 함수
 function updateEstimatedRangeCard() {
   const container = document.getElementById('vehicle-range-card');
   if (!container) return;
 
-  // 1. 카드 HTML 구조가 없으면 먼저 자동 렌더링 (최초 1회)
+  // 1. 카드 HTML 구조가 없으면 자동 렌더링
   if (!container.innerHTML.trim()) {
     container.innerHTML = `
       <div class="bg-gray-900/90 border border-gray-800 rounded-2xl p-4 shadow-2xl backdrop-blur-md mb-4">
-        <!-- 상단 상태 & 시간 헤더 -->
         <div class="flex justify-between items-center pb-3 mb-3 border-b border-gray-800/80">
           <div class="flex items-center gap-2">
             <span class="relative flex h-3 w-3">
@@ -3586,40 +3632,24 @@ function updateEstimatedRangeCard() {
               <span id="v-state-dot" class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
             </span>
             <span id="v-state-title" class="font-extrabold text-white text-sm tracking-wide">확인 중...</span>
-            <span id="v-state-duration" class="text-xs text-gray-400 font-medium bg-gray-800/80 px-2 py-0.5 rounded-md border border-gray-700/50">
-              -
-            </span>
+            <span id="v-state-duration" class="text-xs text-gray-400 font-medium bg-gray-800/80 px-2 py-0.5 rounded-md border border-gray-700/50">-</span>
           </div>
-          
           <div class="flex items-center gap-1.5 text-xs text-gray-400">
             <span id="v-last-updated-time">- 기준</span>
             <button onclick="updateEstimatedRangeCard()" class="p-1 hover:text-white transition active:rotate-180" title="새로고침">🔄</button>
           </div>
         </div>
-
-        <!-- 메인 KPI 3열 그리드 (배터리 / 주행거리 / 예상거리) -->
         <div class="grid grid-cols-3 gap-2.5">
-          <!-- 1. 현재 배터리 -->
           <div class="bg-gray-800/40 p-3 rounded-xl border border-gray-700/40 flex flex-col items-center justify-center">
-            <span class="text-[11px] text-gray-400 font-semibold mb-1 flex items-center gap-1">
-              ⚡ 배터리
-            </span>
+            <span class="text-[11px] text-gray-400 font-semibold mb-1 flex items-center gap-1">⚡ 배터리</span>
             <span id="v-battery-val" class="text-xl font-black text-emerald-400 tracking-tight">- %</span>
           </div>
-
-          <!-- 2. 누적 주행거리 -->
           <div class="bg-gray-800/40 p-3 rounded-xl border border-gray-700/40 flex flex-col items-center justify-center">
-            <span class="text-[11px] text-gray-400 font-semibold mb-1 flex items-center gap-1">
-              📍 총 거리
-            </span>
+            <span class="text-[11px] text-gray-400 font-semibold mb-1 flex items-center gap-1">📍 총 거리</span>
             <span id="v-odometer-val" class="text-xl font-black text-blue-400 tracking-tight">- km</span>
           </div>
-
-          <!-- 3. 예상 주행 가능 거리 -->
           <div class="bg-gray-800/40 p-3 rounded-xl border border-emerald-500/30 flex flex-col items-center justify-center relative overflow-hidden">
-            <span class="text-[11px] text-emerald-400/90 font-semibold mb-1 flex items-center gap-1">
-              🎯 예상 거리
-            </span>
+            <span class="text-[11px] text-emerald-400/90 font-semibold mb-1 flex items-center gap-1">🎯 예상 거리</span>
             <span id="v-est-range-val" class="text-xl font-black text-emerald-300 tracking-tight">- km</span>
           </div>
         </div>
@@ -3635,53 +3665,49 @@ function updateEstimatedRangeCard() {
   let rawObj = latest.raw_data ?? latest.rawdata ?? latest.rawData ?? {};
   if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
 
-  // 2. 차량 상태 추출 및 한국어 변환
+  // 2. 차량 상태 추출 및 변환
   const rawState = (latest.vehicle_state || latest.state || rawObj?.state || 'parked').toLowerCase();
   let stateTitle = '주차 중';
   if (rawState.includes('drive')) stateTitle = '주행 중';
   else if (rawState.includes('asleep') || rawState.includes('sleep')) stateTitle = '수면 중';
   else if (rawState.includes('charge')) stateTitle = '충전 중';
 
-  // 3. 상태 지속 시간 및 최근 업데이트 시각 계산
-  const stateStartTime = latest.state_changed_at || latest.timestamp || latest.created_at;
+  // 3. 상태 지속 시간 및 최근 업데이트 시각
+  const stateStartTime = latest.state_changed_at || latest.timestamp || latest.created_at || latest.date;
   const durationText = formatDurationFromTimestamp(stateStartTime);
 
   const lastTime = stateStartTime ? new Date(stateStartTime) : new Date();
   const hh = String(lastTime.getHours()).padStart(2, '0');
   const mm = String(lastTime.getMinutes()).padStart(2, '0');
-  const updatedTimeText = `${hh}:${mm} 기준`;
 
-  // 4. 배터리 잔량 & 누적 주행거리 파싱
-  let batPct = Number(
-    latest.now_battery ??
-    latest.added_battery_level ??
-    latest.start_battery ??
-    rawObj?.charge_state?.battery_level ??
-    rawObj?.vehicle_state?.usable_battery_level ??
-    0
-  );
-
-  const odoKm = Number(latest.odometer ?? rawObj?.vehicle_state?.odometer ?? 0);
-
-  // Helper: DOM 값 변경 시에만 DOM 수정 (화면 껄떡임 방지)
   const setText = (id, val) => {
     const el = document.getElementById(id);
     if (el && el.innerText !== String(val)) el.innerText = val;
   };
 
-  // 5. DOM 데이터 주입
   setText('v-state-title', stateTitle);
   setText('v-state-duration', durationText);
-  setText('v-last-updated-time', updatedTimeText);
+  setText('v-last-updated-time', `${hh}:${mm} 기준`);
 
+  // 4. 배터리 잔량 & 누적 주행거리 파싱 (Supabase raw_data.nowBattery 카멜케이스 대응)
+  let batPct = Number(
+    latest.now_battery ??
+    rawObj?.nowBattery ??
+    latest.battery_level ??
+    latest.usable_battery_level ??
+    rawObj?.charge_state?.battery_level ??
+    rawObj?.vehicle_state?.usable_battery_level ??
+    latest.start_battery ??
+    0
+  );
+
+  const odoKm = Number(latest.odometer ?? rawObj?.vehicle_state?.odometer ?? rawObj?.odometer ?? 0);
+
+  // 5. DOM 데이터 주입
   if (batPct > 0) {
-    setText('v-battery-val', `${batPct}%`);
+    setText('v-battery-val', `${Math.round(batPct)}%`);
     const batteryCapacity = Number(window.VEHICLE_BATTERY_CAPACITY || 60);
-    
-    // 평균 전비 함수 호출 (Fast 버전 우선, 없으면 일반 버전 fallback)
-    const avgEff = (typeof calculateMyAvgEfficiencyFast === 'function') 
-      ? calculateMyAvgEfficiencyFast() 
-      : ((typeof calculateMyAvgEfficiency === 'function') ? calculateMyAvgEfficiency() : 5.5);
+    const avgEff = calculateMyAvgEfficiencyFast();
 
     const estKm = Math.round(((batPct / 100) * batteryCapacity) * avgEff);
     setText('v-est-range-val', `${estKm.toLocaleString()} km`);
@@ -3695,16 +3721,76 @@ function updateEstimatedRangeCard() {
   } else {
     setText('v-odometer-val', '- km');
   }
+
+  // 6. 하단 최근 운행일 전체 기록 자동 연동
+  if (typeof updateLatestDaySummaryCard === 'function') {
+    updateLatestDaySummaryCard();
+  }
 }
 
-// 12. 페이지 최초 로드 스위치 및 포그라운드 전환 감지
+// 4. 최근 운행일 전체 기록 자동 계산 함수
+function updateLatestDaySummaryCard() {
+  if (typeof allTrips === 'undefined' || !Array.isArray(allTrips) || allTrips.length === 0) return;
+
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && el.innerText !== String(val)) el.innerText = val;
+  };
+
+  const batteryCapacity = Number(window.VEHICLE_BATTERY_CAPACITY || 60);
+  const latestTrip = allTrips[0];
+  const latestTimeStr = latestTrip.start_time || latestTrip.end_time || latestTrip.timestamp || '';
+  if (!latestTimeStr) return;
+
+  const targetDateKey = String(latestTimeStr).slice(0, 10);
+  setText('v-latest-trip-date', targetDateKey);
+
+  const sameDayTrips = allTrips.filter(t => {
+    const tTime = t.start_time || t.end_time || t.timestamp || '';
+    return String(tTime).slice(0, 10) === targetDateKey;
+  });
+
+  let totalDist = 0;
+  let totalBatUsed = 0;
+  let totalDriveSec = 0;
+  let totalKwh = 0;
+
+  sameDayTrips.forEach(t => {
+    const dist = Number(t.moveKM ?? t.distance ?? t.drive_km ?? 0);
+    const batUsed = Number(t.useBattery ?? t.used_battery ?? t.battery_used ?? 0);
+    let kwh = Number(t.used_kwh ?? t.kwh ?? 0);
+
+    if (!kwh && batUsed > 0) {
+      kwh = (batUsed / 100) * batteryCapacity;
+    }
+
+    const driveSec = Number(t.driveTimeSec ?? t.drive_time_sec ?? t.duration ?? 0);
+
+    totalDist += dist;
+    totalBatUsed += batUsed;
+    totalKwh += kwh;
+    totalDriveSec += driveSec;
+  });
+
+  const avgEff = (totalKwh > 0 && totalDist > 0) 
+    ? (totalDist / totalKwh).toFixed(1) 
+    : '-';
+
+  const driveMins = Math.round(totalDriveSec / 60);
+
+  setText('v-day-efficiency', avgEff);
+  setText('v-day-dist', `${totalDist.toFixed(1)} km`);
+  setText('v-day-bat', `${Math.round(totalBatUsed)}%`);
+  setText('v-day-time', `${driveMins} 분`);
+  setText('v-day-kwh', `${totalKwh.toFixed(1)} kWh`);
+}
+
+// 5. 페이지 로드 이벤트 리스너
 document.addEventListener('DOMContentLoaded', () => {
-  // 앱 화면 전환(포그라운드/백그라운드) 감지 리스너
   if (typeof handleAppVisibilityChange === 'function') {
     document.addEventListener('visibilitychange', handleAppVisibilityChange);
   }
 
-  // 설정값 로드 여부 확인 후 대시보드 초속 병렬 로딩 시작
   const isConfigLoaded = (typeof loadConfig === 'function') ? loadConfig() : false;
   
   if (isConfigLoaded) {
