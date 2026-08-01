@@ -133,104 +133,101 @@
     <span id="v-last-time" class="text-xs font-mono text-gray-400 bg-gray-900/60 px-2.5 py-1 rounded-lg border border-gray-800">--:-- 기준 🔄</span>
   </div>
 
-  
+  <!-- 2. 동적 테슬라 대시보드 카드가 렌더링되는 위치 (updateEstimatedRangeCard() 출력) -->
+  <div id="vehicle-range-card" class="mb-4"></div>
 
-  <!-- 3. 현재 차량 상태 요약 카드 -->
-  <div class="glass-card p-4 rounded-2xl flex justify-between items-center shadow-xl">
-    <div class="flex items-center space-x-2.5">
-      <span id="v-status-dot" class="w-3 h-3 rounded-full bg-amber-500 shadow-lg shadow-amber-500/50"></span>
-      <span id="v-status-text" class="text-sm font-bold text-gray-100">현재: 주차 중</span>
+  <!-- 3. 주행/충전/감시 동적 상태 지속시간 카드 -->
+  <div id="card-state-duration" class="glass-card card-border-amber p-4 rounded-2xl flex items-center justify-between transition-all shadow-lg">
+    <div class="flex items-center space-x-3.5">
+      <span id="v-state-icon" class="text-3xl">🅿️</span>
+      <div>
+        <div id="v-state-duration-title" class="text-sm font-extrabold text-amber-500">주차 중</div>
+        <div id="v-state-start-time" class="text-[11px] text-gray-400 font-medium">시각 정보 불러오는 중...</div>
+      </div>
     </div>
-    <div class="flex items-center space-x-4 text-sm font-black tracking-tight">
-      <div class="flex items-center space-x-1.5 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-1 rounded-xl">
-        <span>🔋</span><span id="v-battery-val" class="text-emerald-400">-%</span>
+    <div id="v-state-extra-info" class="text-right text-xs font-bold text-gray-300"></div>
+  </div>
+
+  <!-- 4. 최근 운행일 전체 기록 -->
+  <div class="glass-card p-4 rounded-2xl space-y-3 shadow-xl">
+    <div class="flex justify-between items-center">
+      <span class="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
+        <i class="fa-solid fa-bolt text-indigo-500"></i> 최근 운행일 전체 기록
+      </span>
+      <div class="flex items-center gap-1.5">
+        <span id="v-latest-trip-date" class="text-[11px] text-gray-300 bg-gray-800/80 px-2.5 py-0.5 rounded-full border border-gray-700/50 font-mono">-</span>
+        <!-- 📅 캘린더 상호명 뱃지 위치 -->
+        <span id="v-latest-trip-calendar"></span>
       </div>
-      <div class="flex items-center space-x-1.5 bg-gray-900/60 border border-gray-800 px-2.5 py-1 rounded-xl">
-        <span>📍</span><span id="v-odometer-val" class="text-gray-200">- km</span>
-      </div>
+    </div>
     
-  </div>
-  <!-- 이 엘리먼트가 있어야 예상 주행 거리 카드가 렌더링됩니다 -->
-<div id="vehicle-range-card" class="mb-4"></div>
-
-
-  <!-- (이하 기존 차량 상태 관련 나머지 요소들) -->
-  </div>
-        <!-- 주행/충전/감시 동적 카드 -->
-        <div id="card-state-duration" class="glass-card card-border-amber p-4 rounded-2xl flex items-center justify-between transition-all shadow-lg">
-          <div class="flex items-center space-x-3.5">
-            <span id="v-state-icon" class="text-3xl">🅿️</span>
-            <div>
-              <div id="v-state-duration-title" class="text-sm font-extrabold text-amber-500">주차 중</div>
-              <div id="v-state-start-time" class="text-[11px] text-gray-400 font-medium">시각 정보 불러오는 중...</div>
-            </div>
-                 </div>
-          <div id="v-state-extra-info" class="text-right text-xs font-bold text-gray-300"></div>
-               </div>
-        <!-- 최근 운행일 기록 -->
-        <div class="glass-card p-4 rounded-2xl space-y-3 shadow-xl">
-          <div class="flex justify-between items-center">
-            <span class="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
-              <i class="fa-solid fa-bolt text-indigo-500"></i> 최근 운행일 전체 기록
-            </span>
-            <span id="v-latest-trip-date" class="text-[11px] text-gray-300 bg-gray-800/80 px-2.5 py-0.5 rounded-full border border-gray-700/50 font-mono">-</span>
-<!-- ★ 여기에 이 한 줄을 추가하세요 -->
-<span id="v-latest-trip-calendar"></span> 
-
-          </div>
-          <div class="flex items-baseline space-x-2">
-            <span id="v-day-efficiency" class="text-3xl font-black text-indigo-400 tracking-tight">-</span>
-            <span class="text-xs font-bold text-gray-400">km/kWh (평균)</span>
-          </div>
-          <hr class="border-gray-800 my-1">
-          <div class="grid grid-cols-4 gap-2 text-center text-xs">
-            <div class="bg-gray-900/50 p-2 rounded-xl border border-gray-800/60"><span class="text-gray-500 block text-[10px]">총 이동거리</span><span id="v-day-dist" class="font-extrabold text-gray-200 block mt-0.5">- km</span></div>
-            <div class="bg-gray-900/50 p-2 rounded-xl border border-gray-800/60"><span class="text-gray-500 block text-[10px]">총 사용배터리</span><span id="v-day-bat" class="font-extrabold text-gray-200 block mt-0.5">-%</span></div>
-            <div class="bg-gray-900/50 p-2 rounded-xl border border-gray-800/60"><span class="text-gray-500 block text-[10px]">총 운전시간</span><span id="v-day-time" class="font-extrabold text-gray-200 block mt-0.5">- 분</span></div>
-            <div class="bg-gray-900/50 p-2 rounded-xl border border-gray-800/60"><span class="text-gray-500 block text-[10px]">총 사용에너지</span><span id="v-day-kwh" class="font-extrabold text-gray-200 block mt-0.5">- kWh</span></div>
-          </div>
-          
-          <!-- 주행 클릭 시 해당 주행 지도로 이동 -->
-          <div id="v-day-trips-list" class="space-y-2 pt-2 border-t border-gray-800/80 text-xs"></div>
-        </div>
-
-        <!-- TPMS & 외기 온도 카드 -->
-        <div class="glass-card p-4 rounded-2xl space-y-3 shadow-xl">
-          <div class="flex justify-between items-center text-xs">
-            <span class="font-bold text-gray-200 flex items-center gap-1.5">
-              <span>🛞</span> 타이어 공기압 (TPMS)
-            </span>
-            <!-- 우측 외기 온도 소수점 절삭 적용 -->
-            <span id="v-outside-temp" class="text-amber-400 font-extrabold bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-800/40 text-[11px]">🌡️ 외기: -°C</span>
-          </div>
-          <div class="grid grid-cols-2 gap-2.5">
-            <div class="bg-gray-900/80 border border-blue-500/30 p-2.5 rounded-xl text-center shadow-inner">
-              <span class="text-[10px] text-gray-400 block font-medium">앞 왼쪽 (FL)</span>
-              <span id="tpms-fl" class="text-lg font-black text-blue-400 mt-0.5 block">- psi</span>
-            </div>
-            <div class="bg-gray-900/80 border border-blue-500/30 p-2.5 rounded-xl text-center shadow-inner">
-              <span class="text-[10px] text-gray-400 block font-medium">앞 오른쪽 (FR)</span>
-              <span id="tpms-fr" class="text-lg font-black text-blue-400 mt-0.5 block">- psi</span>
-            </div>
-            <div class="bg-gray-900/80 border border-blue-500/30 p-2.5 rounded-xl text-center shadow-inner">
-              <span class="text-[10px] text-gray-400 block font-medium">뒤 왼쪽 (RL)</span>
-              <span id="tpms-rl" class="text-lg font-black text-blue-400 mt-0.5 block">- psi</span>
-            </div>
-            <div class="bg-gray-900/80 border border-blue-500/30 p-2.5 rounded-xl text-center shadow-inner">
-              <span class="text-[10px] text-gray-400 block font-medium">뒤 오른쪽 (RR)</span>
-              <span id="tpms-rr" class="text-lg font-black text-blue-400 mt-0.5 block">- psi</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 최근 상태 히스토리 -->
-        <div class="space-y-2.5 pt-1">
-          <h3 class="text-xs font-extrabold text-gray-300 px-1 flex items-center gap-1.5">
-            <i class="fa-solid fa-clock-rotate-left text-blue-400"></i> 최근 상태 히스토리
-          </h3>
-          <div id="timeline-container" class="space-y-3"></div>
-        </div>
+    <div class="flex items-baseline space-x-2">
+      <span id="v-day-efficiency" class="text-3xl font-black text-indigo-400 tracking-tight">-</span>
+      <span class="text-xs font-bold text-gray-400">km/kWh (평균)</span>
+    </div>
+    
+    <hr class="border-gray-800 my-1">
+    
+    <div class="grid grid-cols-4 gap-2 text-center text-xs">
+      <div class="bg-gray-900/50 p-2 rounded-xl border border-gray-800/60">
+        <span class="text-gray-500 block text-[10px]">총 이동거리</span>
+        <span id="v-day-dist" class="font-extrabold text-gray-200 block mt-0.5">- km</span>
       </div>
+      <div class="bg-gray-900/50 p-2 rounded-xl border border-gray-800/60">
+        <span class="text-gray-500 block text-[10px]">총 사용배터리</span>
+        <span id="v-day-bat" class="font-extrabold text-gray-200 block mt-0.5">-%</span>
+      </div>
+      <div class="bg-gray-900/50 p-2 rounded-xl border border-gray-800/60">
+        <span class="text-gray-500 block text-[10px]">총 운전시간</span>
+        <span id="v-day-time" class="font-extrabold text-gray-200 block mt-0.5">- 분</span>
+      </div>
+      <div class="bg-gray-900/50 p-2 rounded-xl border border-gray-800/60">
+        <span class="text-gray-500 block text-[10px]">총 사용에너지</span>
+        <span id="v-day-kwh" class="font-extrabold text-gray-200 block mt-0.5">- kWh</span>
+      </div>
+    </div>
+    
+    <!-- 주행 리스트 -->
+    <div id="v-day-trips-list" class="space-y-2 pt-2 border-t border-gray-800/80 text-xs"></div>
+  </div>
+
+  <!-- 5. TPMS & 외기 온도 카드 -->
+  <div class="glass-card p-4 rounded-2xl space-y-3 shadow-xl">
+    <div class="flex justify-between items-center text-xs">
+      <span class="font-bold text-gray-200 flex items-center gap-1.5">
+        <span>🛞</span> 타이어 공기압 (TPMS)
+      </span>
+      <span id="v-outside-temp" class="text-amber-400 font-extrabold bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-800/40 text-[11px]">🌡️ 외기: -°C</span>
+    </div>
+    <div class="grid grid-cols-2 gap-2.5">
+      <div class="bg-gray-900/80 border border-blue-500/30 p-2.5 rounded-xl text-center shadow-inner">
+        <span class="text-[10px] text-gray-400 block font-medium">앞 왼쪽 (FL)</span>
+        <span id="tpms-fl" class="text-lg font-black text-blue-400 mt-0.5 block">- psi</span>
+      </div>
+      <div class="bg-gray-900/80 border border-blue-500/30 p-2.5 rounded-xl text-center shadow-inner">
+        <span class="text-[10px] text-gray-400 block font-medium">앞 오른쪽 (FR)</span>
+        <span id="tpms-fr" class="text-lg font-black text-blue-400 mt-0.5 block">- psi</span>
+      </div>
+      <div class="bg-gray-900/80 border border-blue-500/30 p-2.5 rounded-xl text-center shadow-inner">
+        <span class="text-[10px] text-gray-400 block font-medium">뒤 왼쪽 (RL)</span>
+        <span id="tpms-rl" class="text-lg font-black text-blue-400 mt-0.5 block">- psi</span>
+      </div>
+      <div class="bg-gray-900/80 border border-blue-500/30 p-2.5 rounded-xl text-center shadow-inner">
+        <span class="text-[10px] text-gray-400 block font-medium">뒤 오른쪽 (RR)</span>
+        <span id="tpms-rr" class="text-lg font-black text-blue-400 mt-0.5 block">- psi</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. 최근 상태 히스토리 -->
+  <div class="space-y-2.5 pt-1">
+    <h3 class="text-xs font-extrabold text-gray-300 px-1 flex items-center gap-1.5">
+      <i class="fa-solid fa-clock-rotate-left text-blue-400"></i> 최근 상태 히스토리
+    </h3>
+    <div id="timeline-container" class="space-y-3"></div>
+  </div>
+
+</div>
 
       <!-- 1-2. 주행 지도 서브 탭 -->
       <div id="sub-panel-driving" class="hidden space-y-3">
@@ -2734,7 +2731,18 @@ function renderDrivingData() {
 }
 
 
-// [7]
+// ============================================================================
+// [6] / [7] 월간 리포트 & 배터리 헬스케어 차트 모듈 (최적화 적용 버전)
+// ============================================================================
+
+// 💡 [최적화 1] 차량 모델/트림별 가변 배터리 용량(kWh) 설정 (기본값: 60kWh)
+const getBatteryCapacityKwh = () => {
+  if (typeof window !== 'undefined' && window.VEHICLE_BATTERY_CAPACITY) {
+    return Number(window.VEHICLE_BATTERY_CAPACITY) || 60;
+  }
+  return 60;
+};
+
 // 1-3. 월간 리포트 기능군 (원본 보장 + Supabase chargingRows 완벽 연동)
 function initMonthlyDropdowns() {
   const yearSel = document.getElementById('m-select-year');
@@ -2761,9 +2769,9 @@ function initMonthlyDropdowns() {
   const currentYear = new Date().getFullYear();
   if (years.length === 0) years = [currentYear, currentYear - 1];
 
-  // 2. 드롭다운 옵션 생성
+  // 2. 드롭다운 옵션 일괄 생성
   yearSel.innerHTML = years.map(y => `<option value="${y}">${y}년</option>`).join('');
-  monthSel.innerHTML = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
+  monthSel.innerHTML = Array.from({length: 12}, (_, i) => `<option value="${i + 1}">${i + 1}월</option>`).join('');
 
   // 3. 기본 선택값 설정 (최신 데이터 날짜 기준)
   const now = new Date();
@@ -2776,7 +2784,7 @@ function initMonthlyDropdowns() {
     monthSel.value = now.getMonth() + 1;
   }
 
-  // 4. 이벤트 리스너 바인딩 (드롭다운 변경 시 자동 갱신)
+  // 4. 이벤트 리스너 바인딩
   yearSel.onchange = onMonthlyDropdownChange;
   monthSel.onchange = onMonthlyDropdownChange;
 
@@ -2811,6 +2819,8 @@ function selectPrevMonth() {
 
 // 차량 수집 로그 및 Supabase charging 테이블 기반 충전 연산
 function calculateMonthlyChargingStats(selY, selM) {
+  const batteryCapacity = getBatteryCapacityKwh(); // 💡 [최적화 적용]
+
   // ① 1순위: Supabase charging 테이블 데이터 활용 (가장 정확함)
   if (typeof chargingRows !== 'undefined' && Array.isArray(chargingRows) && chargingRows.length > 0) {
     const monthCharges = chargingRows.filter(c => {
@@ -2863,7 +2873,8 @@ function calculateMonthlyChargingStats(selY, selM) {
     }
   }
 
-  const totalChargedKwh = (totalChargedPct / 100) * 60;
+  // 💡 [최적화 적용] 가변 배터리 용량 사용
+  const totalChargedKwh = (totalChargedPct / 100) * batteryCapacity;
   return { count: chargeCount, kwh: totalChargedKwh };
 }
 
@@ -2874,6 +2885,7 @@ function renderMonthlyTop5() {
 
   const selY = Number(ySel.value);
   const selM = Number(mSel.value);
+  const batteryCapacity = getBatteryCapacityKwh(); // 💡 [최적화 적용]
 
   const trips = (typeof allTrips !== 'undefined' && Array.isArray(allTrips)) ? allTrips : [];
 
@@ -2885,7 +2897,9 @@ function renderMonthlyTop5() {
   const totalDist = matchedTrips.reduce((s, t) => s + (Number(t.moveKM || t.distance || t.km) || 0), 0);
   const activeDays = new Set(matchedTrips.map(t => new Date(t.timestamp || t.date || t.start_time).toDateString())).size;
   const totalBat = matchedTrips.reduce((s, t) => s + (Number(t.useBattery) || 0), 0);
-  const totalKwh = (totalBat / 100) * 60;
+  
+  // 💡 [최적화 적용] 가변 배터리 용량 사용
+  const totalKwh = (totalBat / 100) * batteryCapacity;
   const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
   const avgTripKm = matchedTrips.length > 0 ? (totalDist / matchedTrips.length).toFixed(1) : "0.0";
 
@@ -2894,54 +2908,72 @@ function renderMonthlyTop5() {
   const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준
   const co2Saved = Math.round(totalDist * 0.12); // km당 0.12kg 절감
 
-  // 안전한 DOM 텍스트 설정 헬퍼
-  const setText = (id, text) => {
-    const el = document.getElementById(id);
-    if (el) el.innerText = text;
+  // 💡 [최적화 2] DOM 배치 텍스트 업데이트 (Element Diffing 적용으로 리플로우 최소화)
+  const statsMap = {
+    'm-stat-distance': `${totalDist.toFixed(1)} km`,
+    'm-stat-days': `${activeDays} 일`,
+    'm-stat-charge-count': `${chargeStats.count} 회`,
+    'm-stat-charge-kwh': `${chargeStats.kwh.toFixed(1)} kWh`,
+    'm-stat-cost': `₩${estimatedCost.toLocaleString()}`,
+    'm-stat-co2': `${co2Saved.toLocaleString()} kg`,
+    'm-stat-avg-eff': `${avgEff} km/kWh`,
+    'm-stat-avg-trip-km': `${avgTripKm}km`
   };
 
-  setText('m-stat-distance', `${totalDist.toFixed(1)} km`);
-  setText('m-stat-days', `${activeDays} 일`);
-  setText('m-stat-charge-count', `${chargeStats.count} 회`);
-  setText('m-stat-charge-kwh', `${chargeStats.kwh.toFixed(1)} kWh`);
-  setText('m-stat-cost', `₩${estimatedCost.toLocaleString()}`);
-  setText('m-stat-co2', `${co2Saved.toLocaleString()} kg`);
-  setText('m-stat-avg-eff', `${avgEff} km/kWh`);
-  setText('m-stat-avg-trip-km', `${avgTripKm}km`);
+  Object.entries(statsMap).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el && el.innerText !== val) el.innerText = val;
+  });
 
   const safeCleanAddress = typeof cleanAddress === 'function' ? cleanAddress : (addr => addr || '-');
+  const hasJumpTrip = typeof jumpToSingleTrip === 'function';
+
+  // 💡 [최적화 2] TOP 5 리스트 아이템 HTML 일괄 템플릿 헬퍼
+  const buildTripItemHTML = (t, idx, type) => {
+    const dateStr = new Date(t.timestamp || t.date || t.start_time).toLocaleDateString();
+    const startDong = safeCleanAddress(t.startDong);
+    const endDong = safeCleanAddress(t.endDong);
+    const clickAttr = hasJumpTrip ? `onclick="jumpToSingleTrip('${t.id}')"` : '';
+    
+    if (type === 'time') {
+      return `
+        <div ${clickAttr} class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-blue-500/50 transition">
+          <div>
+            <span class="font-bold text-gray-200">#${idx + 1} ${dateStr}</span>
+            <span class="text-[10px] text-gray-400 block">${startDong} → ${endDong}</span>
+          </div>
+          <span class="font-extrabold text-blue-400">${t.durationMin || 0}분 (${(t.moveKM || 0).toFixed(1)}km)</span>
+        </div>`;
+    } else {
+      return `
+        <div ${clickAttr} class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-green-500/50 transition">
+          <div>
+            <span class="font-bold text-gray-200">#${idx + 1} ${dateStr}</span>
+            <span class="text-[10px] text-gray-400 block">${startDong} → ${endDong}</span>
+          </div>
+          <span class="font-extrabold text-green-400">${(t.moveKM || 0).toFixed(1)} km</span>
+        </div>`;
+    }
+  };
 
   // 최장 운행 시간 TOP 5
-  const topTimeTrips = [...matchedTrips].sort((a,b) => (b.durationMin || 0) - (a.durationMin || 0)).slice(0, 5);
   const timeListEl = document.getElementById('m-top5-time-list');
   if (timeListEl) {
-    timeListEl.innerHTML = topTimeTrips.map((t, idx) => `
-      <div onclick="${typeof jumpToSingleTrip === 'function' ? `jumpToSingleTrip('${t.id}')` : ''}" class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-blue-500/50 transition">
-        <div>
-          <span class="font-bold text-gray-200">#${idx+1} ${new Date(t.timestamp || t.date || t.start_time).toLocaleDateString()}</span>
-          <span class="text-[10px] text-gray-400 block">${safeCleanAddress(t.startDong)} → ${safeCleanAddress(t.endDong)}</span>
-        </div>
-        <span class="font-extrabold text-blue-400">${t.durationMin || 0}분 (${(t.moveKM || 0).toFixed(1)}km)</span>
-      </div>
-    `).join('') || `<span class="text-gray-500">데이터가 없습니다.</span>`;
+    const topTimeTrips = [...matchedTrips].sort((a, b) => (b.durationMin || 0) - (a.durationMin || 0)).slice(0, 5);
+    timeListEl.innerHTML = topTimeTrips.length > 0
+      ? topTimeTrips.map((t, idx) => buildTripItemHTML(t, idx, 'time')).join('')
+      : `<span class="text-gray-500">데이터가 없습니다.</span>`;
   }
 
-  // 최장 운행 거리 TOP 5 (정렬 산술 연산 방식으로 수정)
-  const topDistTrips = [...matchedTrips].sort((a,b) => (b.moveKM || 0) - (a.moveKM || 0)).slice(0, 5);
+  // 최장 운행 거리 TOP 5
   const distListEl = document.getElementById('m-top5-dist-list');
   if (distListEl) {
-    distListEl.innerHTML = topDistTrips.map((t, idx) => `
-      <div onclick="${typeof jumpToSingleTrip === 'function' ? `jumpToSingleTrip('${t.id}')` : ''}" class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer hover:border-green-500/50 transition">
-        <div>
-          <span class="font-bold text-gray-200">#${idx+1} ${new Date(t.timestamp || t.date || t.start_time).toLocaleDateString()}</span>
-          <span class="text-[10px] text-gray-400 block">${safeCleanAddress(t.startDong)} → ${safeCleanAddress(t.endDong)}</span>
-        </div>
-        <span class="font-extrabold text-green-400">${(t.moveKM || 0).toFixed(1)} km</span>
-      </div>
-    `).join('') || `<span class="text-gray-500">데이터가 없습니다.</span>`;
+    const topDistTrips = [...matchedTrips].sort((a, b) => (b.moveKM || 0) - (a.moveKM || 0)).slice(0, 5);
+    distListEl.innerHTML = topDistTrips.length > 0
+      ? topDistTrips.map((t, idx) => buildTripItemHTML(t, idx, 'dist')).join('')
+      : `<span class="text-gray-500">데이터가 없습니다.</span>`;
   }
 }
-
 
 // 1-4. 프리미엄 배터리 차트 & KPI 렌더링 (chargingRows 정밀 연동 버전)
 function renderBatteryCharts() {
@@ -2951,7 +2983,8 @@ function renderBatteryCharts() {
 
   if (!sourceRows || sourceRows.length === 0) return;
 
-  const initKwh = parseFloat(document.getElementById('input-init-kwh')?.value || 62.5);
+  const defaultCap = getBatteryCapacityKwh();
+  const initKwh = parseFloat(document.getElementById('input-init-kwh')?.value || defaultCap);
   const certRange = parseFloat(document.getElementById('input-cert-range')?.value || 400);
 
   const sortedRows = [...sourceRows].sort((a, b) => new Date(a.date || a.updated_at) - new Date(b.date || b.updated_at));
@@ -3012,33 +3045,35 @@ function renderBatteryCharts() {
 
   if (labels.length === 0) return;
 
-  // 2. KPI 요약 카드 수치 업데이트
+  // 2. KPI 요약 카드 수치 배치 업데이트
   const lastSoh = sohData[sohData.length - 1];
   const lastMaxRange = maxRangeData[maxRangeData.length - 1];
   const lastCap = capacityData[capacityData.length - 1];
   const degradation = (100 - lastSoh).toFixed(1);
 
-  const setText = (id, text) => {
-    const el = document.getElementById(id);
-    if (el) el.innerText = text;
-  };
-
-  setText('b-soh-val', lastSoh);
-  setText('b-degradation-val', `-${degradation}%`);
-  setText('b-max-range-val', lastMaxRange);
-  
-  if (document.getElementById('b-range-diff-val')) {
-    const diff = lastMaxRange - certRange;
-    document.getElementById('b-range-diff-val').innerText = `${diff >= 0 ? '+' : ''}${diff} km`;
-  }
-  
-  setText('b-capacity-val', lastCap);
-  setText('b-init-cap-text', `${initKwh} kWh`);
-
   const totalChargeCount = (acCount + dcCount) || 1;
   const acRatio = Math.round((acCount / totalChargeCount) * 100);
   const dcRatio = 100 - acRatio;
-  setText('b-ac-ratio-val', `${acRatio}:${dcRatio}`);
+
+  const kpiMap = {
+    'b-soh-val': lastSoh,
+    'b-degradation-val': `-${degradation}%`,
+    'b-max-range-val': lastMaxRange,
+    'b-capacity-val': lastCap,
+    'b-init-cap-text': `${initKwh} kWh`,
+    'b-ac-ratio-val': `${acRatio}:${dcRatio}`
+  };
+
+  Object.entries(kpiMap).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el && el.innerText !== String(val)) el.innerText = val;
+  });
+  
+  const diffEl = document.getElementById('b-range-diff-val');
+  if (diffEl) {
+    const diff = lastMaxRange - certRange;
+    diffEl.innerText = `${diff >= 0 ? '+' : ''}${diff} km`;
+  }
 
   // 차트 생성 Guard (Chart.js 라이브러리 탑재 여부 검사)
   if (typeof Chart === 'undefined') return;
@@ -3234,47 +3269,123 @@ function cleanLocationTitle(text) {
   return cleaned || text;
 }
 
-// 5. 목적지 상호명 및 신사동 집/캘린더 판별 핵심 함수
-function getTripDestinationName(trip, isFirstTripOfDay, isLastTripOfDay) {
-  if (!trip) return '목적지 정보 없음';
-
-  const endLoc = cleanLocationTitle(trip.end_location || trip.destination || '');
-  const endAddr = trip.end_address || ''; // GPS 기반 상세 도로명/지번 주소
-
-  const isShinSa = (str) => str.includes('신사1동') || str.includes('신사동');
-  const isMyHomeGps = (str) => str.includes('응암역') || str.includes('효성해링턴');
-
-  // A. 도착지가 '신사1동' 계열인 경우
-  if (isShinSa(endLoc)) {
-    // 당일 마지막 도착지이거나 당일 첫 출발지인 경우 -> 무조건 '신사동 집'
-    if (isLastTripOfDay || isFirstTripOfDay) {
-      return '신사동 집';
-    }
-
-    // 중간 도착지가 신사1동인 경우
-    // 1) 당일 캘린더에 신사동 관련 다른 장소/일정이 있는지 확인
-    const matchedEvent = findCalendarEventForTrip(trip);
-    if (matchedEvent) return cleanLocationTitle(matchedEvent.summary);
-
-    // 2) GPS 상세 주소가 집(응암역 효성해링턴)과 다르면 도로명/장소 표기
-    if (endAddr && !isMyHomeGps(endAddr)) {
-      return cleanLocationTitle(endAddr);
-    }
-
-    return '신사동 집';
+// 💡 최신 저장 데이터의 날짜를 추출하는 헬퍼 함수 (DB/트립 기록 기반)
+function getLatestSavedDate() {
+  if (typeof vehicleRows !== 'undefined' && Array.isArray(vehicleRows) && vehicleRows.length > 0) {
+    const ts = vehicleRows[0].timestamp || vehicleRows[0].created_at || vehicleRows[0].start_time;
+    if (ts) return new Date(ts);
   }
 
-  // B. 당일 첫/끝 출발·도착지가 신사1동이 아닌 경우 (호텔, 1박2일 숙소, 타지역 일정)
-  const matchedEvent = findCalendarEventForTrip(trip);
-  if (matchedEvent) {
-    return cleanLocationTitle(matchedEvent.summary);
+  if (typeof allTrips !== 'undefined' && Array.isArray(allTrips) && allTrips.length > 0) {
+    const ts = allTrips[0].start_time || allTrips[0].end_time || allTrips[0].timestamp;
+    if (ts) return new Date(ts);
   }
 
-  // C. 일반 도착지 (상호명만 깨끗하게 반환)
-  return endLoc || '알 수 없는 목적지';
+  return new Date();
 }
 
-// 6. 주행 기록에 맞는 캘린더 일정 추적 함수
+// 5. Supabase 캘린더 데이터 파싱 헬퍼 (날짜별 맵 생성)
+function parseCalendarEvents(events) {
+  (events || []).forEach(evt => {
+    if (!evt.start_time) return;
+
+    const startDate = new Date(evt.start_time);
+    let endDate = evt.end_time ? new Date(evt.end_time) : new Date(startDate);
+
+    if (endDate > startDate && endDate.getHours() === 0 && endDate.getMinutes() === 0) {
+      endDate.setSeconds(endDate.getSeconds() - 1);
+    }
+
+    let curr = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const last = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+    let safetyCounter = 0;
+    while (curr <= last && safetyCounter < 31) {
+      safetyCounter++;
+      const yyyy = curr.getFullYear();
+      const mm = String(curr.getMonth() + 1).padStart(2, '0');
+      const dd = String(curr.getDate()).padStart(2, '0');
+      const dateKey = `${yyyy}-${mm}-${dd}`;
+
+      if (!calendarEventsMap[dateKey]) {
+        calendarEventsMap[dateKey] = [];
+      }
+
+      const exists = calendarEventsMap[dateKey].some(e => e.id === evt.uid);
+      if (!exists) {
+        calendarEventsMap[dateKey].push({
+          id: evt.uid,
+          summary: evt.summary || '',   // 화면 출력용 (예: 중구 신세계백화점 본점)
+          location: evt.location || ''   // 주소 비교용 (예: 서울특별시 중구 소공로 63)
+        });
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+  });
+}
+
+// 6. Supabase 캘린더 데이터 로드 (최신 저장 날짜 기준 -1일 ~ 해당일 경량 로드)
+async function loadGoogleCalendarEvents() {
+  try {
+    if (typeof supabaseClient === 'undefined' || !supabaseClient?.from) {
+      console.warn('⚠️ Supabase 클라이언트가 준비되지 않아 캘린더 조회를 건너뜁니다.');
+      return;
+    }
+
+    const latestDate = getLatestSavedDate();
+
+    // 최신 데이터 날짜 기준 하루 전 00:00부터 당일 23:59까지 2일치만 조회
+    const startDate = new Date(latestDate.getFullYear(), latestDate.getMonth(), latestDate.getDate() - 1, 0, 0, 0).toISOString();
+    const endDate = new Date(latestDate.getFullYear(), latestDate.getMonth(), latestDate.getDate(), 23, 59, 59).toISOString();
+
+    const { data, error } = await supabaseClient
+      .from('calendar_events')
+      .select('uid, summary, location, start_time, end_time')
+      .gte('start_time', startDate)
+      .lte('start_time', endDate);
+
+    if (error) throw error;
+
+    calendarEventsMap = {};
+    parseCalendarEvents(data || []);
+
+    console.log(`⚡ 캘린더 초경량 로드 완료! (범위: ${startDate.slice(0, 10)} ~ ${endDate.slice(0, 10)})`);
+
+    if (typeof renderDrivingData === 'function') renderDrivingData();
+    if (typeof renderTrips === 'function') renderTrips();
+    if (typeof updateEstimatedRangeCard === 'function') updateEstimatedRangeCard();
+
+  } catch (err) {
+    console.error('❌ Supabase 캘린더 로딩 에러:', err.message);
+  }
+}
+
+// 6-1. [온디맨드] 특정 날짜 선택 시 해당 날짜 캘린더 동적 가져오기
+async function fetchCalendarForDate(dateStr) {
+  if (!dateStr) return;
+  const dateKey = String(dateStr).slice(0, 10);
+  if (calendarEventsMap[dateKey]) return; // 이미 캐시된 경우 요청 생략
+
+  try {
+    const startIso = `${dateKey}T00:00:00.000Z`;
+    const endIso = `${dateKey}T23:59:59.999Z`;
+
+    const { data, error } = await supabaseClient
+      .from('calendar_events')
+      .select('uid, summary, location, start_time, end_time')
+      .gte('start_time', startIso)
+      .lte('start_time', endIso);
+
+    if (!error && data) {
+      parseCalendarEvents(data);
+      if (typeof renderDrivingData === 'function') renderDrivingData();
+    }
+  } catch (e) {
+    console.warn('일간 캘린더 로드 실패:', e);
+  }
+}
+
+// 7. 주행 기록에 맞는 캘린더 일정 추적 (location 주소 매칭)
 function findCalendarEventForTrip(trip) {
   if (!trip) return null;
   const timeStr = trip.start_time || trip.end_time || trip.timestamp || '';
@@ -3284,90 +3395,56 @@ function findCalendarEventForTrip(trip) {
   const events = calendarEventsMap[dateKey] || [];
   if (events.length === 0) return null;
 
-  const endLoc = trip.end_location || trip.destination || '';
-  
-  // 장소명/제목 연관성 비교 (호텔/숙소 키워드 포함)
+  const endAddr = trip.end_address || trip.end_location || trip.destination || '';
+
+  // 주소 비교 (location 기반)
   for (const evt of events) {
-    const summary = evt.summary || '';
-    const location = evt.location || '';
-    
-    if (summary.includes('호텔') || summary.includes('리조트') || summary.includes('숙소') ||
-        (location && endLoc && (location.includes(endLoc) || endLoc.includes(location)))) {
+    if (evt.location && endAddr && (evt.location.includes(endAddr) || endAddr.includes(evt.location))) {
       return evt;
     }
   }
 
-  return events[0]; // 특별한 매칭 없으면 당일 대표 일정 반환
+  // 매칭되는 상세 주소가 없으면 당일 첫 일정 반환
+  return events[0];
 }
 
-// 7. Supabase 캘린더 데이터 로드 (속도 최적화 및 안정성 보장)
-async function loadGoogleCalendarEvents() {
-  try {
-    if (typeof supabaseClient === 'undefined' || !supabaseClient || typeof supabaseClient.from !== 'function') {
-      console.warn('⚠️ Supabase 클라이언트가 준비되지 않아 캘린더 조회를 건너뜁니다.');
-      return;
+// 8. 목적지 상호명 판별 핵심 함수 (summary 상호명 반환)
+function getTripDestinationName(trip, isFirstTripOfDay, isLastTripOfDay) {
+  if (!trip) return '목적지 정보 없음';
+
+  const endLoc = cleanLocationTitle(trip.end_location || trip.destination || '');
+  const endAddr = trip.end_address || '';
+
+  const isShinSa = (str) => str.includes('신사1동') || str.includes('신사동');
+  const isMyHomeGps = (str) => str.includes('응암역') || str.includes('효성해링턴');
+
+  // A. 도착지가 신사동 계열인 경우
+  if (isShinSa(endLoc)) {
+    if (isLastTripOfDay || isFirstTripOfDay) {
+      return '신사동 집';
     }
 
-    const { data, error } = await supabaseClient
-      .from('calendar_events')
-      .select('uid, summary, location, start_time, end_time');
+    const matchedEvent = findCalendarEventForTrip(trip);
+    if (matchedEvent) return cleanLocationTitle(matchedEvent.summary);
 
-    if (error) throw error;
+    if (endAddr && !isMyHomeGps(endAddr)) {
+      return cleanLocationTitle(endAddr);
+    }
 
-    calendarEventsMap = {};
-
-    (data || []).forEach(evt => {
-      if (!evt.start_time) return;
-
-      const startDate = new Date(evt.start_time);
-      let endDate = evt.end_time ? new Date(evt.end_time) : new Date(startDate);
-
-      if (endDate > startDate && endDate.getHours() === 0 && endDate.getMinutes() === 0) {
-        endDate.setSeconds(endDate.getSeconds() - 1);
-      }
-
-      let curr = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-      const last = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-
-      // 무한 루프 방지용 계수 제한 (최대 31일 범위로 제한)
-      let safetyCounter = 0;
-      while (curr <= last && safetyCounter < 31) {
-        safetyCounter++;
-        const yyyy = curr.getFullYear();
-        const mm = String(curr.getMonth() + 1).padStart(2, '0');
-        const dd = String(curr.getDate()).padStart(2, '0');
-        const dateKey = `${yyyy}-${mm}-${dd}`;
-
-        if (!calendarEventsMap[dateKey]) {
-          calendarEventsMap[dateKey] = [];
-        }
-
-        const exists = calendarEventsMap[dateKey].some(e => e.id === evt.uid);
-        if (!exists) {
-          calendarEventsMap[dateKey].push({
-            id: evt.uid,
-            summary: evt.summary || '',
-            location: evt.location || ''
-          });
-        }
-
-        curr.setDate(curr.getDate() + 1);
-      }
-    });
-
-    console.log('📅 Supabase 캘린더 로드 완료! (등록 날짜 수:', Object.keys(calendarEventsMap).length, ')');
-
-    // UI 및 카드 업데이트
-    if (typeof renderDrivingData === 'function') renderDrivingData();
-    if (typeof renderTrips === 'function') renderTrips();
-    updateEstimatedRangeCard();
-
-  } catch (err) {
-    console.error('❌ Supabase 캘린더 로딩 에러:', err.message);
+    return '신사동 집';
   }
+
+  // B. 캘린더 location 비교로 매칭된 summary 상호명 표시
+  const matchedEvent = findCalendarEventForTrip(trip);
+  if (matchedEvent) {
+    return cleanLocationTitle(matchedEvent.summary);
+  }
+
+  // C. 매칭 일정이 없는 경우 GPS 도착지 상호명 반환
+  return endLoc || '알 수 없는 목적지';
 }
 
-// 8. 날짜 뱃지 HTML 생성 (상호명만 출력)
+// 9. 날짜 뱃지 HTML 생성 (summary 상호명 출력)
 function getCalendarBadgeHtml(targetDate) {
   if (!targetDate) return '';
 
@@ -3393,6 +3470,7 @@ function getCalendarBadgeHtml(targetDate) {
     `;
   }).join(' ');
 }
+
 
 // 9. 내 누적 주행 기록(allTrips) 기반 실제 평균 전비(km/kWh) 계산
 function calculateMyAvgEfficiency() {
@@ -3472,41 +3550,151 @@ function renderEstimatedRange(batteryPercent, avgEfficiency) {
 }
 
 // 11. 주행 가능 거리 카드 안전 업데이트 함수
+// ⏱️ 상태 지속 시간 포맷 계산 함수 (예: '11시간 1분째' 또는 '2일 3시간째')
+function formatDurationFromTimestamp(startTimeStr) {
+  if (!startTimeStr) return '-';
+  const start = new Date(startTimeStr);
+  if (isNaN(start.getTime())) return '-';
+
+  const now = new Date();
+  const diffMs = Math.max(0, now - start);
+  const totalMin = Math.floor(diffMs / (1000 * 60));
+
+  const days = Math.floor(totalMin / (60 * 24));
+  const hours = Math.floor((totalMin % (60 * 24)) / 60);
+  const mins = totalMin % 60;
+
+  if (days > 0) return `${days}일 ${hours}시간째`;
+  if (hours > 0) return `${hours}시간 ${mins}분째`;
+  return `${mins}분째`;
+}
+
+// 🎯 초고속 대시보드 카드 동적 생성 및 데이터 업데이트 함수
 function updateEstimatedRangeCard() {
-  let currentBattery = 0;
-  let latest = null;
+  const container = document.getElementById('vehicle-range-card');
+  if (!container) return;
 
-  if (typeof vehicleRows !== 'undefined' && Array.isArray(vehicleRows) && vehicleRows.length > 0) {
-    latest = vehicleRows[0];
+  // 1. 카드 HTML 구조가 없으면 먼저 자동 렌더링 (최초 1회)
+  if (!container.innerHTML.trim()) {
+    container.innerHTML = `
+      <div class="bg-gray-900/90 border border-gray-800 rounded-2xl p-4 shadow-2xl backdrop-blur-md mb-4">
+        <!-- 상단 상태 & 시간 헤더 -->
+        <div class="flex justify-between items-center pb-3 mb-3 border-b border-gray-800/80">
+          <div class="flex items-center gap-2">
+            <span class="relative flex h-3 w-3">
+              <span id="v-state-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span id="v-state-dot" class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <span id="v-state-title" class="font-extrabold text-white text-sm tracking-wide">확인 중...</span>
+            <span id="v-state-duration" class="text-xs text-gray-400 font-medium bg-gray-800/80 px-2 py-0.5 rounded-md border border-gray-700/50">
+              -
+            </span>
+          </div>
+          
+          <div class="flex items-center gap-1.5 text-xs text-gray-400">
+            <span id="v-last-updated-time">- 기준</span>
+            <button onclick="updateEstimatedRangeCard()" class="p-1 hover:text-white transition active:rotate-180" title="새로고침">🔄</button>
+          </div>
+        </div>
 
-    let rawObj = latest.raw_data ?? latest.rawdata ?? latest.rawData ?? {};
-    if (typeof rawObj === 'string') {
-      try {
-        rawObj = JSON.parse(rawObj);
-      } catch (e) {
-        rawObj = {};
-      }
-    }
+        <!-- 메인 KPI 3열 그리드 (배터리 / 주행거리 / 예상거리) -->
+        <div class="grid grid-cols-3 gap-2.5">
+          <!-- 1. 현재 배터리 -->
+          <div class="bg-gray-800/40 p-3 rounded-xl border border-gray-700/40 flex flex-col items-center justify-center">
+            <span class="text-[11px] text-gray-400 font-semibold mb-1 flex items-center gap-1">
+              ⚡ 배터리
+            </span>
+            <span id="v-battery-val" class="text-xl font-black text-emerald-400 tracking-tight">- %</span>
+          </div>
 
-    currentBattery =
-      Number(latest.now_battery ??
-        latest.added_battery_level ??
-        latest.start_battery ??
-        rawObj?.charge_state?.battery_level ??
-        rawObj?.vehicle_state?.usable_battery_level ??
-        0);
+          <!-- 2. 누적 주행거리 -->
+          <div class="bg-gray-800/40 p-3 rounded-xl border border-gray-700/40 flex flex-col items-center justify-center">
+            <span class="text-[11px] text-gray-400 font-semibold mb-1 flex items-center gap-1">
+              📍 총 거리
+            </span>
+            <span id="v-odometer-val" class="text-xl font-black text-blue-400 tracking-tight">- km</span>
+          </div>
+
+          <!-- 3. 예상 주행 가능 거리 -->
+          <div class="bg-gray-800/40 p-3 rounded-xl border border-emerald-500/30 flex flex-col items-center justify-center relative overflow-hidden">
+            <span class="text-[11px] text-emerald-400/90 font-semibold mb-1 flex items-center gap-1">
+              🎯 예상 거리
+            </span>
+            <span id="v-est-range-val" class="text-xl font-black text-emerald-300 tracking-tight">- km</span>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
-  if (!currentBattery) {
-    const batteryEl = document.getElementById('v-battery-val');
-    if (batteryEl) {
-      const match = batteryEl.innerText.match(/(d+(.d+)?)%/);
-      if (match) currentBattery = parseFloat(match[1]);
-    }
+  if (typeof vehicleRows === 'undefined' || !Array.isArray(vehicleRows) || vehicleRows.length === 0) {
+    return;
   }
 
-  const myAvgEff = calculateMyAvgEfficiency();
-  renderEstimatedRange(currentBattery, myAvgEff);
+  const latest = vehicleRows[0];
+  let rawObj = latest.raw_data ?? latest.rawdata ?? latest.rawData ?? {};
+  if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
+
+  // 2. 차량 상태 추출 및 한국어 변환
+  const rawState = (latest.vehicle_state || latest.state || rawObj?.state || 'parked').toLowerCase();
+  let stateTitle = '주차 중';
+  if (rawState.includes('drive')) stateTitle = '주행 중';
+  else if (rawState.includes('asleep') || rawState.includes('sleep')) stateTitle = '수면 중';
+  else if (rawState.includes('charge')) stateTitle = '충전 중';
+
+  // 3. 상태 지속 시간 및 최근 업데이트 시각 계산
+  const stateStartTime = latest.state_changed_at || latest.timestamp || latest.created_at;
+  const durationText = formatDurationFromTimestamp(stateStartTime);
+
+  const lastTime = stateStartTime ? new Date(stateStartTime) : new Date();
+  const hh = String(lastTime.getHours()).padStart(2, '0');
+  const mm = String(lastTime.getMinutes()).padStart(2, '0');
+  const updatedTimeText = `${hh}:${mm} 기준`;
+
+  // 4. 배터리 잔량 & 누적 주행거리 파싱
+  let batPct = Number(
+    latest.now_battery ??
+    latest.added_battery_level ??
+    latest.start_battery ??
+    rawObj?.charge_state?.battery_level ??
+    rawObj?.vehicle_state?.usable_battery_level ??
+    0
+  );
+
+  const odoKm = Number(latest.odometer ?? rawObj?.vehicle_state?.odometer ?? 0);
+
+  // Helper: DOM 값 변경 시에만 DOM 수정 (화면 껄떡임 방지)
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && el.innerText !== String(val)) el.innerText = val;
+  };
+
+  // 5. DOM 데이터 주입
+  setText('v-state-title', stateTitle);
+  setText('v-state-duration', durationText);
+  setText('v-last-updated-time', updatedTimeText);
+
+  if (batPct > 0) {
+    setText('v-battery-val', `${batPct}%`);
+    const batteryCapacity = Number(window.VEHICLE_BATTERY_CAPACITY || 60);
+    
+    // 평균 전비 함수 호출 (Fast 버전 우선, 없으면 일반 버전 fallback)
+    const avgEff = (typeof calculateMyAvgEfficiencyFast === 'function') 
+      ? calculateMyAvgEfficiencyFast() 
+      : ((typeof calculateMyAvgEfficiency === 'function') ? calculateMyAvgEfficiency() : 5.5);
+
+    const estKm = Math.round(((batPct / 100) * batteryCapacity) * avgEff);
+    setText('v-est-range-val', `${estKm.toLocaleString()} km`);
+  } else {
+    setText('v-battery-val', '- %');
+    setText('v-est-range-val', '- km');
+  }
+
+  if (odoKm > 0) {
+    setText('v-odometer-val', `${Math.round(odoKm).toLocaleString()} km`);
+  } else {
+    setText('v-odometer-val', '- km');
+  }
 }
 
 // 12. 페이지 최초 로드 스위치 및 포그라운드 전환 감지
