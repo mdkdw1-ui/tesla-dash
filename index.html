@@ -220,12 +220,14 @@
   </div>
 
   <!-- 6. 최근 상태 히스토리 -->
-  <div class="space-y-2.5 pt-1">
-    <h3 class="text-xs font-extrabold text-gray-300 px-1 flex items-center gap-1.5">
-      <i class="fa-solid fa-clock-rotate-left text-blue-400"></i> 최근 상태 히스토리
-    </h3>
-    <div id="timeline-container" class="space-y-3"></div>
-  </div>
+<div class="space-y-2.5 pt-1">
+  <h3 class="text-xs font-extrabold text-gray-300 px-1 flex items-center gap-1.5">
+    <i class="fa-solid fa-clock-rotate-left text-blue-400"></i> 최근 상태 히스토리
+  </h3>
+  <!-- 🎯 id를 v-status-history-list 로 변경 -->
+  <div id="v-status-history-list" class="space-y-3"></div>
+</div>
+
 
 </div>
 
@@ -3728,7 +3730,167 @@ function updateEstimatedRangeCard() {
   }
 }
 
-// 4. 최근 운행일 전체 기록 자동 계산 함수
+// 📊 최근 운행일 전체 기록 계산 및 날짜/시간 완벽 변환 함수
+// 1. 빠른 실효 전비 계산 함수
+function calculateMyAvgEfficiencyFast() {
+  if (typeof allTrips === 'undefined' || !Array.isArray(allTrips) || allTrips.length === 0) {
+    return 5.5; 
+  }
+
+  const batteryCapacity = Number(window.VEHICLE_BATTERY_CAPACITY || 60);
+  let totalDist = 0;
+  let totalKwh = 0;
+
+  const recentTrips = allTrips.slice(0, 15);
+
+  for (let i = 0; i < recentTrips.length; i++) {
+    const trip = recentTrips[i];
+    const dist = Number(trip.moveKM ?? trip.distance ?? 0);
+    let usedKwh = Number(trip.used_kwh ?? 0);
+
+    if (!usedKwh && trip.useBattery !== undefined) {
+      usedKwh = (Number(trip.useBattery) / 100) * batteryCapacity;
+    }
+
+    if (dist > 0.5 && usedKwh > 0) {
+      totalDist += dist;
+      totalKwh += usedKwh;
+    }
+  }
+
+  return (totalKwh > 0 && totalDist > 0) ? (totalDist / totalKwh) : 5.5;
+}
+
+// 2. 상태 지속 시간 계산 함수
+function formatDurationFromTimestamp(startTimeStr) {
+  if (!startTimeStr) return '-';
+  const start = new Date(startTimeStr);
+  const now = new Date();
+  const diffMs = now - start;
+  if (isNaN(start.getTime()) || diffMs < 0) return '방금 전';
+  
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const hours = Math.floor(diffMins / 60);
+  const mins = diffMins % 60;
+  
+  if (hours > 0) return `${hours}시간 ${mins}분째`;
+  return `${mins}분째`;
+}
+
+// 3. Supabase DB 대응 대시보드 메인 카드 동적 업데이트 함수
+function updateEstimatedRangeCard() {
+  const container = document.getElementById('vehicle-range-card');
+  if (!container) return;
+
+  // 1. 카드 HTML 구조가 없으면 자동 렌더링
+  if (!container.innerHTML.trim()) {
+    container.innerHTML = `
+      <div class="bg-gray-900/90 border border-gray-800 rounded-2xl p-4 shadow-2xl backdrop-blur-md mb-4">
+        <div class="flex justify-between items-center pb-3 mb-3 border-b border-gray-800/80">
+          <div class="flex items-center gap-2">
+            <span class="relative flex h-3 w-3">
+              <span id="v-state-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span id="v-state-dot" class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <span id="v-state-title" class="font-extrabold text-white text-sm tracking-wide">확인 중...</span>
+            <span id="v-state-duration" class="text-xs text-gray-400 font-medium bg-gray-800/80 px-2 py-0.5 rounded-md border border-gray-700/50">-</span>
+          </div>
+          <div class="flex items-center gap-1.5 text-xs text-gray-400">
+            <span id="v-last-updated-time">- 기준</span>
+            <button onclick="updateEstimatedRangeCard()" class="p-1 hover:text-white transition active:rotate-180" title="새로고침">🔄</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2.5">
+          <div class="bg-gray-800/40 p-3 rounded-xl border border-gray-700/40 flex flex-col items-center justify-center">
+            <span class="text-[11px] text-gray-400 font-semibold mb-1 flex items-center gap-1">⚡ 배터리</span>
+            <span id="v-battery-val" class="text-xl font-black text-emerald-400 tracking-tight">- %</span>
+          </div>
+          <div class="bg-gray-800/40 p-3 rounded-xl border border-gray-700/40 flex flex-col items-center justify-center">
+            <span class="text-[11px] text-gray-400 font-semibold mb-1 flex items-center gap-1">📍 총 거리</span>
+            <span id="v-odometer-val" class="text-xl font-black text-blue-400 tracking-tight">- km</span>
+          </div>
+          <div class="bg-gray-800/40 p-3 rounded-xl border border-emerald-500/30 flex flex-col items-center justify-center relative overflow-hidden">
+            <span class="text-[11px] text-emerald-400/90 font-semibold mb-1 flex items-center gap-1">🎯 예상 거리</span>
+            <span id="v-est-range-val" class="text-xl font-black text-emerald-300 tracking-tight">- km</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (typeof vehicleRows === 'undefined' || !Array.isArray(vehicleRows) || vehicleRows.length === 0) {
+    return;
+  }
+
+  const latest = vehicleRows[0];
+  let rawObj = latest.raw_data ?? latest.rawdata ?? latest.rawData ?? {};
+  if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
+
+  // 2. 차량 상태 추출
+  const rawState = (latest.vehicle_state || latest.state || rawObj?.state || 'parked').toLowerCase();
+  let stateTitle = '주차 중';
+  if (rawState.includes('drive')) stateTitle = '주행 중';
+  else if (rawState.includes('asleep') || rawState.includes('sleep')) stateTitle = '수면 중';
+  else if (rawState.includes('charge')) stateTitle = '충전 중';
+
+  // 3. 상태 지속 시간 & 시각
+  const stateStartTime = latest.state_changed_at || latest.timestamp || latest.created_at || latest.date;
+  const durationText = formatDurationFromTimestamp(stateStartTime);
+
+  const lastTime = stateStartTime ? new Date(stateStartTime) : new Date();
+  const hh = String(lastTime.getHours()).padStart(2, '0');
+  const mm = String(lastTime.getMinutes()).padStart(2, '0');
+
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && el.innerText !== String(val)) el.innerText = val;
+  };
+
+  setText('v-state-title', stateTitle);
+  setText('v-state-duration', durationText);
+  setText('v-last-updated-time', `${hh}:${mm} 기준`);
+
+  // 4. 배터리 잔량 & 누적 거리 (now_battery, nowBattery 카멜케이스 대응)
+  let batPct = Number(
+    latest.now_battery ??
+    rawObj?.nowBattery ??
+    latest.battery_level ??
+    latest.usable_battery_level ??
+    rawObj?.charge_state?.battery_level ??
+    rawObj?.vehicle_state?.usable_battery_level ??
+    latest.start_battery ??
+    0
+  );
+
+  const odoKm = Number(latest.odometer ?? rawObj?.vehicle_state?.odometer ?? rawObj?.odometer ?? 0);
+
+  if (batPct > 0) {
+    setText('v-battery-val', `${Math.round(batPct)}%`);
+    const batteryCapacity = Number(window.VEHICLE_BATTERY_CAPACITY || 60);
+    const avgEff = calculateMyAvgEfficiencyFast();
+    const estKm = Math.round(((batPct / 100) * batteryCapacity) * avgEff);
+    setText('v-est-range-val', `${estKm.toLocaleString()} km`);
+  } else {
+    setText('v-battery-val', '- %');
+    setText('v-est-range-val', '- km');
+  }
+
+  if (odoKm > 0) {
+    setText('v-odometer-val', `${Math.round(odoKm).toLocaleString()} km`);
+  } else {
+    setText('v-odometer-val', '- km');
+  }
+
+  // 5. 하단 연동 카드 자동 호출
+  if (typeof updateLatestDaySummaryCard === 'function') {
+    updateLatestDaySummaryCard();
+  }
+  if (typeof renderStatusHistory === 'function') {
+    renderStatusHistory();
+  }
+}
+
+// 4. 최근 운행일 전체 기록 계산 및 날짜/시간 완벽 변환 함수
 function updateLatestDaySummaryCard() {
   if (typeof allTrips === 'undefined' || !Array.isArray(allTrips) || allTrips.length === 0) return;
 
@@ -3739,15 +3901,49 @@ function updateLatestDaySummaryCard() {
 
   const batteryCapacity = Number(window.VEHICLE_BATTERY_CAPACITY || 60);
   const latestTrip = allTrips[0];
-  const latestTimeStr = latestTrip.start_time || latestTrip.end_time || latestTrip.timestamp || '';
-  if (!latestTimeStr) return;
+  const rawTime = latestTrip.start_time || latestTrip.end_time || latestTrip.timestamp || latestTrip.date;
 
-  const targetDateKey = String(latestTimeStr).slice(0, 10);
-  setText('v-latest-trip-date', targetDateKey);
+  if (!rawTime) return;
+
+  // 현지 시각 YYYY-MM-DD 생성 헬퍼 (UTC 시차 오류 방지)
+  const formatLocalYmd = (d) => {
+    if (isNaN(d.getTime())) return '';
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // 1. 타임스탬프(숫자/문자열) 안전 파싱
+  let tripDate;
+  if (typeof rawTime === 'number' || (!isNaN(Number(rawTime)) && String(rawTime).length >= 10)) {
+    const num = Number(rawTime);
+    tripDate = new Date(num > 10000000000 ? num : num * 1000);
+  } else {
+    tripDate = new Date(rawTime);
+  }
+
+  let dateBadgeText = String(rawTime).slice(0, 10);
+  if (!isNaN(tripDate.getTime())) {
+    const yyyy = tripDate.getFullYear();
+    const mm = String(tripDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(tripDate.getDate()).padStart(2, '0');
+    dateBadgeText = `${yyyy}.${mm}.${dd}`;
+  }
+
+  setText('v-latest-trip-date', dateBadgeText);
+
+  // 2. 당일 전체 트립 필터링 (현지 시각 기준 비교)
+  const targetYmd = formatLocalYmd(tripDate) || String(rawTime).slice(0, 10);
 
   const sameDayTrips = allTrips.filter(t => {
-    const tTime = t.start_time || t.end_time || t.timestamp || '';
-    return String(tTime).slice(0, 10) === targetDateKey;
+    const tTime = t.start_time || t.end_time || t.timestamp || t.date;
+    if (!tTime) return false;
+    let tD = (typeof tTime === 'number' || (!isNaN(Number(tTime)) && String(tTime).length >= 10)) 
+      ? new Date(Number(tTime) > 10000000000 ? Number(tTime) : Number(tTime) * 1000)
+      : new Date(tTime);
+    
+    return formatLocalYmd(tD) === targetYmd;
   });
 
   let totalDist = 0;
@@ -3764,7 +3960,15 @@ function updateLatestDaySummaryCard() {
       kwh = (batUsed / 100) * batteryCapacity;
     }
 
-    const driveSec = Number(t.driveTimeSec ?? t.drive_time_sec ?? t.duration ?? 0);
+    // 운전시간 추출 (Fallback: start_time ~ end_time 계산)
+    let driveSec = Number(t.driveTimeSec ?? t.drive_time_sec ?? t.duration ?? 0);
+    if (driveSec === 0 && t.start_time && t.end_time) {
+      const st = new Date(t.start_time).getTime();
+      const et = new Date(t.end_time).getTime();
+      if (!isNaN(st) && !isNaN(et) && et > st) {
+        driveSec = Math.round((et - st) / 1000);
+      }
+    }
 
     totalDist += dist;
     totalBatUsed += batUsed;
@@ -3772,11 +3976,12 @@ function updateLatestDaySummaryCard() {
     totalDriveSec += driveSec;
   });
 
+  // 3. UI 반영
   const avgEff = (totalKwh > 0 && totalDist > 0) 
     ? (totalDist / totalKwh).toFixed(1) 
-    : '-';
+    : (totalBatUsed > 0 ? ((totalDist / ((totalBatUsed / 100) * batteryCapacity))).toFixed(1) : '-');
 
-  const driveMins = Math.round(totalDriveSec / 60);
+  const driveMins = Math.max(1, Math.round(totalDriveSec / 60));
 
   setText('v-day-efficiency', avgEff);
   setText('v-day-dist', `${totalDist.toFixed(1)} km`);
@@ -3785,7 +3990,67 @@ function updateLatestDaySummaryCard() {
   setText('v-day-kwh', `${totalKwh.toFixed(1)} kWh`);
 }
 
-// 5. 페이지 로드 이벤트 리스너
+// 5. 최근 상태 히스토리 자동 렌더링 함수
+function renderStatusHistory() {
+  const container = document.getElementById('v-status-history-list') || document.getElementById('status-history-container');
+  if (!container) return;
+
+  if (typeof vehicleRows === 'undefined' || !Array.isArray(vehicleRows) || vehicleRows.length === 0) {
+    container.innerHTML = `<div class="text-xs text-gray-500 text-center py-4">최근 상태 히스토리 기록이 없습니다.</div>`;
+    return;
+  }
+
+  const historyList = vehicleRows.slice(0, 5);
+  let html = `<div class="space-y-2 mt-2">`;
+  
+  historyList.forEach((item) => {
+    let rawObj = item.raw_data ?? item.rawdata ?? {};
+    if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
+
+    const rawState = (item.vehicle_state || item.state || rawObj?.state || 'parked').toLowerCase();
+    let stateLabel = '🅿️ 주차 중';
+    let badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+
+    if (rawState.includes('drive')) {
+      stateLabel = '🚗 주행 중';
+      badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+    } else if (rawState.includes('charge')) {
+      stateLabel = '⚡ 충전 중';
+      badgeClass = 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
+    } else if (rawState.includes('asleep') || rawState.includes('sleep')) {
+      stateLabel = '🌙 수면 중';
+      badgeClass = 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+    }
+
+    const timeVal = item.state_changed_at || item.created_at || item.timestamp || item.date;
+    let timeStr = '-';
+    if (timeVal) {
+      const d = new Date(typeof timeVal === 'number' ? (timeVal > 10000000000 ? timeVal : timeVal * 1000) : timeVal);
+      if (!isNaN(d.getTime())) {
+        timeStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      }
+    }
+
+    const bat = item.now_battery ?? rawObj?.nowBattery ?? item.battery_level ?? '-';
+
+    html += `
+      <div class="flex items-center justify-between p-2.5 rounded-xl bg-gray-800/30 border border-gray-700/30 text-xs">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-0.5 rounded-md border font-semibold ${badgeClass}">${stateLabel}</span>
+          <span class="text-gray-400">${timeStr}</span>
+        </div>
+        <div class="text-gray-300 font-medium">
+          배터리 <span class="text-emerald-400 font-bold">${bat}%</span>
+        </div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+
+  container.innerHTML = html;
+}
+
+// 6. 페이지 로드 및 포그라운드 전환 리스너
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof handleAppVisibilityChange === 'function') {
     document.addEventListener('visibilitychange', handleAppVisibilityChange);
