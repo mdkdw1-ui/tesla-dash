@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.25</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -3916,16 +3916,18 @@ function updateEstimatedRangeCard() {
 
 // 📊 Supabase 'driving' 테이블 스키마에 완벽 최적화된 트립 계산 함수
 /**
- * 🚘 Tesla Command Hub - 통합 트립 / 히스토리 / 캘린더 매칭 스크립트
- */
-
 /**
- * 🚘 Tesla Command Hub - 완벽 보정 통합 스크립트
+ * 🚘 Tesla Command Hub - allTrips(주행지도 데이터) 기반 완벽 연동 스크립트
  */
 
 // 1. 최근 운행일 전체 합산 + 개별 운행 카드 + 캘린더 매칭
-function renderDaySummaryAndSingleTrips(allTrips, calendarEvents = []) {
-  if (!allTrips || !Array.isArray(allTrips) || allTrips.length === 0) return;
+function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
+  // 💡 vehicleData 대신 이미 지도에서 정확히 사용 중인전역 `allTrips` 배열 참조
+  const tripsData = (typeof allTrips !== 'undefined' && Array.isArray(allTrips) && allTrips.length > 0) 
+    ? allTrips 
+    : [];
+
+  if (tripsData.length === 0) return;
 
   const setText = (id, val) => {
     const el = document.getElementById(id);
@@ -3934,9 +3936,9 @@ function renderDaySummaryAndSingleTrips(allTrips, calendarEvents = []) {
 
   const batteryCapacity = Number(window.VEHICLE_BATTERY_CAPACITY || 60);
 
-  const toYmd = (dateInput) => {
-    if (!dateInput) return '';
-    const d = new Date(dateInput);
+  const toYmd = (ts) => {
+    if (!ts) return '';
+    const d = new Date(ts);
     if (isNaN(d.getTime())) return '';
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -3944,23 +3946,21 @@ function renderDaySummaryAndSingleTrips(allTrips, calendarEvents = []) {
     return `${yyyy}-${mm}-${dd}`;
   };
 
-  const formatTime = (dateInput) => {
-    if (!dateInput) return '';
-    const d = new Date(dateInput);
+  const formatTime = (ts) => {
+    if (!ts) return '';
+    const d = new Date(ts);
     if (isNaN(d.getTime())) return '';
     return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
-  const latestTrip = allTrips[0];
-  const rawTripTime = latestTrip.start_time || latestTrip.created_at || latestTrip.updated_at;
-  const targetYmd = toYmd(rawTripTime);
+  // 가장 최근 운행 데이터의 날짜 추출 (예: 2026.07.31)
+  const latestTrip = tripsData[0];
+  const targetYmd = toYmd(latestTrip.timestamp);
 
   if (!targetYmd) return;
 
-  const sameDayTrips = allTrips.filter(t => {
-    const tTime = t.start_time || t.created_at || t.updated_at;
-    return toYmd(tTime) === targetYmd;
-  });
+  // 해당 날짜의 운행 기록만 필터링
+  const sameDayTrips = tripsData.filter(t => toYmd(t.timestamp) === targetYmd);
 
   setText('v-latest-trip-date', targetYmd.replace(/-/g, '.'));
 
@@ -3970,25 +3970,10 @@ function renderDaySummaryAndSingleTrips(allTrips, calendarEvents = []) {
   let totalKwh = 0;
 
   sameDayTrips.forEach(t => {
-    // 💡 다양한 DB 컬럼명 대치 (move_km, distance, move_distance, moveKM 및 계기판 차이값)
-    let dist = Number(t.move_km ?? t.distance_km ?? t.move_distance ?? t.distance ?? t.moveKM ?? 0);
-    if (dist === 0 && t.end_odometer && t.start_odometer) {
-      dist = Math.max(0, Number(t.end_odometer) - Number(t.start_odometer));
-    }
-
-    const batUsed = Number(t.use_battery_level ?? t.use_battery ?? t.useBattery ?? t.battery_used ?? 0);
-    
-    let driveMins = Number(t.duration_min ?? t.duration ?? t.driving_time ?? 0);
-    if (driveMins === 0 && t.start_time && t.end_time) {
-      const s = new Date(t.start_time).getTime();
-      const e = new Date(t.end_time).getTime();
-      driveMins = Math.max(1, Math.round((e - s) / (1000 * 60)));
-    }
-
-    let kwh = Number(t.used_kwh ?? t.kwh ?? t.use_kwh ?? 0);
-    if (!kwh && batUsed > 0) {
-      kwh = (batUsed / 100) * batteryCapacity;
-    }
+    const dist = Number(t.moveKM || 0);
+    const batUsed = Number(t.useBattery || 0);
+    const driveMins = Number(t.durationMin || 0);
+    const kwh = (batUsed / 100) * batteryCapacity;
 
     totalDist += dist;
     totalBatUsed += batUsed;
@@ -3996,8 +3981,8 @@ function renderDaySummaryAndSingleTrips(allTrips, calendarEvents = []) {
     totalKwh += kwh;
   });
 
-  // ⚡ 평균 전비 계산 (km / kWh)
-  const avgEff = totalKwh > 0 && totalDist > 0 ? (totalDist / totalKwh).toFixed(1) : '-';
+  // ⚡ 평균 전비 계산 (km / kWh) - 지도 상단의 5.97 km/kWh 방식과 동일
+  const avgEff = totalKwh > 0 && totalDist > 0 ? (totalDist / totalKwh).toFixed(2) : '-';
 
   setText('v-day-efficiency', avgEff);
   setText('v-day-dist', `${totalDist.toFixed(1)} km`);
@@ -4005,16 +3990,16 @@ function renderDaySummaryAndSingleTrips(allTrips, calendarEvents = []) {
   setText('v-day-time', `${totalDriveMins}분`);
   setText('v-day-kwh', `${totalKwh.toFixed(1)} kWh`);
 
-  // 개별 운행 상세 렌더링
+  // 🚗📅 당일 개별 운행 상세 목록 + 캘린더 일정 매칭 렌더링
   renderSingleTripCardsUI(sameDayTrips, calendarEvents, targetYmd, formatTime, toYmd);
 }
 
 
 // 2. 개별 운행 리스트 & 캘린더 매칭 UI
-function renderSingleTripCardsUI(trips, calendarEvents, targetYmd, formatTime, toYmd) {
+function renderSingleTripCardsUI(sameDayTrips, calendarEvents, targetYmd, formatTime, toYmd) {
   let container = document.getElementById('single-trips-container');
   
-  // HTML에 컨테이너가 없으면 '최근 운행일 전체 기록' 카드 내부 맨 아래에 자동 생성
+  // HTML 상에 컨테이너가 없으면 요약 카드 하단에 자동 생성
   if (!container) {
     const parentCard = document.getElementById('v-latest-trip-date')?.closest('.card') || 
                        document.getElementById('v-day-dist')?.closest('.card') ||
@@ -4022,68 +4007,92 @@ function renderSingleTripCardsUI(trips, calendarEvents, targetYmd, formatTime, t
     if (parentCard) {
       container = document.createElement('div');
       container.id = 'single-trips-container';
-      container.className = 'mt-4 pt-3 border-t border-gray-800/80 space-y-2';
+      container.className = 'mt-4 pt-3 border-t border-gray-800/80 space-y-2.5';
       parentCard.appendChild(container);
     } else {
       return;
     }
   }
 
-  const sameDayEvents = calendarEvents.filter(ev => toYmd(ev.start_time || ev.start) === targetYmd);
+  // 📅 당일 캘린더 이벤트 추출
+  const cEvents = (typeof window.calendarEvents !== 'undefined' && Array.isArray(window.calendarEvents))
+    ? window.calendarEvents
+    : calendarEvents;
+
+  const sameDayEvents = cEvents.filter(ev => toYmd(ev.start_time || ev.start) === targetYmd);
 
   let html = `
-    <div class="flex justify-between items-center mb-2 px-1 mt-2">
-      <h4 class="text-xs font-semibold text-gray-400">🚗 당일 개별 운행 상세 (${trips.length}건)</h4>
-      ${sameDayEvents.length > 0 ? `<span class="text-xs text-indigo-400 font-medium">📅 당일 일정 ${sameDayEvents.length}건</span>` : ''}
+    <div class="flex justify-between items-center mb-2 px-1 mt-3">
+      <h4 class="text-xs font-semibold text-gray-400">🚗 당일 운행 및 일정 상세 (${sameDayTrips.length}건)</h4>
+      ${sameDayEvents.length > 0 ? `<span class="text-xs text-indigo-400 font-medium">📅 관련 일정 ${sameDayEvents.length}건</span>` : ''}
     </div>
   `;
 
-  trips.forEach((trip, idx) => {
-    const sTime = new Date(trip.start_time || trip.created_at);
-    const eTime = trip.end_time ? new Date(trip.end_time) : new Date(sTime.getTime() + (Number(trip.duration_min || 0) * 60000));
+  // 시간 순서대로 (오래된 운행 #1부터 출력)
+  const orderedTrips = [...sameDayTrips].reverse();
+
+  orderedTrips.forEach((trip, idx) => {
+    const sTime = new Date(trip.timestamp);
+    const eTime = new Date(sTime.getTime() + (Number(trip.durationMin || 0) * 60000));
     
     const startTimeStr = formatTime(sTime) || '-';
     const endTimeStr = formatTime(eTime) || '-';
     
-    let dist = Number(trip.move_km ?? trip.distance_km ?? trip.move_distance ?? trip.distance ?? 0);
-    if (dist === 0 && trip.end_odometer && trip.start_odometer) {
-      dist = Math.max(0, Number(trip.end_odometer) - Number(trip.start_odometer));
-    }
+    const dist = Number(trip.moveKM || 0).toFixed(1);
+    const bat = Math.round(Number(trip.useBattery || 0));
+    const mins = trip.durationMin || 1;
+    const kwh = ((bat / 100) * Number(window.VEHICLE_BATTERY_CAPACITY || 60)).toFixed(1);
+    const eff = kwh > 0 ? (dist / kwh).toFixed(2) : '-';
 
-    const bat = Math.round(Number(trip.use_battery_level ?? trip.use_battery ?? trip.battery_used ?? 0));
-    const mins = trip.duration_min || Math.max(1, Math.round((eTime - sTime) / 60000));
+    const startLoc = trip.startDong || "출발지 미상";
+    const endLoc = trip.endDong || "목적지 미상";
 
+    // 💡 주행 시간과 매칭되는 캘린더 일정 탐색
     const matchedEvents = sameDayEvents.filter(ev => {
-      if (!ev.start_time) return false;
-      const evStart = new Date(ev.start_time);
-      const evEnd = ev.end_time ? new Date(ev.end_time) : new Date(evStart.getTime() + 3600000);
-      return (sTime <= evEnd && eTime >= evStart);
+      if (!ev.start_time && !ev.start) return false;
+      const evStart = new Date(ev.start_time || ev.start).getTime();
+      const evEnd = ev.end_time ? new Date(ev.end_time).getTime() : evStart + 3600000;
+      
+      // 운행 시작 전후 30분 이내이거나 시간대가 겹치는 일정 매칭
+      return (sTime.getTime() <= evEnd + 1800000 && eTime.getTime() >= evStart - 1800000);
     });
 
     let calendarBadgeHtml = '';
     if (matchedEvents.length > 0) {
       calendarBadgeHtml = matchedEvents.map(ev => `
-        <div class="mt-2 text-xs bg-indigo-950/70 text-indigo-200 p-2 rounded-lg border border-indigo-700/50">
-          <div class="font-bold flex items-center gap-1">
-            <span>📅</span>
-            <span>${ev.summary || ev.title || '일정'}</span>
-            <span class="text-[10px] text-indigo-300 opacity-80">(${formatTime(ev.start_time)})</span>
+        <div class="mt-2 text-xs bg-indigo-950/80 text-indigo-200 p-2.5 rounded-lg border border-indigo-700/60 shadow-inner">
+          <div class="font-bold flex items-center justify-between">
+            <span class="flex items-center gap-1.5">
+              <span>📅</span>
+              <span class="text-indigo-100">${ev.summary || ev.title || '일정'}</span>
+            </span>
+            <span class="text-[10px] text-indigo-300 bg-indigo-900/50 px-1.5 py-0.5 rounded">
+              ${formatTime(ev.start_time || ev.start)}
+            </span>
           </div>
-          ${ev.location ? `<div class="text-[11px] text-indigo-300/80 mt-0.5 truncate">📍 ${ev.location}</div>` : ''}
+          ${ev.location ? `<div class="text-[11px] text-indigo-300/80 mt-1 flex items-center gap-1">📍 <span>${ev.location}</span></div>` : ''}
         </div>
       `).join('');
     }
 
     html += `
-      <div class="bg-gray-800/80 p-3 rounded-xl border border-gray-700/60 shadow-sm text-sm">
-        <div class="flex justify-between items-center font-bold text-gray-200">
-          <span>운행 #${trips.length - idx} (${startTimeStr} ~ ${endTimeStr})</span>
-          <span class="text-blue-400 bg-blue-900/30 px-2 py-0.5 rounded text-xs">${mins}분 운행</span>
+      <div class="bg-gray-800/90 p-3 rounded-xl border border-gray-700/70 shadow-md text-sm">
+        <div class="flex justify-between items-center font-bold text-gray-100">
+          <span class="text-blue-400">#${idx + 1} 운행 (${startTimeStr} 출발)</span>
+          <span class="text-gray-300 font-normal text-xs bg-gray-700/60 px-2 py-0.5 rounded">${dist} km / ${mins}분</span>
         </div>
-        <div class="flex justify-between items-center text-xs text-gray-400 mt-2">
-          <span>이동거리: <strong class="text-white">${dist.toFixed(1)} km</strong></span>
-          <span>사용 배터리: <strong class="text-amber-400">${bat}%</strong></span>
+        
+        <div class="my-2 text-xs text-gray-300 font-medium flex items-center gap-1.5">
+          <span class="text-blue-300">${startLoc}</span>
+          <span class="text-gray-500">➔</span>
+          <span class="text-emerald-300">${endLoc}</span>
         </div>
+
+        <div class="flex justify-between items-center text-[11px] text-gray-400 pt-1.5 border-t border-gray-700/40">
+          <span>🔋 소모: <strong class="text-amber-400">${bat}% (${kwh}kWh)</strong></span>
+          <span>⚡ 전비: <strong class="text-emerald-400">${eff} km/kWh</strong></span>
+        </div>
+        
         ${calendarBadgeHtml}
       </div>
     `;
@@ -4097,7 +4106,6 @@ function renderSingleTripCardsUI(trips, calendarEvents, targetYmd, formatTime, t
 function renderVehicleStateHistory(vehicleHistoryRecords) {
   let container = document.getElementById('state-history-container');
   
-  // ID가 없으면 화면 내 '최근 상태 히스토리' 텍스트를 찾아서 그 아래에 생성
   if (!container) {
     const allElements = Array.from(document.querySelectorAll('div, span, h3, h4, header'));
     const targetHeader = allElements.find(el => el.innerText && el.innerText.includes('최근 상태 히스토리'));
@@ -4112,7 +4120,9 @@ function renderVehicleStateHistory(vehicleHistoryRecords) {
     }
   }
 
-  if (!vehicleHistoryRecords || vehicleHistoryRecords.length === 0) {
+  const records = vehicleHistoryRecords || window.allVehicleTrips || [];
+
+  if (!records || records.length === 0) {
     container.innerHTML = `<div class="text-xs text-gray-500 text-center py-2">상태 변경 이력이 없습니다.</div>`;
     return;
   }
@@ -4126,7 +4136,7 @@ function renderVehicleStateHistory(vehicleHistoryRecords) {
 
   let html = `<div class="space-y-2 mt-2">`;
   
-  vehicleHistoryRecords.slice(0, 5).forEach(rec => {
+  records.slice(0, 5).forEach(rec => {
     const stateKey = (rec.state || rec.vehicle_state || 'online').toLowerCase();
     const stInfo = stateMap[stateKey] || { label: rec.state || '대기 중', color: 'bg-gray-700 text-gray-300 border-gray-600' };
     
@@ -4143,47 +4153,6 @@ function renderVehicleStateHistory(vehicleHistoryRecords) {
           <span class="text-gray-400">${timeStr}</span>
         </div>
         <span class="text-gray-200 font-bold">🔋 ${bat}</span>
-      </div>
-    `;
-  });
-
-  html += `</div>`;
-  container.innerHTML = html;
-}
-
-
-
-// 3. 최근 차량 상태 히스토리 타임라인 출력
-function renderVehicleStateHistory(vehicleHistoryRecords) {
-  let container = document.getElementById('state-history-container');
-  if (!container) return;
-
-  if (!vehicleHistoryRecords || vehicleHistoryRecords.length === 0) {
-    container.innerHTML = `<div class="text-xs text-gray-500 text-center py-2">상태 변경 이력이 없습니다.</div>`;
-    return;
-  }
-
-  const stateMap = {
-    'online': { label: '대기 중', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-    'driving': { label: '주행 중', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-    'charging': { label: '충전 중', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
-    'asleep': { label: '수면 중', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' }
-  };
-
-  let html = `<div class="space-y-2">`;
-  
-  vehicleHistoryRecords.slice(0, 5).forEach(rec => {
-    const stInfo = stateMap[rec.state] || { label: rec.state || '알 수 없음', color: 'bg-gray-700 text-gray-300' };
-    const timeStr = rec.updated_at ? new Date(rec.updated_at).toLocaleString('ko-KR') : '-';
-    const bat = rec.battery_level !== undefined ? `${rec.battery_level}%` : '-';
-
-    html += `
-      <div class="flex items-center justify-between p-2 rounded-lg bg-gray-800/50 border border-gray-700/40 text-xs">
-        <div class="flex items-center gap-2">
-          <span class="px-2 py-0.5 rounded border ${stInfo.color} font-medium">${stInfo.label}</span>
-          <span class="text-gray-400">${timeStr}</span>
-        </div>
-        <span class="text-gray-300 font-bold">🔋 ${bat}</span>
       </div>
     `;
   });
