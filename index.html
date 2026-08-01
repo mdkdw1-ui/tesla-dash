@@ -71,7 +71,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.25</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -83,12 +83,6 @@
       <button onclick="handleUnifiedSync()" title="Vercel Sync 및 데이터 갱신" class="p-2 sm:px-3 sm:py-1.5 text-xs font-bold rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-900/30 border border-blue-400/30 transition active:scale-95 flex items-center gap-1.5">
         <i class="fa-solid fa-arrows-rotate"></i> <span class="hidden sm:inline">동기화 & 갱신</span>
       </button>
-
-
-
-
-
-
 
       <!-- 설정 버튼 -->
       <button onclick="openConfigModal()" title="설정" class="p-2 sm:px-3 sm:py-1.5 text-xs font-bold rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-200 border border-gray-700 transition active:scale-95 flex items-center gap-1.5 shadow-md">
@@ -123,113 +117,86 @@
       </div>
 
       <!-- 1-1. 차량 정보 서브 탭 -->
-<div id="sub-panel-vehicle" class="space-y-4">
-  
-  <!-- 1. 상단 제목 헤더 (제목 + 기준 시각) -->
-  <div class="flex justify-between items-center px-1">
-    <h2 class="text-base font-extrabold text-white flex items-center gap-2">
-      <span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> 최근 차량 상태
-    </h2>
-    <span id="v-last-time" class="text-xs font-mono text-gray-400 bg-gray-900/60 px-2.5 py-1 rounded-lg border border-gray-800">--:-- 기준 🔄</span>
+      <div id="sub-panel-vehicle" class="space-y-4">
+        
+        <!-- 1. 상단 제목 헤더 (제목 + 기준 시각) -->
+        <div class="flex justify-between items-center px-1">
+          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> 최근 차량 상태
+          </h2>
+          <span id="v-last-time" class="text-xs font-mono text-gray-400 bg-gray-900/60 px-2.5 py-1 rounded-lg border border-gray-800">--:-- 기준 🔄</span>
+        </div>
+
+        <!-- 2. 동적 테슬라 대시보드 카드가 렌더링되는 위치 (updateEstimatedRangeCard() 출력) -->
+        <div id="vehicle-range-card" class="mb-4"></div>
+
+        <!-- 3. 주행/충전/감시 동적 상태 지속시간 카드 -->
+        <div id="card-state-duration" class="glass-card card-border-amber p-4 rounded-2xl flex items-center justify-between transition-all shadow-lg">
+          <div class="flex items-center space-x-3.5">
+            <span id="v-state-icon" class="text-3xl">🅿️</span>
+            <div>
+              <div id="v-state-duration-title" class="text-sm font-extrabold text-amber-500">주차 중</div>
+              <div id="v-state-start-time" class="text-[11px] text-gray-400 font-medium">시각 정보 불러오는 중...</div>
+            </div>
+          </div>
+          <div id="v-state-extra-info" class="text-right text-xs font-bold text-gray-300"></div>
+        </div>
+
+        <!-- [사진 3] 최근 운행일 전체 기록 -->
+<div class="bg-gray-900/90 border border-gray-800 rounded-2xl p-4 shadow-xl mb-4">
+  <div class="flex justify-between items-center mb-3">
+    <div class="flex items-center gap-2">
+      <span class="text-blue-400">⚡</span>
+      <span class="font-bold text-white text-sm">최근 운행일 전체 기록</span>
+    </div>
+    <span id="v-latest-trip-date" class="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded-md font-mono">-</span>
   </div>
 
-  <!-- 2. 동적 테슬라 대시보드 카드가 렌더링되는 위치 (updateEstimatedRangeCard() 출력) -->
-  <div id="vehicle-range-card" class="mb-4"></div>
-
-  <!-- 3. 주행/충전/감시 동적 상태 지속시간 카드 -->
-  <div id="card-state-duration" class="glass-card card-border-amber p-4 rounded-2xl flex items-center justify-between transition-all shadow-lg">
-    <div class="flex items-center space-x-3.5">
-      <span id="v-state-icon" class="text-3xl">🅿️</span>
-      <div>
-        <div id="v-state-duration-title" class="text-sm font-extrabold text-amber-500">주차 중</div>
-        <div id="v-state-start-time" class="text-[11px] text-gray-400 font-medium">시각 정보 불러오는 중...</div>
-      </div>
+  <!-- 수치 요약 4종 -->
+  <div class="grid grid-cols-4 gap-2 mb-3 text-center">
+    <div class="bg-gray-800/40 p-2 rounded-xl border border-gray-800">
+      <div class="text-[10px] text-gray-400">총 이동거리</div>
+      <div id="v-day-dist" class="text-sm font-black text-white mt-0.5">0.0 km</div>
     </div>
-    <div id="v-state-extra-info" class="text-right text-xs font-bold text-gray-300"></div>
-  </div>
-
-  <!-- 4. 최근 운행일 전체 기록 -->
-  <div class="glass-card p-4 rounded-2xl space-y-3 shadow-xl">
-    <div class="flex justify-between items-center">
-      <span class="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
-        <i class="fa-solid fa-bolt text-indigo-500"></i> 최근 운행일 전체 기록
-      </span>
-      <div class="flex items-center gap-1.5">
-        <span id="v-latest-trip-date" class="text-[11px] text-gray-300 bg-gray-800/80 px-2.5 py-0.5 rounded-full border border-gray-700/50 font-mono">-</span>
-        <!-- 📅 캘린더 상호명 뱃지 위치 -->
-        <span id="v-latest-trip-calendar"></span>
-      </div>
+    <div class="bg-gray-800/40 p-2 rounded-xl border border-gray-800">
+      <div class="text-[10px] text-gray-400">총 사용배터리</div>
+      <div id="v-day-bat" class="text-sm font-black text-white mt-0.5">0%</div>
     </div>
-    
-    <div class="flex items-baseline space-x-2">
-      <span id="v-day-efficiency" class="text-3xl font-black text-indigo-400 tracking-tight">-</span>
-      <span class="text-xs font-bold text-gray-400">km/kWh (평균)</span>
+    <div class="bg-gray-800/40 p-2 rounded-xl border border-gray-800">
+      <div class="text-[10px] text-gray-400">총 운전시간</div>
+      <div id="v-day-time" class="text-sm font-black text-white mt-0.5">0분</div>
     </div>
-    
-    <hr class="border-gray-800 my-1">
-    
-    <div class="grid grid-cols-4 gap-2 text-center text-xs">
-      <div class="bg-gray-900/50 p-2 rounded-xl border border-gray-800/60">
-        <span class="text-gray-500 block text-[10px]">총 이동거리</span>
-        <span id="v-day-dist" class="font-extrabold text-gray-200 block mt-0.5">- km</span>
-      </div>
-      <div class="bg-gray-900/50 p-2 rounded-xl border border-gray-800/60">
-        <span class="text-gray-500 block text-[10px]">총 사용배터리</span>
-        <span id="v-day-bat" class="font-extrabold text-gray-200 block mt-0.5">-%</span>
-      </div>
-      <div class="bg-gray-900/50 p-2 rounded-xl border border-gray-800/60">
-        <span class="text-gray-500 block text-[10px]">총 운전시간</span>
-        <span id="v-day-time" class="font-extrabold text-gray-200 block mt-0.5">- 분</span>
-      </div>
-      <div class="bg-gray-900/50 p-2 rounded-xl border border-gray-800/60">
-        <span class="text-gray-500 block text-[10px]">총 사용에너지</span>
-        <span id="v-day-kwh" class="font-extrabold text-gray-200 block mt-0.5">- kWh</span>
-      </div>
-    </div>
-    
-    <!-- 주행 리스트 -->
-    <div id="v-day-trips-list" class="space-y-2 pt-2 border-t border-gray-800/80 text-xs"></div>
-  </div>
-
-  <!-- 5. TPMS & 외기 온도 카드 -->
-  <div class="glass-card p-4 rounded-2xl space-y-3 shadow-xl">
-    <div class="flex justify-between items-center text-xs">
-      <span class="font-bold text-gray-200 flex items-center gap-1.5">
-        <span>🛞</span> 타이어 공기압 (TPMS)
-      </span>
-      <span id="v-outside-temp" class="text-amber-400 font-extrabold bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-800/40 text-[11px]">🌡️ 외기: -°C</span>
-    </div>
-    <div class="grid grid-cols-2 gap-2.5">
-      <div class="bg-gray-900/80 border border-blue-500/30 p-2.5 rounded-xl text-center shadow-inner">
-        <span class="text-[10px] text-gray-400 block font-medium">앞 왼쪽 (FL)</span>
-        <span id="tpms-fl" class="text-lg font-black text-blue-400 mt-0.5 block">- psi</span>
-      </div>
-      <div class="bg-gray-900/80 border border-blue-500/30 p-2.5 rounded-xl text-center shadow-inner">
-        <span class="text-[10px] text-gray-400 block font-medium">앞 오른쪽 (FR)</span>
-        <span id="tpms-fr" class="text-lg font-black text-blue-400 mt-0.5 block">- psi</span>
-      </div>
-      <div class="bg-gray-900/80 border border-blue-500/30 p-2.5 rounded-xl text-center shadow-inner">
-        <span class="text-[10px] text-gray-400 block font-medium">뒤 왼쪽 (RL)</span>
-        <span id="tpms-rl" class="text-lg font-black text-blue-400 mt-0.5 block">- psi</span>
-      </div>
-      <div class="bg-gray-900/80 border border-blue-500/30 p-2.5 rounded-xl text-center shadow-inner">
-        <span class="text-[10px] text-gray-400 block font-medium">뒤 오른쪽 (RR)</span>
-        <span id="tpms-rr" class="text-lg font-black text-blue-400 mt-0.5 block">- psi</span>
-      </div>
+    <div class="bg-gray-800/40 p-2 rounded-xl border border-gray-800">
+      <div class="text-[10px] text-gray-400">총 사용에너지</div>
+      <div id="v-day-kwh" class="text-sm font-black text-white mt-0.5">0.0 kWh</div>
     </div>
   </div>
 
-  <!-- 6. 최근 상태 히스토리 -->
-<div class="space-y-2.5 pt-1">
-  <h3 class="text-xs font-extrabold text-gray-300 px-1 flex items-center gap-1.5">
-    <i class="fa-solid fa-clock-rotate-left text-blue-400"></i> 최근 상태 히스토리
-  </h3>
-  <!-- 🎯 id를 v-status-history-list 로 변경 -->
-  <div id="v-status-history-list" class="space-y-3"></div>
+  <!-- 평균 전비 -->
+  <div class="text-xs text-gray-400 mb-3 px-1">
+    <span id="v-day-efficiency" class="font-bold text-emerald-400 text-sm">-</span> km/kWh (평균)
+  </div>
+
+  <!-- 당일 이동 경로 (사진 3의 🌐 당일 이동 경로) -->
+  <div id="day-path-container" class="hidden mb-3 p-3 bg-gray-800/60 rounded-xl border border-gray-700/50">
+    <div class="text-xs font-semibold text-blue-400 mb-1 flex items-center gap-1">🌐 당일 이동 경로</div>
+    <div id="day-path-text" class="text-xs font-bold text-gray-200"></div>
+  </div>
+
+  <!-- 개별 운행 목록 + 캘린더 일정 (사진 3) -->
+  <div id="single-trips-container" class="space-y-2.5"></div>
 </div>
 
-
+<!-- [사진 4] 최근 상태 히스토리 -->
+<div class="mt-6 mb-4">
+  <div class="flex items-center gap-2 mb-3">
+    <span class="text-gray-400">🕒</span>
+    <h3 class="font-bold text-white text-sm">최근 상태 히스토리</h3>
+  </div>
+  <div id="state-history-container" class="space-y-4"></div>
 </div>
+
+      </div>
 
       <!-- 1-2. 주행 지도 서브 탭 -->
       <div id="sub-panel-driving" class="hidden space-y-3">
@@ -252,16 +219,15 @@
             <button onclick="shiftDrivingFilter(1)" class="px-3 py-2 bg-gray-800/80 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold rounded-xl text-xs transition">▶</button>
           </div>
 
-          <!-- ★ 주행 지도 통계 전용 고유 ID 적용 -->
-<div id="map-stat-calendar" class="flex justify-center items-center empty:hidden mb-2"></div>
+          <!-- 주행 지도 통계 전용 고유 ID 적용 -->
+          <div id="map-stat-calendar" class="flex justify-center items-center empty:hidden mb-2"></div>
 
-<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-gray-950/80 p-3 rounded-xl text-center text-xs border border-gray-800">
-    <div><span class="text-gray-500 block text-[10px]">운행건수</span><span id="stat-count" class="font-black text-blue-400 text-sm mt-0.5 block">-</span></div>
-    <div><span class="text-gray-500 block text-[10px]">이동거리</span><span id="stat-distance" class="font-black text-green-400 text-sm mt-0.5 block">-</span></div>
-    <div><span class="text-gray-500 block text-[10px]">소모 배터리/전력</span><span id="stat-energy" class="font-black text-yellow-400 text-sm mt-0.5 block">-</span></div>
-    <div><span class="text-gray-500 block text-[10px]">평균 전비</span><span id="stat-efficiency" class="font-black text-indigo-400 text-sm mt-0.5 block">-</span></div>
-</div>
-
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-gray-950/80 p-3 rounded-xl text-center text-xs border border-gray-800">
+            <div><span class="text-gray-500 block text-[10px]">운행건수</span><span id="stat-count" class="font-black text-blue-400 text-sm mt-0.5 block">-</span></div>
+            <div><span class="text-gray-500 block text-[10px]">이동거리</span><span id="stat-distance" class="font-black text-green-400 text-sm mt-0.5 block">-</span></div>
+            <div><span class="text-gray-500 block text-[10px]">소모 배터리/전력</span><span id="stat-energy" class="font-black text-yellow-400 text-sm mt-0.5 block">-</span></div>
+            <div><span class="text-gray-500 block text-[10px]">평균 전비</span><span id="stat-efficiency" class="font-black text-indigo-400 text-sm mt-0.5 block">-</span></div>
+          </div>
         </div>
 
         <!-- 지도 화면 -->
@@ -354,137 +320,128 @@
         </div>
       </div>
 
-            <!-- 1-4. 배터리 서브 탭 (대폭 개선된 프리미엄 배터리 헬스케어) -->
-<div id="sub-panel-battery" class="hidden space-y-4">
+      <!-- 1-4. 배터리 서브 탭 -->
+      <div id="sub-panel-battery" class="hidden space-y-4">
 
-  <!-- 1. 핵심 배터리 KPI 요약 카드 (4열 그리드) -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-    <!-- SoH 건강도 -->
-    <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-emerald-500/80">
-      <div class="absolute -right-3 -bottom-3 w-14 h-14 bg-emerald-500/10 rounded-full blur-xl"></div>
-      <div class="flex justify-between items-start mb-1">
-        <span class="text-[11px] text-gray-400 font-medium">배터리 건강도 (SoH)</span>
-        <span id="b-soh-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">양호</span>
-      </div>
-      <div class="flex items-baseline gap-1.5">
-        <span id="b-soh-val" class="text-2xl font-black text-emerald-400">98.5</span>
-        <span class="text-xs text-emerald-400/80 font-bold">%</span>
-      </div>
-      <p class="text-[10px] text-gray-500 mt-1">초기 대비 열화율: <span id="b-degradation-val" class="text-gray-300 font-semibold">-1.5%</span></p>
-    </div>
+        <!-- 1. 핵심 배터리 KPI 요약 카드 -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-emerald-500/80">
+            <div class="absolute -right-3 -bottom-3 w-14 h-14 bg-emerald-500/10 rounded-full blur-xl"></div>
+            <div class="flex justify-between items-start mb-1">
+              <span class="text-[11px] text-gray-400 font-medium">배터리 건강도 (SoH)</span>
+              <span id="b-soh-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">양호</span>
+            </div>
+            <div class="flex items-baseline gap-1.5">
+              <span id="b-soh-val" class="text-2xl font-black text-emerald-400">98.5</span>
+              <span class="text-xs text-emerald-400/80 font-bold">%</span>
+            </div>
+            <p class="text-[10px] text-gray-500 mt-1">초기 대비 열화율: <span id="b-degradation-val" class="text-gray-300 font-semibold">-1.5%</span></p>
+          </div>
 
-    <!-- 100% 완충 시 추정 주행거리 -->
-    <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-indigo-500/80">
-      <div class="absolute -right-3 -bottom-3 w-14 h-14 bg-indigo-500/10 rounded-full blur-xl"></div>
-      <span class="text-[11px] text-gray-400 block mb-1 font-medium">100% 환산 주행거리</span>
-      <div class="flex items-baseline gap-1">
-        <span id="b-max-range-val" class="text-2xl font-black text-indigo-400">421</span>
-        <span class="text-xs text-indigo-400/80 font-bold">km</span>
-      </div>
-      <p class="text-[10px] text-gray-500 mt-1">공인 인증 거리 대비 <span id="b-range-diff-val" class="text-indigo-300 font-semibold">+21 km</span></p>
-    </div>
+          <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-indigo-500/80">
+            <div class="absolute -right-3 -bottom-3 w-14 h-14 bg-indigo-500/10 rounded-full blur-xl"></div>
+            <span class="text-[11px] text-gray-400 block mb-1 font-medium">100% 환산 주행거리</span>
+            <div class="flex items-baseline gap-1">
+              <span id="b-max-range-val" class="text-2xl font-black text-indigo-400">421</span>
+              <span class="text-xs text-indigo-400/80 font-bold">km</span>
+            </div>
+            <p class="text-[10px] text-gray-500 mt-1">공인 인증 거리 대비 <span id="b-range-diff-val" class="text-indigo-300 font-semibold">+21 km</span></p>
+          </div>
 
-    <!-- 추정 가용 배터리 용량 -->
-    <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-blue-500/80">
-      <div class="absolute -right-3 -bottom-3 w-14 h-14 bg-blue-500/10 rounded-full blur-xl"></div>
-      <span class="text-[11px] text-gray-400 block mb-1 font-medium">현재 가용 배터리 용량</span>
-      <div class="flex items-baseline gap-1">
-        <span id="b-capacity-val" class="text-2xl font-black text-blue-400">61.5</span>
-        <span class="text-xs text-blue-400/80 font-bold">kWh</span>
-      </div>
-      <p class="text-[10px] text-gray-500 mt-1">신차 초기 용량: <span id="b-init-cap-text" class="text-gray-300 font-semibold">62.5 kWh</span></p>
-    </div>
+          <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-blue-500/80">
+            <div class="absolute -right-3 -bottom-3 w-14 h-14 bg-blue-500/10 rounded-full blur-xl"></div>
+            <span class="text-[11px] text-gray-400 block mb-1 font-medium">현재 가용 배터리 용량</span>
+            <div class="flex items-baseline gap-1">
+              <span id="b-capacity-val" class="text-2xl font-black text-blue-400">61.5</span>
+              <span class="text-xs text-blue-400/80 font-bold">kWh</span>
+            </div>
+            <p class="text-[10px] text-gray-500 mt-1">신차 초기 용량: <span id="b-init-cap-text" class="text-gray-300 font-semibold">62.5 kWh</span></p>
+          </div>
 
-    <!-- 완속 vs 급속 충전 비율 -->
-    <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-amber-500/80">
-      <div class="absolute -right-3 -bottom-3 w-14 h-14 bg-amber-500/10 rounded-full blur-xl"></div>
-      <span class="text-[11px] text-gray-400 block mb-1 font-medium">완속(AC) vs 급속(DC)</span>
-      <div class="flex items-baseline gap-1">
-        <span id="b-ac-ratio-val" class="text-2xl font-black text-amber-400">82:18</span>
-      </div>
-      <p class="text-[10px] text-gray-500 mt-1">권장 충전 습관: <span class="text-emerald-400 font-semibold">매우 우수</span></p>
-    </div>
-  </div>
-
-  <!-- 2. 차트 1: 배터리 건강도(SoH) 및 열화율 변화 추이 -->
-  <div class="glass-card p-4 rounded-2xl space-y-3 shadow-lg relative border-l-4 border-emerald-500/80">
-    <div class="flex justify-between items-center">
-      <div>
-        <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
-          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shadow-sm shadow-emerald-500"></span>
-          배터리 건강도 (SoH %) 및 열화율 추이
-        </h3>
-        <p class="text-[10px] text-gray-400 mt-0.5">충전 이력 기반 추정 건강 수치 변화입니다.</p>
-      </div>
-      <span class="text-[10px] font-medium px-2 py-1 rounded-lg bg-gray-800 text-gray-300 border border-gray-700">최근 30회</span>
-    </div>
-    <div class="w-full h-52"><canvas id="chartSohTrend"></canvas></div>
-  </div>
-
-  <!-- 3. 차트 2: 100% 완충 주행거리 & 가용 용량(kWh) 복합 추이 -->
-  <div class="glass-card p-4 rounded-2xl space-y-3 shadow-lg relative border-l-4 border-indigo-500/80">
-    <div class="flex justify-between items-center">
-      <div>
-        <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
-          <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block shadow-sm shadow-indigo-500"></span>
-          완충 주행거리(km) 및 가용 용량(kWh) 변화
-        </h3>
-        <p class="text-[10px] text-gray-400 mt-0.5">공인 주행거리 기준선 대비 실제 배터리 상태 추이입니다.</p>
-      </div>
-    </div>
-    <div class="w-full h-52"><canvas id="chartRangeCapacity"></canvas></div>
-  </div>
-
-  <!-- 4. 하단 2열: 충전 습관 분석 & 차량 초기 기준값 설정 -->
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-    
-    <!-- 충전 습관 도넛 차트 -->
-    <div class="glass-card p-4 rounded-2xl shadow-lg space-y-2 flex flex-col justify-between">
-      <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
-        ⚡ 충전 방식 분포 (AC / DC)
-      </h3>
-      <div class="w-full h-36 flex justify-center items-center">
-        <canvas id="chartChargeRatio"></canvas>
-      </div>
-      <p class="text-[10px] text-gray-400 text-center">완속 충전 비율이 높아 배터리 스트레스가 적습니다.</p>
-    </div>
-
-    <!-- 기준값 설정 및 헬스케어 가이드 -->
-    <div class="glass-card p-4 rounded-2xl shadow-lg md:col-span-2 space-y-3 flex flex-col justify-between border-t border-gray-700/50">
-      <div class="flex justify-between items-center border-b border-gray-800 pb-2">
-        <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
-          ⚙️ 차량 배터리 초기 스펙 설정
-        </h3>
-        <span class="text-[10px] text-indigo-400">정확한 SoH 계산용</span>
-      </div>
-
-      <div class="grid grid-cols-2 gap-3 text-xs">
-        <div>
-          <label class="block text-gray-400 mb-1 text-[11px]">신차 초기 가용량 (kWh)</label>
-          <input type="number" id="input-init-kwh" value="62.5" step="0.1" class="w-full bg-gray-900/80 border border-gray-700 rounded-xl px-3 py-1.5 text-white text-xs focus:border-indigo-500 focus:outline-none">
+          <div class="glass-card p-4 rounded-2xl shadow-lg relative overflow-hidden border-t-2 border-amber-500/80">
+            <div class="absolute -right-3 -bottom-3 w-14 h-14 bg-amber-500/10 rounded-full blur-xl"></div>
+            <span class="text-[11px] text-gray-400 block mb-1 font-medium">완속(AC) vs 급속(DC)</span>
+            <div class="flex items-baseline gap-1">
+              <span id="b-ac-ratio-val" class="text-2xl font-black text-amber-400">82:18</span>
+            </div>
+            <p class="text-[10px] text-gray-500 mt-1">권장 충전 습관: <span class="text-emerald-400 font-semibold">매우 우수</span></p>
+          </div>
         </div>
-        <div>
-          <label class="block text-gray-400 mb-1 text-[11px]">공인 주행거리 (km)</label>
-          <input type="number" id="input-cert-range" value="400" step="1" class="w-full bg-gray-900/80 border border-gray-700 rounded-xl px-3 py-1.5 text-white text-xs focus:border-indigo-500 focus:outline-none">
+
+        <!-- 2. 차트 1: 배터리 건강도(SoH) 및 열화율 변화 추이 -->
+        <div class="glass-card p-4 rounded-2xl space-y-3 shadow-lg relative border-l-4 border-emerald-500/80">
+          <div class="flex justify-between items-center">
+            <div>
+              <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shadow-sm shadow-emerald-500"></span>
+                배터리 건강도 (SoH %) 및 열화율 추이
+              </h3>
+              <p class="text-[10px] text-gray-400 mt-0.5">충전 이력 기반 추정 건강 수치 변화입니다.</p>
+            </div>
+            <span class="text-[10px] font-medium px-2 py-1 rounded-lg bg-gray-800 text-gray-300 border border-gray-700">최근 30회</span>
+          </div>
+          <div class="w-full h-52"><canvas id="chartSohTrend"></canvas></div>
         </div>
+
+        <!-- 3. 차트 2: 100% 완충 주행거리 & 가용 용량(kWh) 복합 추이 -->
+        <div class="glass-card p-4 rounded-2xl space-y-3 shadow-lg relative border-l-4 border-indigo-500/80">
+          <div class="flex justify-between items-center">
+            <div>
+              <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block shadow-sm shadow-indigo-500"></span>
+                완충 주행거리(km) 및 가용 용량(kWh) 변화
+              </h3>
+              <p class="text-[10px] text-gray-400 mt-0.5">공인 주행거리 기준선 대비 실제 배터리 상태 추이입니다.</p>
+            </div>
+          </div>
+          <div class="w-full h-52"><canvas id="chartRangeCapacity"></canvas></div>
+        </div>
+
+        <!-- 4. 하단 2열: 충전 습관 분석 & 차량 초기 기준값 설정 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="glass-card p-4 rounded-2xl shadow-lg space-y-2 flex flex-col justify-between">
+            <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
+              ⚡ 충전 방식 분포 (AC / DC)
+            </h3>
+            <div class="w-full h-36 flex justify-center items-center">
+              <canvas id="chartChargeRatio"></canvas>
+            </div>
+            <p class="text-[10px] text-gray-400 text-center">완속 충전 비율이 높아 배터리 스트레스가 적습니다.</p>
+          </div>
+
+          <div class="glass-card p-4 rounded-2xl shadow-lg md:col-span-2 space-y-3 flex flex-col justify-between border-t border-gray-700/50">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+              <h3 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">
+                ⚙️ 차량 배터리 초기 스펙 설정
+              </h3>
+              <span class="text-[10px] text-indigo-400">정확한 SoH 계산용</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <label class="block text-gray-400 mb-1 text-[11px]">신차 초기 가용량 (kWh)</label>
+                <input type="number" id="input-init-kwh" value="62.5" step="0.1" class="w-full bg-gray-900/80 border border-gray-700 rounded-xl px-3 py-1.5 text-white text-xs focus:border-indigo-500 focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-gray-400 mb-1 text-[11px]">공인 주행거리 (km)</label>
+                <input type="number" id="input-cert-range" value="400" step="1" class="w-full bg-gray-900/80 border border-gray-700 rounded-xl px-3 py-1.5 text-white text-xs focus:border-indigo-500 focus:outline-none">
+              </div>
+            </div>
+
+            <div class="bg-gray-900/60 p-2.5 rounded-xl border border-gray-800 text-[11px] text-gray-300 space-y-1">
+              <div class="font-bold text-emerald-400 flex items-center gap-1">
+                💡 배터리 케어 팁
+              </div>
+              <p class="text-[10px] text-gray-400 leading-relaxed">
+                일상 주행 시 20%~80% 구간을 유지하고, 100% 완충 후 장시간 방치하지 않는 것이 열화를 방지하는 최상의 방법입니다.
+              </p>
+            </div>
+          </div>
+        </div>
+
       </div>
 
-      <div class="bg-gray-900/60 p-2.5 rounded-xl border border-gray-800 text-[11px] text-gray-300 space-y-1">
-        <div class="font-bold text-emerald-400 flex items-center gap-1">
-          💡 배터리 케어 팁
-        </div>
-        <p class="text-[10px] text-gray-400 leading-relaxed">
-          일상 주행 시 20%~80% 구간을 유지하고, 100% 완충 후 장시간 방치하지 않는 것이 열화를 방지하는 최상의 방법입니다.
-        </p>
-      </div>
-    </div>
-
-  </div>
-
-</div>
-
-
-    </div> <!-- ⭐⭐ [여기 추가] main-panel-monitor 닫기 태그가 필요합니다! ⭐⭐ -->
+    </div> <!-- main-panel-monitor 닫기 -->
 
     
 <!-- [메인 영역 2] 감시 가디언 패널 전체 초기화 -->
@@ -3921,8 +3878,8 @@ function updateEstimatedRangeCard() {
  */
 
 // 1. 최근 운행일 전체 합산 + 개별 운행 카드 + 캘린더 매칭
+// 1. 최근 운행일 전체 합산 + 개별 운행 카드 + 캘린더 summary 매칭 (사진 3 완벽 구현)
 function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
-  // 💡 vehicleData 대신 이미 지도에서 정확히 사용 중인전역 `allTrips` 배열 참조
   const tripsData = (typeof allTrips !== 'undefined' && Array.isArray(allTrips) && allTrips.length > 0) 
     ? allTrips 
     : [];
@@ -3946,21 +3903,23 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
     return `${yyyy}-${mm}-${dd}`;
   };
 
-  const formatTime = (ts) => {
+  const formatTimeStr = (ts) => {
     if (!ts) return '';
     const d = new Date(ts);
     if (isNaN(d.getTime())) return '';
-    return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+    let h = d.getHours();
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${String(h).padStart(2, '0')}:${m} ${ampm}`;
   };
 
-  // 가장 최근 운행 데이터의 날짜 추출 (예: 2026.07.31)
+  // 가장 최근 운행일 계산
   const latestTrip = tripsData[0];
-  const targetYmd = toYmd(latestTrip.timestamp);
-
+  const targetYmd = toYmd(latestTrip.timestamp || latestTrip.start_time);
   if (!targetYmd) return;
 
-  // 해당 날짜의 운행 기록만 필터링
-  const sameDayTrips = tripsData.filter(t => toYmd(t.timestamp) === targetYmd);
+  const sameDayTrips = tripsData.filter(t => toYmd(t.timestamp || t.start_time) === targetYmd);
 
   setText('v-latest-trip-date', targetYmd.replace(/-/g, '.'));
 
@@ -3970,9 +3929,9 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
   let totalKwh = 0;
 
   sameDayTrips.forEach(t => {
-    const dist = Number(t.moveKM || 0);
-    const batUsed = Number(t.useBattery || 0);
-    const driveMins = Number(t.durationMin || 0);
+    const dist = Number(t.moveKM || t.distance_km || 0);
+    const batUsed = Number(t.useBattery || t.battery_used || 0);
+    const driveMins = Number(t.durationMin || t.duration_min || 0);
     const kwh = (batUsed / 100) * batteryCapacity;
 
     totalDist += dist;
@@ -3981,7 +3940,6 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
     totalKwh += kwh;
   });
 
-  // ⚡ 평균 전비 계산 (km / kWh) - 지도 상단의 5.97 km/kWh 방식과 동일
   const avgEff = totalKwh > 0 && totalDist > 0 ? (totalDist / totalKwh).toFixed(2) : '-';
 
   setText('v-day-efficiency', avgEff);
@@ -3990,174 +3948,179 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
   setText('v-day-time', `${totalDriveMins}분`);
   setText('v-day-kwh', `${totalKwh.toFixed(1)} kWh`);
 
-  // 🚗📅 당일 개별 운행 상세 목록 + 캘린더 일정 매칭 렌더링
-  renderSingleTripCardsUI(sameDayTrips, calendarEvents, targetYmd, formatTime, toYmd);
-}
-
-
-// 2. 개별 운행 리스트 & 캘린더 매칭 UI
-function renderSingleTripCardsUI(sameDayTrips, calendarEvents, targetYmd, formatTime, toYmd) {
-  let container = document.getElementById('single-trips-container');
-  
-  // HTML 상에 컨테이너가 없으면 요약 카드 하단에 자동 생성
-  if (!container) {
-    const parentCard = document.getElementById('v-latest-trip-date')?.closest('.card') || 
-                       document.getElementById('v-day-dist')?.closest('.card') ||
-                       document.querySelector('.card');
-    if (parentCard) {
-      container = document.createElement('div');
-      container.id = 'single-trips-container';
-      container.className = 'mt-4 pt-3 border-t border-gray-800/80 space-y-2.5';
-      parentCard.appendChild(container);
-    } else {
-      return;
-    }
+  // 🌐 당일 이동 경로 상단 바 렌더링 (사진 3 상단 스타일)
+  const pathContainer = document.getElementById('day-path-container');
+  const pathText = document.getElementById('day-path-text');
+  if (pathContainer && pathText && sameDayTrips.length > 0) {
+    const orderedForPath = [...sameDayTrips].reverse();
+    const pathNodes = [];
+    orderedForPath.forEach((t, i) => {
+      const sLoc = t.startDong || t.start_location || "출발지";
+      const eLoc = t.endDong || t.end_location || "목적지";
+      if (i === 0) pathNodes.push(sLoc);
+      pathNodes.push(eLoc);
+    });
+    pathText.innerText = pathNodes.join(' ➔ ');
+    pathContainer.classList.remove('hidden');
   }
 
-  // 📅 당일 캘린더 이벤트 추출
-  const cEvents = (typeof window.calendarEvents !== 'undefined' && Array.isArray(window.calendarEvents))
-    ? window.calendarEvents
-    : calendarEvents;
+  // 🚗 당일 개별 운행 목록 + 캘린더 매칭 UI
+  const singleContainer = document.getElementById('single-trips-container');
+  if (!singleContainer) return;
 
-  const sameDayEvents = cEvents.filter(ev => toYmd(ev.start_time || ev.start) === targetYmd);
-
-  let html = `
-    <div class="flex justify-between items-center mb-2 px-1 mt-3">
-      <h4 class="text-xs font-semibold text-gray-400">🚗 당일 운행 및 일정 상세 (${sameDayTrips.length}건)</h4>
-      ${sameDayEvents.length > 0 ? `<span class="text-xs text-indigo-400 font-medium">📅 관련 일정 ${sameDayEvents.length}건</span>` : ''}
-    </div>
-  `;
-
-  // 시간 순서대로 (오래된 운행 #1부터 출력)
+  const cEventsMap = typeof calendarEventsMap !== 'undefined' ? calendarEventsMap[targetYmd] || [] : [];
   const orderedTrips = [...sameDayTrips].reverse();
 
-  orderedTrips.forEach((trip, idx) => {
-    const sTime = new Date(trip.timestamp);
-    const eTime = new Date(sTime.getTime() + (Number(trip.durationMin || 0) * 60000));
-    
-    const startTimeStr = formatTime(sTime) || '-';
-    const endTimeStr = formatTime(eTime) || '-';
-    
-    const dist = Number(trip.moveKM || 0).toFixed(1);
-    const bat = Math.round(Number(trip.useBattery || 0));
-    const mins = trip.durationMin || 1;
-    const kwh = ((bat / 100) * Number(window.VEHICLE_BATTERY_CAPACITY || 60)).toFixed(1);
-    const eff = kwh > 0 ? (dist / kwh).toFixed(2) : '-';
+  let html = '';
 
-    const startLoc = trip.startDong || "출발지 미상";
-    const endLoc = trip.endDong || "목적지 미상";
+  orderedTrips.forEach((trip) => {
+    const sTime = new Date(trip.timestamp || trip.start_time);
+    const mins = Number(trip.durationMin || trip.duration_min || 1);
+    const dist = Number(trip.moveKM || trip.distance_km || 0).toFixed(1);
+    const bat = Math.round(Number(trip.useBattery || trip.battery_used || 0));
 
-    // 💡 주행 시간과 매칭되는 캘린더 일정 탐색
-    const matchedEvents = sameDayEvents.filter(ev => {
-      if (!ev.start_time && !ev.start) return false;
-      const evStart = new Date(ev.start_time || ev.start).getTime();
-      const evEnd = ev.end_time ? new Date(ev.end_time).getTime() : evStart + 3600000;
-      
-      // 운행 시작 전후 30분 이내이거나 시간대가 겹치는 일정 매칭
-      return (sTime.getTime() <= evEnd + 1800000 && eTime.getTime() >= evStart - 1800000);
-    });
+    const startLoc = trip.startDong || trip.start_location || "출발지";
+    const endLoc = trip.endDong || trip.end_location || "목적지";
+    const endAddress = trip.end_address || trip.destination || '';
 
-    let calendarBadgeHtml = '';
-    if (matchedEvents.length > 0) {
-      calendarBadgeHtml = matchedEvents.map(ev => `
-        <div class="mt-2 text-xs bg-indigo-950/80 text-indigo-200 p-2.5 rounded-lg border border-indigo-700/60 shadow-inner">
-          <div class="font-bold flex items-center justify-between">
-            <span class="flex items-center gap-1.5">
-              <span>📅</span>
-              <span class="text-indigo-100">${ev.summary || ev.title || '일정'}</span>
-            </span>
-            <span class="text-[10px] text-indigo-300 bg-indigo-900/50 px-1.5 py-0.5 rounded">
-              ${formatTime(ev.start_time || ev.start)}
-            </span>
-          </div>
-          ${ev.location ? `<div class="text-[11px] text-indigo-300/80 mt-1 flex items-center gap-1">📍 <span>${ev.location}</span></div>` : ''}
-        </div>
-      `).join('');
+    // 📍 캘린더 매칭 (location 정확 비교 검증 후 summary 항목만 노출)
+    let matchedSummary = '';
+    if (cEventsMap.length > 0) {
+      const found = cEventsMap.find(ev => {
+        if (!ev.location) return false;
+        return ev.location.includes(endLoc) || endLoc.includes(ev.location) ||
+               (endAddress && (ev.location.includes(endAddress) || endAddress.includes(ev.location)));
+      });
+      if (found) {
+        matchedSummary = cleanLocationTitle ? cleanLocationTitle(found.summary) : found.summary;
+      }
     }
 
     html += `
-      <div class="bg-gray-800/90 p-3 rounded-xl border border-gray-700/70 shadow-md text-sm">
-        <div class="flex justify-between items-center font-bold text-gray-100">
-          <span class="text-blue-400">#${idx + 1} 운행 (${startTimeStr} 출발)</span>
-          <span class="text-gray-300 font-normal text-xs bg-gray-700/60 px-2 py-0.5 rounded">${dist} km / ${mins}분</span>
+      <div class="bg-gray-800/80 p-3.5 rounded-xl border border-gray-700/60 shadow-md text-xs">
+        <div class="flex justify-between items-center font-bold text-gray-100 mb-1">
+          <span class="text-blue-400 font-extrabold text-sm">${startLoc} ➔ ${endLoc}</span>
         </div>
         
-        <div class="my-2 text-xs text-gray-300 font-medium flex items-center gap-1.5">
-          <span class="text-blue-300">${startLoc}</span>
-          <span class="text-gray-500">➔</span>
-          <span class="text-emerald-300">${endLoc}</span>
+        <div class="text-gray-400 mb-2 font-medium">
+          주행 ${dist}km (${mins}분) | 🔋 ${bat}% | 📍 Odo: ${(trip.odometer || trip.end_odometer || 0).toLocaleString()}km
         </div>
 
-        <div class="flex justify-between items-center text-[11px] text-gray-400 pt-1.5 border-t border-gray-700/40">
-          <span>🔋 소모: <strong class="text-amber-400">${bat}% (${kwh}kWh)</strong></span>
-          <span>⚡ 전비: <strong class="text-emerald-400">${eff} km/kWh</strong></span>
-        </div>
-        
-        ${calendarBadgeHtml}
+        ${matchedSummary ? `
+          <div class="mt-2 bg-purple-950/80 border border-purple-700/60 p-2.5 rounded-lg text-purple-200">
+            <div class="flex items-center gap-1.5 font-bold text-xs text-purple-300">
+              <span>📍 도착지 일정:</span>
+              <span class="text-white">${matchedSummary}</span>
+            </div>
+          </div>
+        ` : ''}
       </div>
     `;
   });
 
-  container.innerHTML = html;
+  singleContainer.innerHTML = html;
 }
 
 
-// 3. 최근 차량 상태 히스토리 타임라인 (자동 DOM 주입)
+// 2. 최근 상태 히스토리 (날짜별 그룹화 및 일간 지도 이동 지원 - 사진 4 완벽 구현)
 function renderVehicleStateHistory(vehicleHistoryRecords) {
-  let container = document.getElementById('state-history-container');
-  
-  if (!container) {
-    const allElements = Array.from(document.querySelectorAll('div, span, h3, h4, header'));
-    const targetHeader = allElements.find(el => el.innerText && el.innerText.includes('최근 상태 히스토리'));
-    
-    if (targetHeader) {
-      container = document.createElement('div');
-      container.id = 'state-history-container';
-      container.className = 'mt-3 space-y-2';
-      targetHeader.after(container);
-    } else {
-      return;
-    }
-  }
+  const container = document.getElementById('state-history-container');
+  if (!container) return;
 
-  const records = vehicleHistoryRecords || window.allVehicleTrips || [];
+  const records = (typeof allTrips !== 'undefined' && Array.isArray(allTrips) && allTrips.length > 0)
+    ? allTrips
+    : (vehicleHistoryRecords || []);
 
   if (!records || records.length === 0) {
-    container.innerHTML = `<div class="text-xs text-gray-500 text-center py-2">상태 변경 이력이 없습니다.</div>`;
+    container.innerHTML = `<div class="text-xs text-gray-500 text-center py-4">최근 운행/상태 이력이 없습니다.</div>`;
     return;
   }
 
-  const stateMap = {
-    'online': { label: '대기 중', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-    'driving': { label: '주행 중', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-    'charging': { label: '충전 중', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
-    'asleep': { label: '수면 중', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' }
+  const toYmd = (ts) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   };
 
-  let html = `<div class="space-y-2 mt-2">`;
-  
-  records.slice(0, 5).forEach(rec => {
-    const stateKey = (rec.state || rec.vehicle_state || 'online').toLowerCase();
-    const stInfo = stateMap[stateKey] || { label: rec.state || '대기 중', color: 'bg-gray-700 text-gray-300 border-gray-600' };
-    
-    const rawTime = rec.updated_at || rec.created_at || rec.timestamp;
-    const timeStr = rawTime ? new Date(rawTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '-';
-    
-    let bat = rec.battery_level ?? rec.now_battery ?? rec.usable_battery_level ?? '-';
-    if (bat !== '-') bat = `${Math.round(bat)}%`;
+  const formatTime12 = (ts) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    let h = d.getHours();
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const ampm = h >= 12 ? '오후' : '오전';
+    h = h % 12 || 12;
+    return `${ampm} ${String(h).padStart(2, '0')}:${m}`;
+  };
+
+  // 날짜별 그룹화
+  const grouped = {};
+  records.forEach(r => {
+    const ymd = toYmd(r.timestamp || r.start_time || r.created_at);
+    if (!ymd) return;
+    if (!grouped[ymd]) grouped[ymd] = [];
+    grouped[ymd].push(r);
+  });
+
+  const sortedDates = Object.keys(grouped).sort().reverse().slice(0, 5); // 최근 5개 날짜
+
+  let html = '';
+
+  sortedDates.forEach(dateStr => {
+    const dayTrips = grouped[dateStr];
 
     html += `
-      <div class="flex items-center justify-between p-2.5 rounded-xl bg-gray-800/60 border border-gray-700/50 text-xs">
-        <div class="flex items-center gap-2">
-          <span class="px-2 py-0.5 rounded border ${stInfo.color} font-medium">${stInfo.label}</span>
-          <span class="text-gray-400">${timeStr}</span>
+      <div class="bg-gray-900/90 border border-gray-800 rounded-2xl p-3.5 shadow-md">
+        <!-- 날짜 헤더 & 해당 날짜 전체 지도 보기 버튼 -->
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-gray-800">
+          <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-950/80 border border-indigo-700/60 text-indigo-200 text-xs font-bold">
+            📅 ${dateStr}
+          </div>
+          <button onclick="jumpToDrivingDate('${dateStr}')" class="text-[11px] text-gray-400 hover:text-white transition flex items-center gap-1">
+            해당 날짜 전체 지도 보기 ▶
+          </button>
         </div>
-        <span class="text-gray-200 font-bold">🔋 ${bat}</span>
+
+        <!-- 당일 주행 목록 -->
+        <div class="space-y-2">
+    `;
+
+    dayTrips.forEach(t => {
+      const timeStr = formatTime12(t.timestamp || t.start_time);
+      const sLoc = t.startDong || t.start_location || "출발지";
+      const eLoc = t.endDong || t.end_location || "목적지";
+      const dist = Math.round(Number(t.moveKM || t.distance_km || 0));
+      const mins = Number(t.durationMin || t.duration_min || 0);
+      const bat = Math.round(Number(t.useBattery || t.battery_used || 0));
+      const temp = t.temp || t.outside_temp ? `${t.temp || t.outside_temp}°C` : '-';
+
+      html += `
+        <div class="bg-gray-800/60 p-3 rounded-xl border border-gray-700/40 text-xs">
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded-md bg-blue-600/30 border border-blue-500/40 text-blue-300 font-bold text-[10px]">🚘 주행</span>
+              <span class="text-gray-300 font-medium">${timeStr}</span>
+              <span class="font-bold text-gray-100">${sLoc} ➔ <span class="text-emerald-400">${eLoc}</span></span>
+            </div>
+          </div>
+          <div class="flex justify-between items-center text-gray-400 mt-1 pl-1 text-[11px]">
+            <span>주행 ${dist}km (${mins}분) | 🔋 ${bat}%</span>
+            <span>🌡️ ${temp}</span>
+          </div>
+        </div>
+      `;
+    });
+
+    html += `
+        </div>
       </div>
     `;
   });
 
-  html += `</div>`;
   container.innerHTML = html;
 }
 
