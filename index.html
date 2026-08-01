@@ -1571,45 +1571,42 @@ function parseDrivingTimeToMinutes(r) {
 // ==========================================
 async function loadAllData(isSilent = false) {
   try {
-    // ---------------------------------------------------------
-    // [1단계] Fast-Path: 마지막 기록일 기준 2일치 빠른 로드 & UI 1차 표시
-    // ---------------------------------------------------------
+    // =========================================================
+    // [1단계] Fast-Path: DB 최신 start_time/created_at 기준 2일치 빠른 로드
+    // =========================================================
     const latestDriving = await fetchSupabaseTable('driving?order=created_at.desc&limit=1');
     
     if (latestDriving && latestDriving.length > 0) {
-      const maxDate = new Date(latestDriving[0].created_at || Date.now());
+      const maxDate = new Date(latestDriving[0].start_time || latestDriving[0].created_at || Date.now());
       const startDate = new Date(maxDate);
-      startDate.setDate(startDate.getDate() - 2); // 마지막 기록일 기준 2일 전
+      startDate.setDate(startDate.getDate() - 2); // 2일 전
 
       const isoStart = startDate.toISOString();
       const isoEnd = maxDate.toISOString();
 
-      // 2일치 데이터 병렬 조회
+      // 병렬 초동 로드
       const [p1Driving, p1Vehicle, p1Calendar] = await Promise.all([
         fetchSupabaseTable(`driving?created_at=gte.${isoStart}&created_at=lte.${isoEnd}&order=created_at.desc`),
         fetchSupabaseTable('vehicle?order=updated_at.desc&limit=50'),
         fetchSupabaseTable(`calendar_events?updated_at=gte.${isoStart}&order=start_time.asc`)
       ]);
 
-      // 1단계 전역 변수 설정 및 가공
       window.allVehicleTrips = p1Vehicle || [];
       window.calendarEvents = p1Calendar || [];
       vehicleRows = p1Vehicle || [];
       allTrips = processDrivingRows(p1Driving || []);
 
-      // ⚡ [1단계 UI 렌더링] 빠르게 1차 화면 업데이트
+      // ⚡ 1단계 화면 즉시 노출
       renderAllUIComponents();
-      console.log("⚡ [1단계 완료] 최근 2일치 데이터로 대시보드 즉시 표시 완료!");
+      console.log("⚡ [1단계 완료] 최근 2일치 데이터로 대시보드 표시");
 
-      // 빠른 주소 역지오코딩 (1단계 2일치 데이터용)
+      // DB에 start_dong이 없는 구형 레코드만 선별적 주소 변환
       processGeocodingAsync(allTrips);
-    } else {
-      console.warn("기록된 주행 데이터가 없습니다.");
     }
 
-    // ---------------------------------------------------------
-    // [2단계] Background-Path: 백그라운드 전체 히스토리 로드 & UI 2차 최신화
-    // ---------------------------------------------------------
+    // =========================================================
+    // [2단계] Background-Path: 전체 데이터 백그라운드 로드
+    // =========================================================
     setTimeout(async () => {
       try {
         console.log("🔄 [2단계 시작] 백그라운드 전체 히스토리 로드 중...");
@@ -1620,13 +1617,12 @@ async function loadAllData(isSilent = false) {
           fetchSupabaseTable('calendar_events?order=start_time.asc')
         ]);
 
-        // 전체 데이터로 전역 변수 교체
         window.allVehicleTrips = vehicleRes || [];
         window.calendarEvents = calendarRes || [];
         vehicleRows = vehicleRes || [];
         allTrips = processDrivingRows(drivingRes || []);
 
-        // 로컬 스토리지 캐시 업데이트
+        // 캐시 저장
         if (vehicleRows.length > 0) {
           localStorage.setItem('tesla_cached_vehicle', JSON.stringify(vehicleRows.slice(0, 50)));
         }
@@ -1634,15 +1630,14 @@ async function loadAllData(isSilent = false) {
           localStorage.setItem('tesla_cached_trips', JSON.stringify(allTrips.slice(0, 50)));
         }
 
-        // 🎉 [2단계 UI 렌더링] 전체 데이터 기반 완전체 화면 갱신
+        // 🎉 2단계 완결 화면 UI 업데이트
         renderAllUIComponents();
-        console.log("🎉 [2단계 완료] 전체 데이터 로드 및 UI 2차 갱신 완결!");
+        console.log("🎉 [2단계 완료] 전체 히스토리 업데이트 완결!");
 
-        // 전체 주행 기록 주소 역지오코딩
         processGeocodingAsync(allTrips);
 
       } catch (bgErr) {
-        console.warn("⚠️ 백그라운드 2단계 로딩 실패 (1단계 데이터 유지):", bgErr);
+        console.warn("⚠️ 백그라운드 로딩 실패:", bgErr);
       }
     }, 100);
 
@@ -1651,60 +1646,42 @@ async function loadAllData(isSilent = false) {
   }
 }
 
-// 💡 헬퍼 1: driving 데이터 변환 로직
-function processDrivingRows(rows) {
-  return rows.map(r => {
-    let pathData = r.location_list || r.path || [];
-    if (typeof pathData === 'string') { 
-      try { pathData = JSON.parse(pathData); } catch(e) { pathData = []; } 
-    }
-    
-    const dMin = typeof parseDrivingTimeToMinutes === 'function' ? parseDrivingTimeToMinutes(r) : 0;
 
-    return {
-      id: r.id,
-      timestamp: new Date(r.created_at || r.start_time || Date.now()).getTime(),
-      moveKM: Number(r.move_km || r.distance || r.km || 0),
-      useBattery: Number(r.use_battery || r.battery_used || 0),
-      startBat: r.start_battery || r.start_battery_level,
-      endBat: r.end_battery || r.end_battery_level,
-      odometer: r.odometer || r.end_odometer,
-      outsideTemp: r.outside_temp ?? r.temp,
-      durationMin: dMin,
-      path: pathData,
-      startDong: typeof cleanAddress === 'function' ? cleanAddress(r.start_address || r.start_location || "조회중") : "조회중",
-      endDong: typeof cleanAddress === 'function' ? cleanAddress(r.end_address || r.end_location || "조회중") : "조회중"
-    };
-  });
-}
-
-// 💡 헬퍼 2: UI 렌더링 함수들을 한곳에 묶어 모듈화
+// 💡 헬퍼 2: UI 렌더링 함수 모듈화 수정
 function renderAllUIComponents() {
   if (typeof switchMainTab === 'function') switchMainTab(currentMainTab);
   if (typeof loadVehicleData === 'function') loadVehicleData();
+  
+  // ⚡ 수정: window.allVehicleTrips 대신 가공된 allTrips를 전달
   if (typeof renderDaySummaryAndSingleTrips === 'function') {
-    renderDaySummaryAndSingleTrips(window.allVehicleTrips, window.calendarEvents);
+    renderDaySummaryAndSingleTrips(allTrips, window.calendarEvents);
   }
   if (typeof renderVehicleStateHistory === 'function') {
     renderVehicleStateHistory(window.allVehicleTrips);
   }
 }
 
-// 💡 헬퍼 3: 주소 변환(역지오코딩) 비동기 처리 분리
 async function processGeocodingAsync(trips) {
   if (typeof getNeighborhood !== 'function') return;
   
+  let updated = false;
   for (let t of trips) {
     if ((t.startDong === "조회중" || t.endDong === "조회중") && t.path && t.path.length > 0) {
       const firstPt = t.path[0], lastPt = t.path[t.path.length - 1];
       const fLat = firstPt.lat || firstPt.latitude || firstPt[0], fLng = firstPt.lng || firstPt.longitude || firstPt[1];
       const lLat = lastPt.lat || lastPt.latitude || lastPt[0], lLng = lastPt.lng || lastPt.longitude || lastPt[1];
 
-      if (t.startDong === "조회중") t.startDong = await getNeighborhood(fLat, fLng);
-      if (t.endDong === "조회중") t.endDong = await getNeighborhood(lLat, lLng);
+      if (t.startDong === "조회중") { t.startDong = await getNeighborhood(fLat, fLng); updated = true; }
+      if (t.endDong === "조회중") { t.endDong = await getNeighborhood(lLat, lLng); updated = true; }
     }
   }
+
+  // ⚡ 주소가 업데이트되었으면 UI 즉시 재갱신
+  if (updated && typeof renderDaySummaryAndSingleTrips === 'function') {
+    renderDaySummaryAndSingleTrips(allTrips, window.calendarEvents);
+  }
 }
+
 
 // ==========================================
 // 3. 기타 UI 업데이트 함수들 (수정 없음)
@@ -3982,11 +3959,12 @@ window.calendarEventsList = window.calendarEventsList || [];
 /**
  * 1. 최근 운행일 전체 합산 + 개별 운행 카드 + 캘린더 summary 매칭
  */
+
 function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
-  // Supabase 데이터 또는 전역 배열 참조 (초기화 깜빡임 방지)
+  // 1. 가공된 allTrips 우선 참조
   const tripsData = (Array.isArray(vehicleData) && vehicleData.length > 0)
     ? vehicleData
-    : (window.allTripsData && window.allTripsData.length > 0 ? window.allTripsData : (typeof allTrips !== 'undefined' ? allTrips : []));
+    : (typeof allTrips !== 'undefined' && allTrips.length > 0 ? allTrips : (window.allTripsData || []));
 
   if (!tripsData || tripsData.length === 0) return;
 
@@ -4007,27 +3985,33 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
     return `${yyyy}-${mm}-${dd}`;
   };
 
-  // 최신순 정렬 후 가장 최근 운행일 계산
-  const sortedTrips = [...tripsData].sort((a, b) => new Date(b.start_time || b.created_at) - new Date(a.start_time || a.created_at));
+  // 2. 최신순 정렬 (timestamp / start_time 기준)
+  const sortedTrips = [...tripsData].sort((a, b) => {
+    const tB = b.timestamp || new Date(b.start_time || b.created_at || 0).getTime();
+    const tA = a.timestamp || new Date(a.start_time || a.created_at || 0).getTime();
+    return tB - tA;
+  });
+
   const latestTrip = sortedTrips[0];
-  const targetYmd = toYmd(latestTrip.start_time || latestTrip.created_at || latestTrip.timestamp);
+  const targetYmd = toYmd(latestTrip.timestamp || latestTrip.start_time || latestTrip.created_at);
   if (!targetYmd) return;
 
-  // 당일 운행목록 추출
-  const sameDayTrips = sortedTrips.filter(t => toYmd(t.start_time || t.created_at || t.timestamp) === targetYmd);
+  // 3. 당일 운행기록 필터링
+  const sameDayTrips = sortedTrips.filter(t => toYmd(t.timestamp || t.start_time || t.created_at) === targetYmd);
 
-  // 상단 날짜 표기 (예: 2026.07.31)
+  // 상단 날짜 표시
   setText('v-latest-trip-date', targetYmd.replace(/-/g, '.'));
 
-  let totalDist = 0;      // move_km
-  let totalBatUsed = 0;   // use_battery
-  let totalDriveMins = 0; // duration_min
+  let totalDist = 0;      
+  let totalBatUsed = 0;   
+  let totalDriveMins = 0; 
   let totalKwh = 0;
 
+  // 4. 당일 전체 수치 집계
   sameDayTrips.forEach(t => {
-    const dist = Number(t.move_km ?? t.distance_km ?? t.moveKM ?? 0);
-    const batUsed = Number(t.use_battery ?? t.battery_used ?? t.useBattery ?? 0);
-    const driveMins = Number(t.duration_min ?? t.durationMin ?? 0);
+    const dist = Number(t.moveKM ?? t.move_km ?? t.distance_km ?? 0);
+    const batUsed = Number(t.useBattery ?? t.use_battery ?? 0);
+    const driveMins = Number(t.durationMin ?? t.duration_min ?? t.driving_time ?? 0);
     const kwh = (batUsed / 100) * batteryCapacity;
 
     totalDist += dist;
@@ -4044,24 +4028,24 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
   setText('v-day-time', `${totalDriveMins}분`);
   setText('v-day-kwh', `${totalKwh.toFixed(1)} kWh`);
 
-  // 🌐 당일 이동 경로 상단 바 (클릭 시 당일 전체 일정 팝업)
+  // 🌐 이동 경로 상단 바
   const pathContainer = document.getElementById('day-path-container');
   const pathText = document.getElementById('day-path-text');
   if (pathContainer && pathText && sameDayTrips.length > 0) {
     const orderedForPath = [...sameDayTrips].reverse();
     const pathNodes = [];
     orderedForPath.forEach((t, i) => {
-      const sLoc = t.start_dong || t.startDong || t.start_address || "출발지";
-      const eLoc = t.end_dong || t.endDong || t.end_address || "목적지";
+      const sLoc = t.startDong || t.start_dong || "출발지";
+      const eLoc = t.endDong || t.end_dong || "목적지";
       if (i === 0) pathNodes.push(sLoc);
       pathNodes.push(eLoc);
     });
     pathText.innerText = pathNodes.join(' ➔ ');
     pathContainer.classList.remove('hidden');
-    pathContainer.onclick = () => showScheduleModalForDay(targetYmd); // 클릭 이벤트 추가
+    pathContainer.onclick = () => typeof showScheduleModalForDay === 'function' && showScheduleModalForDay(targetYmd);
   }
 
-  // 🚗 당일 개별 운행 목록 + 캘린더 summary 매칭 UI
+  // 🚗 개별 운행 목록 출력
   const singleContainer = document.getElementById('single-trips-container');
   if (!singleContainer) return;
 
@@ -4071,22 +4055,25 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
   let html = '';
 
   orderedTrips.forEach((trip) => {
-    const mins = Number(trip.duration_min ?? trip.durationMin ?? 1);
-    const dist = Number(trip.move_km ?? trip.distance_km ?? trip.moveKM ?? 0).toFixed(1);
-    const batUsed = Math.round(Number(trip.use_battery ?? trip.battery_used ?? trip.useBattery ?? 0));
+    const mins = Number(trip.durationMin ?? trip.duration_min ?? trip.driving_time ?? 1);
+    const dist = Number(trip.moveKM ?? trip.move_km ?? trip.distance_km ?? 0).toFixed(1);
+    const batUsed = Math.round(Number(trip.useBattery ?? trip.use_battery ?? 0));
     
     // 남은 배터리 계산
-    const endBat = trip.end_battery ?? trip.end_battery_level ?? (trip.start_battery ? trip.start_battery - batUsed : null);
-    const batStr = endBat !== null ? `🔋 -${batUsed}% (남은 ${endBat}%)` : `🔋 -${batUsed}%`;
+    const endBat = trip.endBat ?? trip.end_battery;
+    const batStr = (endBat !== null && endBat !== undefined) ? `🔋 -${batUsed}% (남은 ${endBat}%)` : `🔋 -${batUsed}%`;
 
-    // 외기 온도
-    const temp = (trip.outside_temp !== undefined && trip.outside_temp !== null) ? `${trip.outside_temp}°C` : '29°C';
+    // 외기 온도 소수점 반올림 처리
+    const rawTemp = trip.outsideTemp ?? trip.outside_temp;
+    const temp = (rawTemp !== undefined && rawTemp !== null && !isNaN(rawTemp)) 
+      ? `${Math.round(Number(rawTemp))}°C` 
+      : '29°C';
 
-    const startLoc = trip.start_dong || trip.startDong || "출발지";
-    const endLoc = trip.end_dong || trip.endDong || "목적지";
+    const startLoc = trip.startDong || trip.start_dong || "출발지";
+    const endLoc = trip.endDong || trip.end_dong || "목적지";
     const endAddr = trip.end_address || "";
 
-    // 📍 calendar_events.location과 주행 end_dong/end_address 비교 후 summary 추출
+    // 캘린더 매칭
     let matchedSummary = '';
     if (currentCalendar.length > 0) {
       const found = currentCalendar.find(ev => {
@@ -4100,10 +4087,10 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
     }
 
     html += `
-      <div class="bg-gray-800/80 p-3.5 rounded-xl border border-gray-700/60 shadow-md text-xs">
+      <div class="bg-gray-800/80 p-3.5 rounded-xl border border-gray-700/60 shadow-md text-xs mb-3">
         <div class="flex justify-between items-center font-bold text-gray-100 mb-1">
           <span class="text-blue-400 font-extrabold text-sm truncate max-w-[80%]">
-            ${startLoc} ➔ <span class="text-emerald-400 cursor-pointer hover:underline" onclick="showScheduleModalForTrip('${endLoc}')">${endLoc} 📌</span>
+            ${startLoc} ➔ <span class="text-emerald-400 cursor-pointer hover:underline" onclick="typeof showScheduleModalForTrip === 'function' && showScheduleModalForTrip('${endLoc}')">${endLoc} 📌</span>
           </span>
           <span class="text-[10px] text-gray-400 font-mono">🌡️ ${temp}</span>
         </div>
@@ -4113,7 +4100,7 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
         </div>
 
         ${matchedSummary ? `
-          <div class="mt-2 bg-purple-950/80 border border-purple-700/60 p-2.5 rounded-lg text-purple-200 cursor-pointer hover:bg-purple-900/80 transition" onclick="showScheduleModalForTrip('${endLoc}')">
+          <div class="mt-2 bg-purple-950/80 border border-purple-700/60 p-2.5 rounded-lg text-purple-200 cursor-pointer hover:bg-purple-900/80 transition" onclick="typeof showScheduleModalForTrip === 'function' && showScheduleModalForTrip('${endLoc}')">
             <div class="flex items-center gap-1.5 font-bold text-xs text-purple-300">
               <span>📍 도착지 일정:</span>
               <span class="text-white">${matchedSummary}</span>
