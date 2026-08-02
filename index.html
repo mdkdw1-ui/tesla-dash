@@ -194,6 +194,9 @@
             <h3 class="font-bold text-white text-sm">최근 상태 히스토리</h3>
           </div>
           <div id="state-history-container" class="space-y-4"></div>
+          <button id="btn-load-more-history" onclick="loadMoreHistoryOnDemand()" class="w-full mt-2 py-2.5 rounded-xl text-xs font-bold bg-gray-800/80 hover:bg-gray-700 text-gray-300 border border-gray-700 transition active:scale-95">
+            📥 이전 기록 전체 불러오기
+          </button>
         </div>
 
       </div>
@@ -1593,36 +1596,125 @@ function parseDrivingTimeToMinutes(r) {
 // ==========================================
 // 2. 전체 데이터 로드 및 가공 (2단계 빠른 로딩)
 // ==========================================
+// ==========================================
+// 1-1. driving 원시 행 가공 함수 (⚠️ 기존에 누락되어 있던 함수 - 신규 추가)
+//   raw snake_case 컬럼은 그대로 유지하면서, 구버전 지도/월간 리포트 코드가
+//   요구하는 camelCase 별칭(moveKM/useBattery/durationMin/startDong/endDong 등)과
+//   location_list(jsonb)에서 뽑아낸 path 배열을 함께 채워준다.
+// ==========================================
+function processDrivingRows(rows) {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.map(r => {
+    const moveKM = num(r.move_km ?? r.distance_km ?? r.moveKM ?? r.distanceKM ?? r.distance ?? 0);
+    const useBattery = num(r.use_battery ?? r.useBattery ?? r.battery_used ?? 0);
+    const durationMin = parseDrivingTimeToMinutes(r);
+    const timestamp = r.created_at ?? r.updated_at ?? r.start_time ?? r.date ?? null;
+
+    // location_list(jsonb)에서 좌표 경로 추출
+    let rawLoc = r.location_list;
+    if (typeof rawLoc === 'string') {
+      try { rawLoc = JSON.parse(rawLoc); } catch (e) { rawLoc = null; }
+    }
+    let path = [];
+    if (Array.isArray(rawLoc)) {
+      path = rawLoc;
+    } else if (rawLoc && Array.isArray(rawLoc.path)) {
+      path = rawLoc.path;
+    } else if (rawLoc && Array.isArray(rawLoc.points)) {
+      path = rawLoc.points;
+    }
+
+    // 출발/도착 동 이름: DB에 저장돼 있으면 그대로, 없고 좌표는 있으면 "조회중"으로
+    // 표시해 processGeocodingAsync()가 역지오코딩으로 채우도록 한다.
+    let startDong = r.start_dong ?? r.startDong ?? '';
+    let endDong = r.end_dong ?? r.endDong ?? '';
+    if (!startDong && path.length > 0) startDong = "조회중";
+    if (!endDong && path.length > 0) endDong = "조회중";
+
+    return {
+      ...r,
+      id: r.id ?? `${r.vehicle_id || 'trip'}_${timestamp || Math.random().toString(36).slice(2)}`,
+      timestamp,
+      moveKM,
+      useBattery,
+      durationMin,
+      startDong,
+      endDong,
+      outsideTemp: r.outside_temp ?? r.outsideTemp,
+      path
+    };
+  });
+}
+
+// 날짜 하루 전 계산 헬퍼
+function oneDayBeforeDate(d) {
+  const nd = new Date(d);
+  nd.setDate(nd.getDate() - 1);
+  return nd;
+}
+
 async function loadAllData(isSilent = false) {
   try {
     // =========================================================
-    // [1단계] Fast-Path: DB 최신 start_time/created_at 기준 2일치 빠른 로드
+    // [1단계] Fast-Path: 테이블별 "마지막 기록일 ~ 하루 전"만 우선 로드
+    //  (driving/charging/vehicle 각각 자기 테이블의 최신 기록일 기준)
     // =========================================================
-    const latestDriving = await fetchSupabaseTable('driving?order=created_at.desc&limit=1');
-    
-    if (latestDriving && latestDriving.length > 0) {
-      const maxDate = new Date(latestDriving[0].start_time || latestDriving[0].created_at || Date.now());
-      const startDate = new Date(maxDate);
-      startDate.setDate(startDate.getDate() - 2); // 2일 전
+    const [lastDrivingRow, lastChargingRow, lastVehicleRow] = await Promise.all([
+      fetchSupabaseTable('driving?select=created_at&order=created_at.desc&limit=1'),
+      fetchSupabaseTable('charging?select=date,created_at&order=date.desc&limit=1'),
+      fetchSupabaseTable('vehicle?select=updated_at&order=updated_at.desc&limit=1')
+    ]);
 
-      const isoStart = startDate.toISOString();
-      const isoEnd = maxDate.toISOString();
+    const drivingMaxDate = lastDrivingRow?.[0]?.created_at ? new Date(lastDrivingRow[0].created_at) : null;
+    const chargingMaxDate = lastChargingRow?.[0]?.date
+      ? new Date(lastChargingRow[0].date)
+      : (lastChargingRow?.[0]?.created_at ? new Date(lastChargingRow[0].created_at) : null);
+    const vehicleMaxDate = lastVehicleRow?.[0]?.updated_at ? new Date(lastVehicleRow[0].updated_at) : null;
 
-      // 병렬 초동 로드
-      const [p1Driving, p1Vehicle, p1Calendar] = await Promise.all([
-        fetchSupabaseTable(`driving?created_at=gte.${isoStart}&created_at=lte.${isoEnd}&order=created_at.desc`),
-        fetchSupabaseTable('vehicle?order=updated_at.desc&limit=50'),
-        fetchSupabaseTable(`calendar_events?updated_at=gte.${isoStart}&order=start_time.asc`)
-      ]);
+    const fastTasks = [
+      drivingMaxDate
+        ? fetchSupabaseTable(`driving?created_at=gte.${oneDayBeforeDate(drivingMaxDate).toISOString()}&created_at=lte.${drivingMaxDate.toISOString()}&order=created_at.desc`)
+        : Promise.resolve([]),
+      chargingMaxDate
+        ? fetchSupabaseTable(`charging?date=gte.${oneDayBeforeDate(chargingMaxDate).toISOString()}&date=lte.${chargingMaxDate.toISOString()}&order=date.desc`)
+        : Promise.resolve([]),
+      vehicleMaxDate
+        ? fetchSupabaseTable(`vehicle?updated_at=gte.${oneDayBeforeDate(vehicleMaxDate).toISOString()}&updated_at=lte.${vehicleMaxDate.toISOString()}&order=updated_at.desc&limit=300`)
+        : Promise.resolve([])
+    ];
+
+    // 캘린더 매칭용 범위: driving/charging/vehicle 마지막 기록일 중 가장 이른 값 - 1일 ~ 가장 늦은 값 + 1일
+    // (반드시 실제 일정 시각인 start_time 기준으로 걸러야 최근 운행일과 정확히 매칭됨. updated_at 기준이면 누락됨)
+    const candidateDates = [drivingMaxDate, chargingMaxDate, vehicleMaxDate].filter(Boolean);
+    let p1Calendar = [];
+
+    if (candidateDates.length > 0) {
+      const calMin = oneDayBeforeDate(new Date(Math.min(...candidateDates.map(d => d.getTime()))));
+      const calMax = new Date(Math.max(...candidateDates.map(d => d.getTime())));
+      calMax.setDate(calMax.getDate() + 1);
+      fastTasks.push(
+        fetchSupabaseTable(`calendar_events?start_time=gte.${calMin.toISOString()}&start_time=lte.${calMax.toISOString()}&order=start_time.asc`)
+      );
+    } else {
+      fastTasks.push(Promise.resolve([]));
+    }
+
+    if (candidateDates.length > 0) {
+      const [p1Driving, p1Charging, p1Vehicle, p1Cal] = await Promise.all(fastTasks);
+      p1Calendar = p1Cal || [];
 
       window.allVehicleTrips = p1Vehicle || [];
-      window.calendarEvents = p1Calendar || [];
+      window.allChargingData = p1Charging || [];
+      window.allChargings = p1Charging || [];
+      window.calendarEvents = p1Calendar;
+      window.calendarEventsList = p1Calendar;
       vehicleRows = p1Vehicle || [];
       allTrips = processDrivingRows(p1Driving || []);
 
       // ⚡ 1단계 화면 즉시 노출
       renderAllUIComponents();
-      console.log("⚡ [1단계 완료] 최근 2일치 데이터로 대시보드 표시");
+      console.log("⚡ [1단계 완료] 테이블별 마지막 기록일 기준 최근 데이터로 대시보드 표시");
 
       // DB에 start_dong이 없는 구형 레코드만 선별적 주소 변환
       processGeocodingAsync(allTrips);
@@ -1631,18 +1723,23 @@ async function loadAllData(isSilent = false) {
     // =========================================================
     // [2단계] Background-Path: 전체 데이터 백그라운드 로드
     // =========================================================
+    window.fullHistoryLoaded = false;
     setTimeout(async () => {
       try {
         console.log("🔄 [2단계 시작] 백그라운드 전체 히스토리 로드 중...");
 
-        const [drivingRes, vehicleRes, calendarRes] = await Promise.all([
+        const [drivingRes, chargingRes, vehicleRes, calendarRes] = await Promise.all([
           fetchSupabaseTable('driving?order=created_at.desc'),
+          fetchSupabaseTable('charging?order=date.desc'),
           fetchSupabaseTable('vehicle?order=updated_at.desc&limit=5000'),
           fetchSupabaseTable('calendar_events?order=start_time.asc')
         ]);
 
         window.allVehicleTrips = vehicleRes || [];
+        window.allChargingData = chargingRes || [];
+        window.allChargings = chargingRes || [];
         window.calendarEvents = calendarRes || [];
+        window.calendarEventsList = calendarRes || [];
         vehicleRows = vehicleRes || [];
         allTrips = processDrivingRows(drivingRes || []);
 
@@ -1656,6 +1753,7 @@ async function loadAllData(isSilent = false) {
 
         // 🎉 2단계 완결 화면 UI 업데이트
         renderAllUIComponents();
+        window.fullHistoryLoaded = true;
         console.log("🎉 [2단계 완료] 전체 히스토리 업데이트 완결!");
 
         processGeocodingAsync(allTrips);
@@ -1670,18 +1768,68 @@ async function loadAllData(isSilent = false) {
   }
 }
 
+// =========================================================
+// [3단계] On-Demand: 사용자가 요청할 때만 추가로 전체 재로딩
+//   (백그라운드 2단계가 실패했거나, 강제로 최신 전체 이력을 다시 받고 싶을 때 사용)
+// =========================================================
+let isOnDemandLoading = false;
+async function loadMoreHistoryOnDemand() {
+  if (isOnDemandLoading) return;
+  isOnDemandLoading = true;
+
+  const btn = document.getElementById('btn-load-more-history');
+  const originalLabel = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ 전체 기록 불러오는 중...';
+  }
+
+  try {
+    const [drivingRes, chargingRes, vehicleRes, calendarRes] = await Promise.all([
+      fetchSupabaseTable('driving?order=created_at.desc'),
+      fetchSupabaseTable('charging?order=date.desc'),
+      fetchSupabaseTable('vehicle?order=updated_at.desc&limit=5000'),
+      fetchSupabaseTable('calendar_events?order=start_time.asc')
+    ]);
+
+    window.allVehicleTrips = vehicleRes || [];
+    window.allChargingData = chargingRes || [];
+    window.allChargings = chargingRes || [];
+    window.calendarEvents = calendarRes || [];
+    window.calendarEventsList = calendarRes || [];
+    vehicleRows = vehicleRes || [];
+    allTrips = processDrivingRows(drivingRes || []);
+
+    renderAllUIComponents();
+    window.fullHistoryLoaded = true;
+    processGeocodingAsync(allTrips);
+
+    if (typeof addLog === 'function') addLog(`✅ 전체 기록 ${allTrips.length}건 추가 로드 완료`);
+  } catch (err) {
+    console.error("On-demand 전체 로딩 실패:", err);
+    if (typeof addLog === 'function') addLog('⚠️ 전체 기록 추가 로드 실패');
+  } finally {
+    isOnDemandLoading = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalLabel || '📥 이전 기록 전체 불러오기';
+    }
+  }
+}
+
 
 // 💡 헬퍼 2: UI 렌더링 함수 모듈화 수정
 function renderAllUIComponents() {
   if (typeof switchMainTab === 'function') switchMainTab(currentMainTab);
   if (typeof loadVehicleData === 'function') loadVehicleData();
   
-  // ⚡ 수정: window.allVehicleTrips 대신 가공된 allTrips를 전달
+  // ⚡ 수정: window.allVehicleTrips(차량 상태 스냅샷 테이블)가 아니라
+  // 가공된 driving 기록(allTrips)을 넘겨야 "최근 상태 히스토리"에 주행 기록이 정상 표시됨
   if (typeof renderDaySummaryAndSingleTrips === 'function') {
     renderDaySummaryAndSingleTrips(allTrips, window.calendarEvents);
   }
   if (typeof renderVehicleStateHistory === 'function') {
-    renderVehicleStateHistory(window.allVehicleTrips);
+    renderVehicleStateHistory(allTrips);
   }
 }
 
@@ -2868,11 +3016,18 @@ function initMonthlyDropdowns() {
   monthSel.onchange = onMonthlyDropdownChange;
 
   // ★ 필수: 초기화 완료 후 첫 화면 렌더링 자동 실행
-  renderMonthlyTop5();
+  // ⚠️ 기존 renderMonthlyTop5()는 항상 undefined인 chargingRows 변수에 의존해
+  // 충전 통계를 부정확하게 추정하고, 실제 화면에 존재하지 않는 DOM(m-top5-*)을
+  // 참조하는 죽은 코드였음. 실제 통계/카드 렌더링을 담당하는 updateMonthlyReportView로 교체.
+  if (typeof updateMonthlyReportView === 'function') updateMonthlyReportView();
 }
 
+// 드롭다운 변경 이벤트 핸들러
 function onMonthlyDropdownChange() {
   renderMonthlyTop5();
+  if (typeof updateMonthlyReportView === 'function') {
+    updateMonthlyReportView();
+  }
 }
 
 function shiftMonthlyDropdown(offset) {
@@ -2889,6 +3044,9 @@ function shiftMonthlyDropdown(offset) {
     ySel.value = y;
     mSel.value = m;
     renderMonthlyTop5();
+    if (typeof updateMonthlyReportView === 'function') {
+      updateMonthlyReportView();
+    }
   }
 }
 
@@ -2896,15 +3054,29 @@ function selectPrevMonth() {
   shiftMonthlyDropdown(-1);
 }
 
+// 📌 [추가] 다음 달 선택 함수 누락분 보완
+function selectNextMonth() {
+  shiftMonthlyDropdown(1);
+}
+
+// 💡 안전한 배터리 용량 가져오기 헬퍼
+function getSafeBatteryCapacity() {
+  if (typeof getBatteryCapacityKwh === 'function') {
+    const cap = getBatteryCapacityKwh();
+    if (!isNaN(cap) && cap > 0) return cap;
+  }
+  return Number(window.VEHICLE_BATTERY_CAPACITY || 60);
+}
+
 // 차량 수집 로그 및 Supabase charging 테이블 기반 충전 연산
 function calculateMonthlyChargingStats(selY, selM) {
-  const batteryCapacity = getBatteryCapacityKwh(); // 💡 [최적화 적용]
+  const batteryCapacity = getSafeBatteryCapacity();
 
-  // ① 1순위: Supabase charging 테이블 데이터 활용 (가장 정확함)
+  // ① 1순위: Supabase charging 테이블 활용
   if (typeof chargingRows !== 'undefined' && Array.isArray(chargingRows) && chargingRows.length > 0) {
     const monthCharges = chargingRows.filter(c => {
       const d = new Date(c.date || c.created_at);
-      return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
+      return !isNaN(d.getTime()) && d.getFullYear() === selY && (d.getMonth() + 1) === selM;
     });
 
     if (monthCharges.length > 0) {
@@ -2917,12 +3089,14 @@ function calculateMonthlyChargingStats(selY, selM) {
     }
   }
 
-  // ② 2순위 (폴백): 기존 vehicleRows 로그 기반 추정 로직
-  if (typeof vehicleRows === 'undefined' || !vehicleRows || vehicleRows.length === 0) return { count: 0, kwh: 0 };
+  // ② 2순위 (폴백): vehicleRows 로그 기반 추정
+  if (typeof vehicleRows === 'undefined' || !Array.isArray(vehicleRows) || vehicleRows.length === 0) {
+    return { count: 0, kwh: 0 };
+  }
 
   const monthLogs = vehicleRows.filter(v => {
     const d = new Date(v.updated_at || v.date);
-    return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
+    return !isNaN(d.getTime()) && d.getFullYear() === selY && (d.getMonth() + 1) === selM;
   }).sort((a, b) => new Date(a.updated_at || a.date) - new Date(b.updated_at || b.date));
 
   let chargeCount = 0;
@@ -2952,7 +3126,6 @@ function calculateMonthlyChargingStats(selY, selM) {
     }
   }
 
-  // 💡 [최적화 적용] 가변 배터리 용량 사용
   const totalChargedKwh = (totalChargedPct / 100) * batteryCapacity;
   return { count: chargeCount, kwh: totalChargedKwh };
 }
@@ -2964,20 +3137,26 @@ function renderMonthlyTop5() {
 
   const selY = Number(ySel.value);
   const selM = Number(mSel.value);
-  const batteryCapacity = getBatteryCapacityKwh(); // 💡 [최적화 적용]
+  if (isNaN(selY) || isNaN(selM)) return;
 
+  const batteryCapacity = getSafeBatteryCapacity();
   const trips = (typeof allTrips !== 'undefined' && Array.isArray(allTrips)) ? allTrips : [];
 
   const matchedTrips = trips.filter(t => {
     const d = new Date(t.timestamp || t.date || t.start_time);
-    return d.getFullYear() === selY && (d.getMonth() + 1) === selM;
+    return !isNaN(d.getTime()) && d.getFullYear() === selY && (d.getMonth() + 1) === selM;
   });
 
   const totalDist = matchedTrips.reduce((s, t) => s + (Number(t.moveKM || t.distance || t.km) || 0), 0);
-  const activeDays = new Set(matchedTrips.map(t => new Date(t.timestamp || t.date || t.start_time).toDateString())).size;
+  
+  // 날짜 파싱 방어 처리
+  const activeDays = new Set(matchedTrips.map(t => {
+    const d = new Date(t.timestamp || t.date || t.start_time);
+    return isNaN(d.getTime()) ? null : d.toDateString();
+  }).filter(Boolean)).size;
+
   const totalBat = matchedTrips.reduce((s, t) => s + (Number(t.useBattery) || 0), 0);
   
-  // 💡 [최적화 적용] 가변 배터리 용량 사용
   const totalKwh = (totalBat / 100) * batteryCapacity;
   const avgEff = totalKwh > 0 ? (totalDist / totalKwh).toFixed(2) : "0.00";
   const avgTripKm = matchedTrips.length > 0 ? (totalDist / matchedTrips.length).toFixed(1) : "0.0";
@@ -2987,7 +3166,7 @@ function renderMonthlyTop5() {
   const estimatedCost = Math.round(effectiveKwh * 340); // kWh당 340원 기준
   const co2Saved = Math.round(totalDist * 0.12); // km당 0.12kg 절감
 
-  // 💡 [최적화 2] DOM 배치 텍스트 업데이트 (Element Diffing 적용으로 리플로우 최소화)
+  // DOM 텍스트 업데이트 (Diffing 적용)
   const statsMap = {
     'm-stat-distance': `${totalDist.toFixed(1)} km`,
     'm-stat-days': `${activeDays} 일`,
@@ -3007,12 +3186,13 @@ function renderMonthlyTop5() {
   const safeCleanAddress = typeof cleanAddress === 'function' ? cleanAddress : (addr => addr || '-');
   const hasJumpTrip = typeof jumpToSingleTrip === 'function';
 
-  // 💡 [최적화 2] TOP 5 리스트 아이템 HTML 일괄 템플릿 헬퍼
+  // TOP 5 리스트 아이템 HTML 생성
   const buildTripItemHTML = (t, idx, type) => {
-    const dateStr = new Date(t.timestamp || t.date || t.start_time).toLocaleDateString();
+    const rawDate = new Date(t.timestamp || t.date || t.start_time);
+    const dateStr = !isNaN(rawDate.getTime()) ? rawDate.toLocaleDateString() : '-';
     const startDong = safeCleanAddress(t.startDong);
     const endDong = safeCleanAddress(t.endDong);
-    const clickAttr = hasJumpTrip ? `onclick="jumpToSingleTrip('${t.id}')"` : '';
+    const clickAttr = hasJumpTrip && t.id ? `onclick="jumpToSingleTrip('${t.id}')"` : '';
     
     if (type === 'time') {
       return `
@@ -3054,7 +3234,7 @@ function renderMonthlyTop5() {
   }
 }
 
-// 1-4. 프리미엄 배터리 차트 & KPI 렌더링 (chargingRows 정밀 연동 버전)
+// 프리미엄 배터리 차트 & KPI 렌더링
 function renderBatteryCharts() {
   const sourceRows = (typeof chargingRows !== 'undefined' && Array.isArray(chargingRows) && chargingRows.length > 0) 
     ? chargingRows 
@@ -3062,9 +3242,14 @@ function renderBatteryCharts() {
 
   if (!sourceRows || sourceRows.length === 0) return;
 
-  const defaultCap = getBatteryCapacityKwh();
-  const initKwh = parseFloat(document.getElementById('input-init-kwh')?.value || defaultCap);
-  const certRange = parseFloat(document.getElementById('input-cert-range')?.value || 400);
+  const defaultCap = getSafeBatteryCapacity();
+
+  // 💡 [NaN 방지 예외 처리] input 박스의 숫자를 안전하게 파싱
+  const parsedInitKwh = parseFloat(document.getElementById('input-init-kwh')?.value);
+  const initKwh = (!isNaN(parsedInitKwh) && parsedInitKwh > 0) ? parsedInitKwh : defaultCap;
+
+  const parsedCertRange = parseFloat(document.getElementById('input-cert-range')?.value);
+  const certRange = (!isNaN(parsedCertRange) && parsedCertRange > 0) ? parsedCertRange : 400;
 
   const sortedRows = [...sourceRows].sort((a, b) => new Date(a.date || a.updated_at) - new Date(b.date || b.updated_at));
   const recentData = sortedRows.slice(-30);
@@ -3089,7 +3274,7 @@ function renderBatteryCharts() {
     let maxRange = 0;
     let usableCap = 0;
 
-    // ① charging 테이블 연산 (levelAdded >= 3 조건 및 NaN/Infinity 처리)
+    // ① charging 테이블 연산
     if (rangeAdded > 0 && levelAdded >= 3) {
       maxRange = Math.round((rangeAdded / levelAdded) * 100);
       usableCap = parseFloat(((chargingAdded / levelAdded) * 100).toFixed(1));
@@ -3106,8 +3291,7 @@ function renderBatteryCharts() {
 
     if (maxRange > 0 && usableCap > 0 && isFinite(usableCap) && initKwh > 0) {
       let soh = parseFloat(((usableCap / initKwh) * 100).toFixed(1));
-      if (isNaN(soh)) soh = 100.0;
-      if (soh > 100) soh = 100.0;
+      if (isNaN(soh) || soh > 100) soh = 100.0;
 
       labels.push(dateStr);
       maxRangeData.push(maxRange);
@@ -3124,7 +3308,7 @@ function renderBatteryCharts() {
 
   if (labels.length === 0) return;
 
-  // 2. KPI 요약 카드 수치 배치 업데이트
+  // KPI 요약 카드 업데이트
   const lastSoh = sohData[sohData.length - 1];
   const lastMaxRange = maxRangeData[maxRangeData.length - 1];
   const lastCap = capacityData[capacityData.length - 1];
@@ -3157,9 +3341,7 @@ function renderBatteryCharts() {
   // 차트 생성 Guard (Chart.js 라이브러리 탑재 여부 검사)
   if (typeof Chart === 'undefined') return;
 
-  // -------------------------------------------------------------
   // 차트 1: 배터리 건강도 (SoH %) 추이
-  // -------------------------------------------------------------
   const ctxSoh = document.getElementById('chartSohTrend')?.getContext('2d');
   if (ctxSoh) {
     if (window.chartSohInst) window.chartSohInst.destroy();
@@ -3167,6 +3349,8 @@ function renderBatteryCharts() {
     const gradient = ctxSoh.createLinearGradient(0, 0, 0, 200);
     gradient.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
     gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+    const minSoh = sohData.length > 0 ? Math.min(...sohData) : 90;
 
     window.chartSohInst = new Chart(ctxSoh, {
       type: 'line',
@@ -3192,7 +3376,7 @@ function renderBatteryCharts() {
         scales: {
           x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#9ca3af', font: { size: 9 }, maxTicksLimit: 8 } },
           y: { 
-            min: Math.max(70, Math.floor(Math.min(...sohData) - 2)), 
+            min: Math.max(70, Math.floor(minSoh - 2)), 
             max: 100, 
             grid: { color: 'rgba(255,255,255,0.04)' }, 
             ticks: { color: '#9ca3af', callback: v => v + '%' } 
@@ -3202,9 +3386,7 @@ function renderBatteryCharts() {
     });
   }
 
-  // -------------------------------------------------------------
-  // 차트 2: 완충 주행거리 & 공인 거리 기준선 복합 차트
-  // -------------------------------------------------------------
+  // 차트 2: 완충 주행거리 & 공인 거리 기준선
   const ctxRC = document.getElementById('chartRangeCapacity')?.getContext('2d');
   if (ctxRC) {
     if (window.chartRCInst) window.chartRCInst.destroy();
@@ -3250,9 +3432,7 @@ function renderBatteryCharts() {
     });
   }
 
-  // -------------------------------------------------------------
   // 차트 3: 완속(AC) vs 급속(DC) 충전 비율 도넛 차트
-  // -------------------------------------------------------------
   const ctxRatio = document.getElementById('chartChargeRatio')?.getContext('2d');
   if (ctxRatio) {
     if (window.chartRatioInst) window.chartRatioInst.destroy();
@@ -3284,13 +3464,13 @@ function renderBatteryCharts() {
 window.addEventListener('popstate', function(event) {
   if (event.state && event.state.tab) {
     if (event.state.sub) {
-      currentSubTab = event.state.sub;
+      window.currentSubTab = event.state.sub;
     }
     if (typeof switchMainTab === 'function') {
       switchMainTab(event.state.tab, false);
     }
   } else {
-    currentSubTab = 'vehicle';
+    window.currentSubTab = 'vehicle';
     if (typeof switchMainTab === 'function') {
       switchMainTab('monitor', false);
     }
@@ -3305,8 +3485,12 @@ window.addEventListener('popstate', function(event) {
 // 📅 Supabase 캘린더 데이터 저장소
 let calendarEventsMap = {};
 
-// 공통 배터리 용량 가져오기 헬퍼
+// 공통 배터리 용량 가져오기 헬퍼 (기존 시스템 함수와 호환성 보장)
 function getBatteryCapacity() {
+  if (typeof getBatteryCapacityKwh === 'function') {
+    const cap = getBatteryCapacityKwh();
+    if (!isNaN(cap) && cap > 0) return cap;
+  }
   return Number(window.VEHICLE_BATTERY_CAPACITY || window.configObj?.batteryCapacity || 60);
 }
 
@@ -3348,32 +3532,43 @@ function selectNextMonth() {
 // 4. 상호명 괄호 및 상세 주소 정제 헬퍼 함수
 function cleanLocationTitle(text) {
   if (!text) return '';
-  const cleaned = text.replace(/\s*\([^)]*\)/g, '').trim();
-  return cleaned || text;
+  const cleaned = String(text).replace(/\s*\([^)]*\)/g, '').trim();
+  return cleaned || String(text);
 }
 
 // 💡 최신 저장 데이터의 날짜를 추출하는 헬퍼 함수 (DB/트립 기록 기반)
 function getLatestSavedDate() {
+  const checkDate = (row) => {
+    if (!row) return null;
+    const ts = row.timestamp || row.created_at || row.start_time || row.updated_at || row.date;
+    if (!ts) return null;
+    const d = new Date(ts);
+    return !isNaN(d.getTime()) ? d : null;
+  };
+
   if (typeof vehicleRows !== 'undefined' && Array.isArray(vehicleRows) && vehicleRows.length > 0) {
-    const ts = vehicleRows[0].timestamp || vehicleRows[0].created_at || vehicleRows[0].start_time;
-    if (ts) return new Date(ts);
+    const validD = checkDate(vehicleRows[0]);
+    if (validD) return validD;
   }
 
   if (typeof allTrips !== 'undefined' && Array.isArray(allTrips) && allTrips.length > 0) {
-    const ts = allTrips[0].start_time || allTrips[0].end_time || allTrips[0].timestamp;
-    if (ts) return new Date(ts);
+    const validD = checkDate(allTrips[0]);
+    if (validD) return validD;
   }
 
   return new Date();
 }
 
-// 5. Supabase 캘린더 데이터 파싱 헬퍼 (날짜별 맵 생성)
+// 5. Supabase 캘린더 데이터 파싱 헬퍼 (KST 기준 날짜별 맵 생성)
 function parseCalendarEvents(events) {
   (events || []).forEach(evt => {
     if (!evt.start_time) return;
 
     const startDate = new Date(evt.start_time);
+    if (isNaN(startDate.getTime())) return;
+
     let endDate = evt.end_time ? new Date(evt.end_time) : new Date(startDate);
+    if (isNaN(endDate.getTime())) endDate = new Date(startDate);
 
     if (endDate > startDate && endDate.getHours() === 0 && endDate.getMinutes() === 0) {
       endDate.setSeconds(endDate.getSeconds() - 1);
@@ -3385,22 +3580,21 @@ function parseCalendarEvents(events) {
     let safetyCounter = 0;
     while (curr <= last && safetyCounter < 31) {
       safetyCounter++;
-      const yyyy = curr.getFullYear();
-      const mm = String(curr.getMonth() + 1).padStart(2, '0');
-      const dd = String(curr.getDate()).padStart(2, '0');
-      const dateKey = `${yyyy}-${mm}-${dd}`;
+      const dateKey = toKstYmd(curr);
+      if (dateKey) {
+        if (!calendarEventsMap[dateKey]) {
+          calendarEventsMap[dateKey] = [];
+        }
 
-      if (!calendarEventsMap[dateKey]) {
-        calendarEventsMap[dateKey] = [];
-      }
-
-      const exists = calendarEventsMap[dateKey].some(e => e.id === evt.uid);
-      if (!exists) {
-        calendarEventsMap[dateKey].push({
-          id: evt.uid,
-          summary: evt.summary || '',   
-          location: evt.location || ''   
-        });
+        const evtId = evt.uid || evt.id || `${dateKey}_${evt.summary}`;
+        const exists = calendarEventsMap[dateKey].some(e => e.id === evtId);
+        if (!exists) {
+          calendarEventsMap[dateKey].push({
+            id: evtId,
+            summary: evt.summary || '',   
+            location: evt.location || ''   
+          });
+        }
       }
       curr.setDate(curr.getDate() + 1);
     }
@@ -3467,10 +3661,12 @@ async function fetchCalendarForDate(dateStr) {
 // 7. 주행 기록에 맞는 캘린더 일정 추적
 function findCalendarEventForTrip(trip) {
   if (!trip) return null;
-  const timeStr = trip.start_time || trip.end_time || trip.timestamp || '';
+  const timeStr = getTripTimeValue(trip);
   if (!timeStr) return null;
 
-  const dateKey = String(timeStr).slice(0, 10);
+  const dateKey = toKstYmd(timeStr);
+  if (!dateKey) return null;
+
   const events = calendarEventsMap[dateKey] || [];
   if (events.length === 0) return null;
 
@@ -3522,16 +3718,7 @@ function getTripDestinationName(trip, isFirstTripOfDay, isLastTripOfDay) {
 function getCalendarBadgeHtml(targetDate) {
   if (!targetDate) return '';
 
-  let dateKey = '';
-  if (targetDate instanceof Date) {
-    const y = targetDate.getFullYear();
-    const m = String(targetDate.getMonth() + 1).padStart(2, '0');
-    const d = String(targetDate.getDate()).padStart(2, '0');
-    dateKey = `${y}-${m}-${d}`;
-  } else {
-    dateKey = String(targetDate).slice(0, 10);
-  }
-
+  const dateKey = toKstYmd(targetDate) || String(targetDate).slice(0, 10);
   const events = calendarEventsMap[dateKey];
   if (!events || events.length === 0) return '';
 
@@ -3545,26 +3732,33 @@ function getCalendarBadgeHtml(targetDate) {
   }).join(' ');
 }
 
-// 10. 통합 전비 계산 함수 (통합 및 최적화)
+// 10. 통합 전비 계산 함수 (최신순 정렬 및 연산 최적화)
 function calculateMyAvgEfficiency() {
-  const trips = (typeof allTrips !== 'undefined' && Array.isArray(allTrips) && allTrips.length > 0)
+  const rawTrips = (typeof allTrips !== 'undefined' && Array.isArray(allTrips) && allTrips.length > 0)
     ? allTrips
     : (window.allTripsData || []);
 
-  if (!trips || trips.length === 0) return 5.5; 
+  if (!rawTrips || rawTrips.length === 0) return 5.5; 
 
   const batteryCapacity = getBatteryCapacity();
   let totalDistanceKm = 0;
   let totalUsedKwh = 0;
 
-  const recentTrips = trips.slice(0, 20); // 최근 데이터 중심으로 빠른 계산
+  // 최신순 정렬 후 최근 20개 운행 추출
+  const sortedTrips = [...rawTrips].sort((a, b) => {
+    const tA = new Date(getTripTimeValue(a)).getTime() || 0;
+    const tB = new Date(getTripTimeValue(b)).getTime() || 0;
+    return tB - tA;
+  });
+
+  const recentTrips = sortedTrips.slice(0, 20);
 
   for (let i = 0; i < recentTrips.length; i++) {
     const trip = recentTrips[i];
-    const dist = Number(trip.moveKM ?? trip.move_km ?? trip.distance_km ?? trip.distance ?? 0);
+    const dist = getDrivingDistanceKm(trip);
     
     let usedKwh = Number(trip.used_kwh ?? trip.energy_used ?? 0);
-    const batUsed = trip.useBattery ?? trip.use_battery;
+    const batUsed = trip.useBattery ?? trip.use_battery ?? trip.useBatteryPct;
 
     if (!usedKwh && batUsed !== undefined) {
       usedKwh = (Number(batUsed) / 100) * batteryCapacity;
@@ -3588,7 +3782,7 @@ function calculateMyAvgEfficiency() {
   return 5.5;
 }
 
-// 11. 상태 지속 시간 포맷 계산 함수 (통합)
+// 11. 상태 지속 시간 포맷 계산 함수
 function formatDurationFromTimestamp(startTimeStr) {
   if (!startTimeStr) return '-';
   const start = new Date(startTimeStr);
@@ -3657,18 +3851,37 @@ function updateEstimatedRangeCard() {
   let rawObj = latest.raw_data ?? latest.rawdata ?? latest.rawData ?? {};
   if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
 
-  const rawState = (latest.vehicle_state || latest.state || rawObj?.state || 'parked').toLowerCase();
+  const rawState = String(latest.vehicle_state || latest.state || rawObj?.state || 'parked').toLowerCase();
   let stateTitle = '주차 중';
-  if (rawState.includes('drive')) stateTitle = '주행 중';
-  else if (rawState.includes('asleep') || rawState.includes('sleep')) stateTitle = '수면 중';
-  else if (rawState.includes('charge')) stateTitle = '충전 중';
+  let dotColorClass = 'bg-emerald-500';
+  let pingColorClass = 'bg-emerald-400';
+
+  if (rawState.includes('drive')) {
+    stateTitle = '주행 중';
+    dotColorClass = 'bg-blue-500';
+    pingColorClass = 'bg-blue-400';
+  } else if (rawState.includes('asleep') || rawState.includes('sleep')) {
+    stateTitle = '수면 중';
+    dotColorClass = 'bg-purple-500';
+    pingColorClass = 'bg-purple-400';
+  } else if (rawState.includes('charge')) {
+    stateTitle = '충전 중';
+    dotColorClass = 'bg-amber-500';
+    pingColorClass = 'bg-amber-400';
+  }
+
+  // 상태 점 컬러 동적 적용
+  const dotEl = document.getElementById('v-state-dot');
+  const pingEl = document.getElementById('v-state-ping');
+  if (dotEl) dotEl.className = `relative inline-flex rounded-full h-3 w-3 ${dotColorClass}`;
+  if (pingEl) pingEl.className = `animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${pingColorClass}`;
 
   const stateStartTime = latest.state_changed_at || latest.updated_at || latest.timestamp || latest.created_at;
   const durationText = formatDurationFromTimestamp(stateStartTime);
 
   const lastTime = stateStartTime ? new Date(stateStartTime) : new Date();
-  const hh = String(lastTime.getHours()).padStart(2, '0');
-  const mm = String(lastTime.getMinutes()).padStart(2, '0');
+  const hh = !isNaN(lastTime.getTime()) ? String(lastTime.getHours()).padStart(2, '0') : '--';
+  const mm = !isNaN(lastTime.getTime()) ? String(lastTime.getMinutes()).padStart(2, '0') : '--';
 
   const setText = (id, val) => {
     const el = document.getElementById(id);
@@ -3708,8 +3921,7 @@ function updateEstimatedRangeCard() {
     setText('v-odometer-val', '- km');
   }
 
-  
-    // 연동 함수들 호출 (vData나 다른 전역 소스까지 통합 탐색)
+  // 연동 함수들 호출 (vData나 다른 전역 소스까지 통합 탐색)
   const currentTrips = (typeof allTrips !== 'undefined' && Array.isArray(allTrips) && allTrips.length > 0)
     ? allTrips 
     : (window.allTripsData || window.allVehicleTrips || vData || []);
@@ -3722,35 +3934,80 @@ function updateEstimatedRangeCard() {
   if (typeof renderVehicleStateHistory === 'function') {
     renderVehicleStateHistory(currentTrips);
   }
-
 }
 
+function getTripTimeValue(row) {
+  return row?.start_time ?? row?.created_at ?? row?.updated_at ?? row?.timestamp ?? row?.date ?? null;
+}
 
+function num(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
 
-// 🚘 Tesla Command Hub - Supabase DB 연동 및 월간 리포트 완벽 대응 스크립트
+function toKstYmd(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(d);
+}
+
+function getTripDateKey(row) {
+  return toKstYmd(getTripTimeValue(row));
+}
+
+function getDrivingDistanceKm(row) {
+  return num(row?.moveKM ?? row?.move_km ?? row?.distance_km ?? row?.distance ?? row?.distanceKM ?? 0);
+}
+
+function getDrivingBatteryUsed(row) {
+  return num(row?.useBattery ?? row?.use_battery ?? row?.battery_used ?? 0);
+}
+
+function getDrivingDurationMin(row) {
+  return num(row?.durationMin ?? row?.duration_min ?? row?.driving_time ?? 0);
+}
+
+function getLocText(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  if (['출발지', '목적지', 'null', 'undefined'].includes(s.toLowerCase())) return '';
+  return s;
+}
+
+function buildTripLabel(trip) {
+  const s = getLocText(trip?.start_dong ?? trip?.startDong);
+  const e = getLocText(trip?.end_dong ?? trip?.endDong);
+  if (s && e) return `${s} ➔ ${e} 📌`;
+  if (s) return `${s} ➔ 이동 📌`;
+  if (e) return `이동 ➔ ${e} 📌`;
+  return '주행 📌';
+}
+
+function isTripInCalendarWindow(trip, evt) {
+  const tripMs = new Date(getTripTimeValue(trip)).getTime();
+  const startMs = new Date(evt?.start_time ?? evt?.starttime).getTime();
+  const endMs = new Date(evt?.end_time ?? evt?.endtime ?? evt?.start_time ?? evt?.starttime).getTime();
+  return Number.isFinite(tripMs) && Number.isFinite(startMs) && Number.isFinite(endMs) && tripMs >= startMs && tripMs <= endMs;
+}
+
+// 🚘 Tesla Command Hub - Supabase DB 연동 및 월간 리포트 대응 스크립트
 
 // [1] 전역 데이터 변수 선언
 window.allTripsData = window.allTripsData || [];
 window.allChargingData = window.allChargingData || [];
 window.calendarEventsList = window.calendarEventsList || [];
 
-// YYYY-MM-DD 변환
 /**
- * 날짜 문자열 변환 헬퍼
+ * YYYY-MM-DD 변환 헬퍼 (KST 안전 변환)
  */
 function toYmdStr(ts) {
-  if (!ts) return '';
-  if (typeof ts === 'string') {
-    if (ts.length >= 10 && ts.includes('-')) {
-      return ts.substring(0, 10);
-    }
-  }
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return '';
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
+  return toKstYmd(ts) || '';
 }
 
 // 12시간제 시간 변환 (예: 09:23 PM)
@@ -3784,7 +4041,7 @@ function switchTabAndShowDayPath(dateStr) {
   }, 150);
 }
 
-// 📌 캘린더 매칭 헬퍼 (DB calendar_events 스키마 연동 강화)
+// 📌 캘린더 매칭 헬퍼 (DB calendar_events 스키마 연동)
 function findMatchedCalendarEvent(trip, dateStr, calendarList) {
   if (!calendarList || !Array.isArray(calendarList) || calendarList.length === 0) return null;
 
@@ -3792,7 +4049,6 @@ function findMatchedCalendarEvent(trip, dateStr, calendarList) {
   const endAddr = (trip.end_address || trip.endAddress || '').trim();
 
   return calendarList.find(ev => {
-    // calendar_events 테이블 필드: start_time, location, summary
     const evYmd = toYmdStr(ev.start_time || ev.start || ev.date || ev.created_at);
     const isSameDate = (!evYmd || evYmd === dateStr);
     if (!isSameDate) return false;
@@ -3813,13 +4069,27 @@ function findMatchedCalendarEvent(trip, dateStr, calendarList) {
   });
 }
 
+
+
+
+// 헬퍼: HTML 특수문자 이스케이프 (레이아웃 깨짐 및 XSS 방지)
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function getTripTimeValue(row) {
   return row?.created_at ?? row?.updated_at ?? row?.timestamp ?? row?.start_time ?? row?.date ?? null;
 }
 
 function getTripDateKey(row) {
   const t = getTripTimeValue(row);
-  return t ? toYmdStr(t) : null;
+  return t ? (typeof toYmdStr === 'function' ? toYmdStr(t) : String(t).slice(0, 10)) : null;
 }
 
 function num(v, fallback = 0) {
@@ -3845,6 +4115,7 @@ function isTripInCalendarWindow(trip, evt) {
   const endMs = new Date(evt?.end_time ?? evt?.endtime ?? evt?.start_time ?? evt?.starttime).getTime();
   return Number.isFinite(tripMs) && Number.isFinite(startMs) && Number.isFinite(endMs) && tripMs >= startMs && tripMs <= endMs;
 }
+
 /**
  * 📌 [DB 스키마 완벽 연동] 최근 운행일 카드 + 캘린더 매칭 및 당일 주행 렌더링
  */
@@ -3868,11 +4139,11 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
 
   const batteryCapacity = Number(window.VEHICLE_BATTERY_CAPACITY || 60);
 
-  const sortedTrips = [...tripsData].sort((a, b) => {
-    const tB = new Date(getTripTimeValue(b) || 0).getTime();
-    const tA = new Date(getTripTimeValue(a) || 0).getTime();
-    return tB - tA;
-  });
+  const sortedTrips = [...tripsData]
+    .filter(t => getTripTimeValue(t))
+    .sort((a, b) => new Date(getTripTimeValue(b)).getTime() - new Date(getTripTimeValue(a)).getTime());
+
+  if (sortedTrips.length === 0) return;
 
   const latestTrip = sortedTrips[0];
   const targetYmd = getTripDateKey(latestTrip);
@@ -3913,14 +4184,18 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
     const orderedForPath = [...sameDayTrips].reverse();
     const pathNodes = [];
     orderedForPath.forEach((t, i) => {
-      const sLoc = t.start_dong || t.startDong || "출발지";
-      const eLoc = t.end_dong || t.endDong || "목적지";
-      if (i === 0) pathNodes.push(sLoc);
-      pathNodes.push(eLoc);
+      const sLoc = typeof getLocText === 'function' ? getLocText(t.start_dong ?? t.startDong) : (t.start_dong ?? t.startDong);
+      const eLoc = typeof getLocText === 'function' ? getLocText(t.end_dong ?? t.endDong) : (t.end_dong ?? t.endDong);
+      const s = sLoc || '주행';
+      const e = eLoc || '주행';
+      if (i === 0) pathNodes.push(s);
+      pathNodes.push(e);
     });
     pathText.innerText = pathNodes.join(' ➔ ');
     pathContainer.classList.remove('hidden');
-    pathContainer.onclick = () => switchTabAndShowDayPath(targetYmd);
+    pathContainer.onclick = () => {
+      if (typeof switchTabAndShowDayPath === 'function') switchTabAndShowDayPath(targetYmd);
+    };
   }
 
   const singleContainer = document.getElementById('single-trips-container');
@@ -3947,29 +4222,28 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
     const rawTemp = trip.outside_temp ?? trip.outsideTemp;
     const temp = (rawTemp !== undefined && rawTemp !== null && !isNaN(rawTemp)) ? `${Math.round(Number(rawTemp))}°C` : '29°C';
 
-    const startLoc = trip.start_dong || trip.startDong || "출발지";
-    const endLoc = trip.end_dong || trip.endDong || "목적지";
+    const rawLabel = typeof buildTripLabel === 'function' ? buildTripLabel(trip) : '운행 기록';
+    const label = escapeHtml(rawLabel);
 
     const matchedEv = (currentCalendar || []).find(evt => {
       if (!isTripInCalendarWindow(trip, evt)) return false;
-
-      const endText = String(endLoc || '').toLowerCase();
+      const endDongRaw = trip.end_dong ?? trip.endDong;
+      const endText = (typeof getLocText === 'function' ? getLocText(endDongRaw) : String(endDongRaw || '')).toLowerCase();
       const locText = String(evt.location || '').toLowerCase();
       const sumText = String(evt.summary || evt.title || '').toLowerCase();
-
       return (
-        (locText && endText && (locText.includes(endText) || endText.includes(locText))) ||
-        (sumText && endText && (sumText.includes(endText) || endText.includes(sumText)))
+        (endText && locText && (locText.includes(endText) || endText.includes(locText))) ||
+        (endText && sumText && (sumText.includes(endText) || endText.includes(sumText)))
       );
     });
 
-    const matchedSummary = matchedEv ? (matchedEv.summary || matchedEv.title || '') : '';
+    const matchedSummary = matchedEv ? escapeHtml(matchedEv.summary || matchedEv.title || '') : '';
 
     html += `
       <div class="bg-gray-800/80 p-3.5 rounded-xl border border-gray-700/60 shadow-md text-xs mb-3">
         <div class="flex justify-between items-center font-bold text-gray-100 mb-1">
-          <span class="text-blue-400 font-extrabold text-sm truncate max-w-[80%] cursor-pointer hover:underline" onclick="switchTabAndShowDayPath('${targetYmd}')">
-            ${startLoc} ➔ <span class="text-emerald-400">${endLoc} 📌</span>
+          <span class="text-blue-400 font-extrabold text-sm truncate max-w-[80%] cursor-pointer hover:underline" onclick="typeof switchTabAndShowDayPath === 'function' && switchTabAndShowDayPath('${targetYmd}')">
+            ${label}
           </span>
           <span class="text-[10px] text-gray-400 font-mono">🌡️ ${temp}</span>
         </div>
@@ -3979,7 +4253,7 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
         </div>
 
         ${matchedSummary ? `
-          <div class="mt-2 bg-purple-950/80 border border-purple-700/60 p-2.5 rounded-lg text-purple-200 cursor-pointer hover:bg-purple-900/80 transition" onclick="switchTabAndShowDayPath('${targetYmd}')">
+          <div class="mt-2 bg-purple-950/80 border border-purple-700/60 p-2.5 rounded-lg text-purple-200 cursor-pointer hover:bg-purple-900/80 transition" onclick="typeof switchTabAndShowDayPath === 'function' && switchTabAndShowDayPath('${targetYmd}')">
             <div class="flex items-center gap-1.5 font-bold text-xs text-purple-300">
               <span>📅 일정:</span>
               <span class="text-white">${matchedSummary}</span>
@@ -3992,6 +4266,7 @@ function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
 
   singleContainer.innerHTML = html;
 }
+
 /**
  * 2. 최근 상태 히스토리 (당일 지도 연동)
  */
@@ -4003,7 +4278,7 @@ function renderVehicleStateHistory(vehicleHistoryRecords) {
     ? vehicleHistoryRecords
     : ((window.allTripsData && window.allTripsData.length > 0)
         ? window.allTripsData
-        : ((typeof allTrips !== 'undefined' && Array.isArray(allTrips) && allTrips.length > 0) ? allTrips : []));
+        : ((typeof allTrips !== 'undefined' && Array.isArray(allTrips) && Array.isArray(allTrips) && allTrips.length > 0) ? allTrips : []));
 
   const chargings = window.allChargingData || window.allChargings || [];
   const grouped = {};
@@ -4011,15 +4286,15 @@ function renderVehicleStateHistory(vehicleHistoryRecords) {
   drivings.forEach(d => {
     const rawTime = getTripTimeValue(d);
     const ymd = getTripDateKey(d);
-    if (!ymd) return;
+    if (!rawTime || !ymd) return;
     if (!grouped[ymd]) grouped[ymd] = [];
     grouped[ymd].push({ type: 'driving', time: new Date(rawTime), data: d });
   });
 
   chargings.forEach(c => {
     const rawTime = c.date ?? c.created_at ?? c.timestamp;
-    const ymd = toYmdStr(rawTime);
-    if (!ymd) return;
+    const ymd = typeof toKstYmd === 'function' ? toKstYmd(rawTime) : String(rawTime || '').slice(0, 10);
+    if (!rawTime || !ymd) return;
     if (!grouped[ymd]) grouped[ymd] = [];
     grouped[ymd].push({ type: 'charging', time: new Date(rawTime), data: c });
   });
@@ -4042,7 +4317,7 @@ function renderVehicleStateHistory(vehicleHistoryRecords) {
           <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-950/80 border border-indigo-700/60 text-indigo-200 text-xs font-bold">
             📅 ${dateStr}
           </div>
-          <button onclick="switchTabAndShowDayPath('${dateStr}')" class="text-[11px] text-blue-400 hover:text-blue-300 font-bold transition flex items-center gap-1 cursor-pointer">
+          <button onclick="typeof switchTabAndShowDayPath === 'function' && switchTabAndShowDayPath('${dateStr}')" class="text-[11px] text-blue-400 hover:text-blue-300 font-bold transition flex items-center gap-1 cursor-pointer">
             🗺️ 당일 지도 경로 보기 ▶
           </button>
         </div>
@@ -4051,38 +4326,28 @@ function renderVehicleStateHistory(vehicleHistoryRecords) {
     `;
 
     dayItems.forEach(item => {
-      const timeStr = formatTime12Str(item.time);
+      const timeStr = typeof formatTime12Str === 'function' ? formatTime12Str(item.time) : item.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
       if (item.type === 'driving') {
         const t = item.data;
-        const sLoc = t.startDong || t.start_dong || "출발지";
-        const eLoc = t.endDong || t.end_dong || "목적지";
         const dist = getDrivingDistanceKm(t).toFixed(1);
         const mins = getDrivingDurationMin(t);
         const batUsed = Math.round(getDrivingBatteryUsed(t));
-
-        let endBat = t.endBat ?? t.end_battery ?? t.now_battery;
-        if ((endBat === undefined || endBat === null) && t.start_battery !== undefined) {
-          endBat = Math.max(0, t.start_battery - batUsed);
-        }
-        const batStr = (endBat !== undefined && endBat !== null) ? `🔋 -${batUsed}% (남은 ${Math.round(endBat)}%)` : `🔋 -${batUsed}%`;
-
         const rawTemp = t.outsideTemp ?? t.outside_temp;
         const temp = (rawTemp !== undefined && rawTemp !== null && !isNaN(rawTemp)) ? `${Math.round(Number(rawTemp))}°C` : '29°C';
+        const label = escapeHtml(typeof buildTripLabel === 'function' ? buildTripLabel(t) : '주행');
 
         html += `
-          <div class="bg-gray-800/60 p-2.5 rounded-xl border border-gray-700/40 text-xs cursor-pointer hover:border-gray-600 transition" onclick="switchTabAndShowDayPath('${dateStr}')">
+          <div class="bg-gray-800/60 p-2.5 rounded-xl border border-gray-700/40 text-xs cursor-pointer hover:border-gray-600 transition" onclick="typeof switchTabAndShowDayPath === 'function' && switchTabAndShowDayPath('${dateStr}')">
             <div class="flex items-center gap-2 mb-1 min-w-0 overflow-hidden">
               <span class="px-1.5 py-0.5 rounded-md bg-blue-600/30 border border-blue-500/40 text-blue-300 font-bold text-[10px] shrink-0">🚘 주행</span>
               <span class="text-gray-300 font-mono font-medium text-[10px] shrink-0">${timeStr}</span>
               <div class="font-bold text-gray-100 text-[11px] truncate min-w-0 flex items-center gap-1">
-                <span class="truncate">${sLoc}</span>
-                <span class="text-gray-500 shrink-0">➔</span>
-                <span class="text-emerald-400 truncate">${eLoc} 📌</span>
+                <span class="truncate">${label}</span>
               </div>
             </div>
             <div class="flex justify-between items-center text-gray-400 mt-1 pl-1 text-[11px]">
-              <span>주행 ${dist}km (${mins}분) | ${batStr}</span>
+              <span>주행 ${dist}km (${mins}분) | 🔋 -${batUsed}%</span>
               <span>🌡️ ${temp}</span>
             </div>
           </div>
@@ -4115,6 +4380,7 @@ function renderVehicleStateHistory(vehicleHistoryRecords) {
 
   container.innerHTML = html;
 }
+
 /**
  * 선택된 월의 리포트 지표 갱신 및 Top 5 카드 출력
  */
@@ -4126,18 +4392,17 @@ function updateMonthlyReportView() {
   const chargings = window.allChargingData || window.allChargings || [];
   const batteryCap = Number(window.VEHICLE_BATTERY_CAPACITY || 60);
 
+  const targetPrefix = `${selYear}-${String(selMonth).padStart(2, '0')}`;
+
   const monthDrivings = drivings.filter(t => {
-    const rawTime = getTripTimeValue(t);
-    if (!rawTime) return false;
-    const d = new Date(rawTime);
-    return d.getFullYear() === selYear && (d.getMonth() + 1) === selMonth;
+    const ymd = getTripDateKey(t);
+    return ymd ? ymd.startsWith(targetPrefix) : false;
   });
 
   const monthChargings = chargings.filter(c => {
     const rawTime = c.date ?? c.created_at ?? c.timestamp;
-    if (!rawTime) return false;
-    const d = new Date(rawTime);
-    return d.getFullYear() === selYear && (d.getMonth() + 1) === selMonth;
+    const ymd = typeof toKstYmd === 'function' ? toKstYmd(rawTime) : String(rawTime || '').slice(0, 10);
+    return ymd ? ymd.startsWith(targetPrefix) : false;
   });
 
   let totalDist = 0;
@@ -4196,7 +4461,7 @@ function updateMonthlyReportView() {
       const subVal = metricType === 'dist' ? `${item.totalMins}분 운행` : `${item.totalDist.toFixed(1)}km 주행`;
 
       return `
-        <div class="bg-gray-800/80 p-3 rounded-xl border border-gray-700/60 mb-2 hover:border-blue-500/50 transition cursor-pointer" onclick="switchTabAndShowDayPath('${item.date}')">
+        <div class="bg-gray-800/80 p-3 rounded-xl border border-gray-700/60 mb-2 hover:border-blue-500/50 transition cursor-pointer" onclick="typeof switchTabAndShowDayPath === 'function' && switchTabAndShowDayPath('${item.date}')">
           <div class="flex justify-between items-center mb-1">
             <div class="flex items-center gap-2">
               <span class="w-5 h-5 rounded-full bg-blue-600/30 text-blue-300 font-extrabold text-[10px] flex items-center justify-center">${idx + 1}</span>
@@ -4219,97 +4484,17 @@ function updateMonthlyReportView() {
   const timeEl = document.getElementById('monthly-top-time-container');
   if (timeEl) timeEl.innerHTML = renderTopListHtml(topTimeDays, 'time');
 }
+
 /**
- * 3. Supabase 데이터 동기화 (⚡ created_at 및 안전한 정렬 기준 적용 버전)
+ * 3. Supabase 데이터 동기화
+ * ⚠️ 과거 버전 호환용 별칭. 예전에는 이 함수가 존재하지도 않는 `supabase.from(...)`
+ * (실제 클라이언트 변수명은 supabaseClient)를 호출해 항상 실패 → charging 테이블은
+ * 한 번도 로드되지 않고, 캐시 재렌더만 반복하는 상태였음. 실제 로딩은 loadAllData()
+ * (fetchSupabaseTable REST 경로, 테이블별 마지막 기록일 기준)가 담당하므로 그쪽으로 위임.
  */
 async function refreshDashboardWithSupabase() {
-  try {
-    if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
-      
-      const [fastTripsRes, fastChargingsRes, calRes] = await Promise.all([
-        supabase.from('driving').select('*').limit(30),
-        supabase.from('charging').select('*').limit(15),
-        supabase.from('calendar_events').select('*')
-      ]);
-
-      const rawTrips = fastTripsRes?.data || [];
-      const rawChargings = fastChargingsRes?.data || [];
-      const calData = calRes?.data || [];
-
-      const initialTrips = rawTrips.sort((a, b) => {
-        const tB = new Date(b.created_at || b.updated_at || b.start_time || 0).getTime();
-        const tA = new Date(a.created_at || a.updated_at || a.start_time || 0).getTime();
-        return tB - tA;
-      });
-
-      const initialChargings = rawChargings.sort((a, b) => {
-        const tB = new Date(b.date || b.created_at || 0).getTime();
-        const tA = new Date(a.date || a.created_at || 0).getTime();
-        return tB - tA;
-      });
-
-      window.allTripsData = initialTrips;
-      window.allTrips = initialTrips;
-      if (typeof allTrips !== 'undefined') allTrips = initialTrips;
-
-      window.allChargingData = initialChargings;
-      window.allChargings = initialChargings;
-      if (typeof allChargings !== 'undefined') allChargings = initialChargings;
-
-      window.calendarEventsList = calData;
-      window.calendarEvents = calData;
-
-      if (initialTrips.length > 0) {
-        renderDaySummaryAndSingleTrips(initialTrips, calData);
-        renderVehicleStateHistory(initialTrips);
-        updateMonthlyReportView();
-      }
-
-      setTimeout(async () => {
-        try {
-          const [fullTripsRes, fullChargingsRes] = await Promise.all([
-            supabase.from('driving').select('*'),
-            supabase.from('charging').select('*')
-          ]);
-
-          if (fullTripsRes?.data) {
-            const sortedFullTrips = fullTripsRes.data.sort((a, b) => {
-              const tB = new Date(b.created_at || b.updated_at || b.start_time || 0).getTime();
-              const tA = new Date(a.created_at || a.updated_at || a.start_time || 0).getTime();
-              return tB - tA;
-            });
-            window.allTripsData = sortedFullTrips;
-            window.allTrips = sortedFullTrips;
-            if (typeof allTrips !== 'undefined') allTrips = sortedFullTrips;
-          }
-
-          if (fullChargingsRes?.data) {
-            window.allChargingData = fullChargingsRes.data;
-            window.allChargings = fullChargingsRes.data;
-            if (typeof allChargings !== 'undefined') allChargings = fullChargingsRes.data;
-          }
-
-          renderVehicleStateHistory(window.allTripsData);
-          updateMonthlyReportView();
-
-        } catch (bgErr) {
-          console.warn("백그라운드 전체 로딩 실패 (1차 데이터로 계속 유지):", bgErr);
-        }
-      }, 100);
-
-    } else {
-      const safeDrivingList = window.allTripsData || window.allTrips || ((typeof allTrips !== 'undefined') ? allTrips : []);
-      const safeCalendarList = window.calendarEventsList || window.calendarEvents || [];
-
-      if (safeDrivingList.length > 0) {
-        renderDaySummaryAndSingleTrips(safeDrivingList, safeCalendarList);
-        renderVehicleStateHistory(safeDrivingList);
-        updateMonthlyReportView();
-      }
-    }
-
-  } catch (err) {
-    console.error("Dashboard refresh error:", err);
+  if (typeof loadAllData === 'function') {
+    await loadAllData(true);
   }
 }
 
@@ -4339,12 +4524,16 @@ function selectPrevMonth() {
 }
 
 /**
- * 4. 페이지 초기화
+ * 4. 페이지 초기화 안전망
+ * (메인 초기화는 첫 DOMContentLoaded 리스너 → initDashboard() → handleRefresh() → loadAllData()
+ *  경로에서 이미 수행됨. 설정 누락 등으로 그 흐름이 아직 시작되지 않은 경우에만 여기서 보충 실행)
  */
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
-    refreshDashboardWithSupabase();
-  }, 100);
+    if (!window.dashboardInitialized) {
+      refreshDashboardWithSupabase();
+    }
+  }, 1500);
 });
 
 /**
@@ -4358,17 +4547,14 @@ function getMonthlyMetricValue(year, month, metricType) {
   const targetYmStr = `${year}-${String(month).padStart(2, '0')}`;
 
   const monthDrivings = drivings.filter(t => {
-    const rawTime = getTripTimeValue(t);
-    if (!rawTime) return false;
-    const ymd = toYmdStr(rawTime);
-    return ymd.startsWith(targetYmStr);
+    const ymd = getTripDateKey(t);
+    return ymd ? ymd.startsWith(targetYmStr) : false;
   });
 
   const monthChargings = chargings.filter(c => {
     const rawTime = c.date ?? c.created_at ?? c.timestamp;
-    if (!rawTime) return false;
-    const ymd = toYmdStr(rawTime);
-    return ymd.startsWith(targetYmStr);
+    const ymd = typeof toKstYmd === 'function' ? toKstYmd(rawTime) : String(rawTime || '').slice(0, 10);
+    return ymd ? ymd.startsWith(targetYmStr) : false;
   });
 
   let totalDist = 0;
@@ -4377,7 +4563,6 @@ function getMonthlyMetricValue(year, month, metricType) {
   monthDrivings.forEach(t => {
     const dist = getDrivingDistanceKm(t);
     const batUsed = getDrivingBatteryUsed(t);
-
     totalDist += dist;
     totalDriveKwh += (batUsed / 100) * batteryCap;
   });
@@ -4390,10 +4575,8 @@ function getMonthlyMetricValue(year, month, metricType) {
   switch (metricType) {
     case 'distance':
       return Math.round(totalDist);
-    case 'days': {
-      const uniqueDays = new Set(monthDrivings.map(t => getTripDateKey(t)).filter(Boolean));
-      return uniqueDays.size;
-    }
+    case 'days':
+      return new Set(monthDrivings.map(t => getTripDateKey(t)).filter(Boolean)).size;
     case 'charge_count':
       return monthChargings.length;
     case 'kwh':
@@ -4404,8 +4587,7 @@ function getMonthlyMetricValue(year, month, metricType) {
       return 0;
   }
 }
- 
- 
+
 let trendChartInstance = null;
 
 function show6MonthTrendModal(metricType, metricTitle) {
@@ -4452,6 +4634,10 @@ function show6MonthTrendModal(metricType, metricTitle) {
   const maxVal = Math.max(...dataValues);
 
   setTimeout(() => {
+    if (typeof Chart === 'undefined') {
+      console.warn('Chart.js 라이브러리가 로드되지 않았습니다.');
+      return;
+    }
     trendChartInstance = new Chart(ctx, {
       type: 'line',
       data: {
@@ -4495,6 +4681,8 @@ function closeTrendModal() {
 }
 
 
-  </script>
+</script>
 </body>
-</html>.
+</html>
+
+      
