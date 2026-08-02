@@ -14,64 +14,63 @@
     touch-action: manipulation;
   }
   
-    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-    
-    body {
-      background-color: #0b0c10;
-      color: #f3f4f6;
-      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    
-    .glass-card {
-      background: linear-gradient(145deg, rgba(22, 24, 32, 0.95), rgba(15, 17, 23, 0.9));
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    }
-    
-    .glass-card-hover {
-      transition: all 0.25s ease-in-out;
-    }
-    .glass-card-hover:hover {
-      border-color: rgba(59, 130, 246, 0.4);
-      transform: translateY(-2px);
-      box-shadow: 0 12px 24px -10px rgba(59, 130, 246, 0.3);
-    }
+  @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+  
+  body {
+    background-color: #0b0c10;
+    color: #f3f4f6;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  
+  .glass-card {
+    background: linear-gradient(145deg, rgba(22, 24, 32, 0.95), rgba(15, 17, 23, 0.9));
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+  
+  .glass-card-hover {
+    transition: all 0.25s ease-in-out;
+  }
+  .glass-card-hover:hover {
+    border-color: rgba(59, 130, 246, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px -10px rgba(59, 130, 246, 0.3);
+  }
 
-    .card-border-amber { border-left: 4px solid #f59e0b; }
-    .card-border-blue { border-left: 4px solid #3b82f6; }
-    .card-border-green { border-left: 4px solid #10b981; }
-    .card-border-red { border-left: 4px solid #ef4444; }
+  .card-border-amber { border-left: 4px solid #f59e0b; }
+  .card-border-blue { border-left: 4px solid #3b82f6; }
+  .card-border-green { border-left: 4px solid #10b981; }
+  .card-border-red { border-left: 4px solid #ef4444; }
 
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
-    ::-webkit-scrollbar-track { background: #0b0c10; }
-    ::-webkit-scrollbar-thumb { background: #262936; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: #0b0c10; }
+  ::-webkit-scrollbar-thumb { background: #262936; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
 
-    .address-tag { display: inline-block; word-break: keep-all; overflow-wrap: break-word; }
-    .status-badge-1line { white-space: nowrap; flex-shrink: 0; }
+  .address-tag { display: inline-block; word-break: keep-all; overflow-wrap: break-word; }
+  .status-badge-1line { white-space: nowrap; flex-shrink: 0; }
 
-    .switch { position: relative; display: inline-block; width: 46px; height: 26px; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: .3s; border-radius: 26px; border: 1px solid rgba(255,255,255,0.1); }
-    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 2px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.4); }
-    input:checked + .slider { background-color: #10b981; }
-    input:checked + .slider:before { transform: translateX(20px); }
+  .switch { position: relative; display: inline-block; width: 46px; height: 26px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: .3s; border-radius: 26px; border: 1px solid rgba(255,255,255,0.1); }
+  .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 2px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.4); }
+  input:checked + .slider { background-color: #10b981; }
+  input:checked + .slider:before { transform: translateX(20px); }
 
-    /* 모달 스타일 */
-    .modal-overlay {
-      background: rgba(0, 0, 0, 0.85);
-      backdrop-filter: blur(8px);
-    }
-    .modal-content {
-      max-width: 400px;
-      width: 90%;
-      animation: modalFadeIn 0.25s ease-out;
-    }
-    @keyframes modalFadeIn {
-      from { opacity: 0; transform: scale(0.95) translateY(10px); }
-      to { opacity: 1; transform: scale(1) translateY(0); }
-    }
+  .modal-overlay {
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+  }
+  .modal-content {
+    max-width: 400px;
+    width: 90%;
+    animation: modalFadeIn 0.25s ease-out;
+  }
+  @keyframes modalFadeIn {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
   </style>
 </head>
 <body class="min-h-screen flex flex-col pb-10 selection:bg-blue-500 selection:text-white">
@@ -120,6 +119,7 @@
         <button onclick="switchSubTab('battery')" id="btn-sub-battery" class="py-2.5 rounded-xl text-gray-400 hover:text-white transition">배터리</button>
       </div>
 
+      <!-- 차량 정보 -->
       <div id="sub-panel-vehicle" class="space-y-4">
         
         <div class="flex justify-between items-center px-1">
@@ -179,7 +179,6 @@
             <div id="day-path-text" class="text-xs font-bold text-gray-200"></div>
           </div>
 
-          <!-- 📅 당일 캘린더 일정 (summary만 표시) -->
           <div id="calendar-events-container" class="hidden mb-3">
             <div class="text-xs font-semibold text-purple-400 mb-1 flex items-center gap-1">📅 당일 캘린더 일정</div>
             <div id="calendar-events-list" class="space-y-1.5"></div>
@@ -201,7 +200,7 @@
 
       </div>
 
-      <!-- 주행 지도 서브 탭 -->
+      <!-- 주행 지도 -->
       <div id="sub-panel-driving" class="hidden space-y-3">
         <div class="glass-card rounded-2xl p-4 flex flex-col gap-3 shadow-xl">
           <span class="text-xs font-bold text-gray-300 flex items-center gap-1">📅 조회 기간 및 조건</span>
@@ -562,16 +561,14 @@
     </div>
   </div>
 
-  <!-- 📍 도착지 정보 모달 (주소 제외, summary만 표시) -->
+  <!-- 📍 도착지 정보 모달 -->
   <div id="trip-detail-modal" class="fixed inset-0 z-50 modal-overlay flex items-center justify-center hidden p-4">
     <div class="modal-content glass-card rounded-2xl p-5 border border-gray-700 shadow-2xl">
       <div class="flex justify-between items-center mb-4 pb-2 border-b border-gray-800">
         <h3 class="text-base font-bold text-white flex items-center gap-2">📍 도착지 정보</h3>
         <button onclick="closeTripDetailModal()" class="text-gray-400 hover:text-white p-1 text-lg font-bold">✕</button>
       </div>
-      <div id="trip-detail-content" class="space-y-3 text-sm">
-        <!-- 동적 내용 -->
-      </div>
+      <div id="trip-detail-content" class="space-y-3 text-sm"></div>
       <button onclick="closeTripDetailModal()" class="w-full mt-4 py-2.5 rounded-xl text-xs font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition">닫기</button>
     </div>
   </div>
@@ -912,7 +909,10 @@
       const res = await fetch('https://my-tesla-app-six.vercel.app/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: accessToken, vehicleId: configObj.vehicleId })
+        body: JSON.stringify({ 
+          token: accessToken, 
+          vehicleId: configObj.vehicleId 
+        })
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -1484,7 +1484,9 @@
         outsideTemp: r.outside_temp ?? null,
         path: Array.isArray(r.location_list) ? r.location_list : [],
         endAddress: r.end_address || r.endAddress || '',
-        startAddress: r.start_address || r.startAddress || ''
+        startAddress: r.start_address || r.startAddress || '',
+        endBattery: r.end_battery || null,
+        startBattery: r.start_battery || null
       }));
 
       renderAllUIComponents();
@@ -1523,7 +1525,9 @@
             outsideTemp: r.outside_temp ?? null,
             path: Array.isArray(r.location_list) ? r.location_list : [],
             endAddress: r.end_address || r.endAddress || '',
-            startAddress: r.start_address || r.startAddress || ''
+            startAddress: r.start_address || r.startAddress || '',
+            endBattery: r.end_battery || null,
+            startBattery: r.start_battery || null
           }));
 
           if (vehicleRows.length > 0) {
@@ -1734,7 +1738,7 @@
   }
 
   // ============================================================
-  // 📌 도착지 정보 모달 표시 (주소 제외)
+  // 📌 도착지 정보 모달 표시
   // ============================================================
   function showTripDetailModal(trip) {
     const modal = document.getElementById('trip-detail-modal');
@@ -1750,7 +1754,6 @@
       (trip.startBattery !== undefined ? Math.round(trip.startBattery - batUsed) : '-');
     const temp = (trip.outsideTemp !== undefined && trip.outsideTemp !== null) ? `${Math.round(Number(trip.outsideTemp))}°C` : '—';
 
-    // 캘린더 매칭 찾기 (해당 날짜의 캘린더 이벤트 중에서)
     const d = new Date(tripTime);
     const ymd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const dayEvents = (window.calendarEvents || []).filter(evt => {
@@ -1825,7 +1828,7 @@
   }
 
   // ============================================================
-  // 📌 최근 운행일 + 캘린더 표시 (수정)
+  // 📌 최근 운행일 + 캘린더 표시
   // ============================================================
   function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
     const tripsData = (Array.isArray(vehicleData) && vehicleData.length > 0)
@@ -1885,7 +1888,7 @@
     setText('v-day-time', `${totalDriveMins}분`);
     setText('v-day-kwh', `${totalKwh.toFixed(1)} kWh`);
 
-    // 📌 당일 캘린더 일정 - summary만 표시 (주소 제외)
+    // 📌 당일 캘린더 일정 - summary만 표시
     const calContainer = document.getElementById('calendar-events-container');
     const calList = document.getElementById('calendar-events-list');
     
@@ -1933,7 +1936,7 @@
       };
     }
 
-    // 📌 개별 운행 목록 (클릭 시 도착지 정보 모달)
+    // 📌 개별 운행 목록
     const singleContainer = document.getElementById('single-trips-container');
     if (!singleContainer) return;
 
@@ -1950,6 +1953,9 @@
       const timeStr = formatTimeAmPm(tripTime);
       const temp = (trip.outsideTemp !== undefined && trip.outsideTemp !== null) ? `${Math.round(Number(trip.outsideTemp))}°C` : '—';
 
+      // 캘린더 매칭
+      const matchedEvt = matchCalendarToTrip(trip, dayCalendarEvents, usedEventIds);
+
       return `
         <div onclick="showTripDetailModal(${JSON.stringify(trip).replace(/"/g, '&quot;')})" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99] overflow-hidden">
           <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
@@ -1962,7 +1968,13 @@
             <span>주행 ${dist}km (${mins}분) | 🔋 사용 -${batUsed}% (잔량 ${batRemain}%)</span>
             <span class="text-amber-400 font-bold">🌡️ ${temp}</span>
           </div>
-          <div class="text-[10px] text-blue-400/70 text-right">👆 터치하여 도착지 정보 보기</div>
+          ${matchedEvt ? `
+            <div class="mt-2 pt-2 border-t border-purple-500/30 flex items-center gap-1.5 text-xs text-purple-200 bg-purple-950/60 p-2 rounded-lg overflow-hidden">
+              <span class="shrink-0">📍 도착지 일정:</span>
+              <span class="font-bold text-purple-300 truncate">${matchedEvt.summary || '일정'}</span>
+            </div>
+          ` : ''}
+          <div class="text-[10px] text-blue-400/70 text-right">👆 터치하여 상세 정보 보기</div>
         </div>
       `;
     }).join('');
@@ -2004,7 +2016,7 @@
   }
 
   // ============================================================
-  // 📌 최근 상태 히스토리 (지도 버튼 수정)
+  // 📌 최근 상태 히스토리
   // ============================================================
   function renderVehicleStateHistory(vehicleHistoryRecords) {
     const container = document.getElementById('state-history-container');
@@ -2163,7 +2175,9 @@
         outsideTemp: r.outside_temp ?? null,
         path: Array.isArray(r.location_list) ? r.location_list : [],
         endAddress: r.end_address || r.endAddress || '',
-        startAddress: r.start_address || r.startAddress || ''
+        startAddress: r.start_address || r.startAddress || '',
+        endBattery: r.end_battery || null,
+        startBattery: r.start_battery || null
       }));
 
       renderAllUIComponents();
@@ -2181,7 +2195,7 @@
   }
 
   // ============================================================
-  // 📌 지도 필터 제어 함수 (간소화)
+  // 📌 지도 필터 제어 함수
   // ============================================================
   function setFilterMode(mode) {
     currentFilterMode = mode;
@@ -2320,7 +2334,7 @@
   }
 
   // ============================================================
-  // 📌 renderDrivingData (간소화)
+  // 📌 renderDrivingData
   // ============================================================
   function renderDrivingData() {
     clearMapPolylines();
@@ -2422,7 +2436,7 @@
                   <span>🔋 사용 -${Math.round(t.useBattery || 0)}% (잔량 ${batRemain}%) | 🌡️ 외기: ${temp}</span>
                   <span class="font-bold text-indigo-400">⚡ 전비: ${eff} km/kWh</span>
                 </div>
-                <div class="text-[10px] text-blue-400/70 text-right">👆 터치하여 도착지 정보 보기</div>
+                <div class="text-[10px] text-blue-400/70 text-right">👆 터치하여 상세 정보 보기</div>
               </div>
             `;
           }).join('');
@@ -2580,7 +2594,23 @@
   }
 
   function selectPrevMonth() {
-    shiftMonthlyDropdown(-1);
+    const ySel = document.getElementById('m-select-year');
+    const mSel = document.getElementById('m-select-month');
+    if (!ySel || !mSel) return;
+    
+    let y = Number(ySel.value);
+    let m = Number(mSel.value) - 1;
+    
+    if (m < 1) { m = 12; y -= 1; }
+    
+    const yearExists = Array.from(ySel.options).some(opt => Number(opt.value) === y);
+    if (yearExists) {
+      ySel.value = y;
+      mSel.value = m;
+      if (typeof updateMonthlyReportView === 'function') {
+        updateMonthlyReportView();
+      }
+    }
   }
 
   function getSafeBatteryCapacity() {
@@ -2851,7 +2881,7 @@
   }
 
   // ============================================================
-  // 📌 배터리 차트 (간소화)
+  // 📌 배터리 차트
   // ============================================================
   function renderBatteryCharts() {
     if (typeof Chart === 'undefined') return;
