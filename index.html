@@ -78,8 +78,10 @@
     background: rgba(59, 130, 246, 0.15);
     border: 1px solid rgba(59, 130, 246, 0.3);
     border-radius: 12px;
-    padding: 8px 12px;
+    padding: 10px 14px;
     margin-top: 6px;
+    max-width: 320px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   }
   .speech-bubble::before {
     content: '';
@@ -103,10 +105,43 @@
     color: #93c5fd;
     font-size: 11px;
     font-weight: 500;
+    line-height: 1.5;
   }
   .bubble-text strong {
     color: #60a5fa;
     font-weight: 700;
+  }
+  .bubble-calendar {
+    display: inline-block;
+    background: rgba(139, 92, 246, 0.25);
+    border: 1px solid rgba(139, 92, 246, 0.35);
+    border-radius: 8px;
+    padding: 4px 10px;
+    color: #c4b5fd;
+    font-weight: 600;
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .bubble-close {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #1f2937;
+    border: 1px solid #4b5563;
+    color: #9ca3af;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .bubble-close:hover {
+    background: #374151;
+    color: #fff;
   }
   </style>
 </head>
@@ -240,7 +275,12 @@
       <!-- 주행 지도 -->
       <div id="sub-panel-driving" class="hidden space-y-3">
         <div class="glass-card rounded-2xl p-4 flex flex-col gap-3 shadow-xl">
-          <span class="text-xs font-bold text-gray-300 flex items-center gap-1">📅 조회 기간 및 조건</span>
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold text-gray-300 flex items-center gap-1">📅 조회 기간 및 조건</span>
+            <button onclick="resetDrivingFilter()" class="px-3 py-1.5 text-xs font-bold rounded-xl bg-gray-800 hover:bg-gray-700 text-blue-400 border border-gray-700 transition flex items-center gap-1.5">
+              <i class="fa-solid fa-rotate-right"></i> 리셋
+            </button>
+          </div>
           
           <div class="flex gap-1.5 overflow-x-auto pb-1 text-xs">
             <button onclick="setFilterMode('single')" id="btn-mode-single" class="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 font-bold whitespace-nowrap">단일운행</button>
@@ -598,11 +638,11 @@
     </div>
   </div>
 
-  <!-- 📍 도착지 정보 말풍선 표시용 (개별 운행 클릭 시) -->
+  <!-- 📍 도착지 정보 말풍선 (캘린더 매칭된 경우만 표시) -->
   <div id="trip-bubble-container" class="fixed inset-0 z-50 pointer-events-none hidden p-4">
-    <div id="trip-bubble" class="speech-bubble pointer-events-auto max-w-sm mx-auto shadow-xl">
+    <div id="trip-bubble" class="speech-bubble pointer-events-auto mx-auto shadow-xl">
       <div id="trip-bubble-content" class="bubble-text text-xs"></div>
-      <button onclick="closeTripBubble()" class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-gray-800 text-gray-400 hover:text-white text-xs font-bold border border-gray-700 flex items-center justify-center pointer-events-auto">✕</button>
+      <button onclick="closeTripBubble()" class="bubble-close">✕</button>
     </div>
   </div>
 
@@ -637,7 +677,7 @@
   let map = null, geocoder = null;
   let allTrips = [], vehicleRows = [];
   let currentPolylines = [], currentInfoWindow = null;
-  let currentFilterMode = 'daily';
+  let currentFilterMode = localStorage.getItem('tesla_filter_mode') || 'daily';
   
   let addressCache = {};
   try {
@@ -1522,7 +1562,6 @@
         startBattery: r.start_battery || null
       }));
 
-      // 차량 배터리 정보 로드
       loadVehicleBatteryData();
 
       renderAllUIComponents();
@@ -1823,31 +1862,13 @@
   }
 
   // ============================================================
-  // 📌 도착지 정보 말풍선 표시
+  // 📌 도착지 정보 말풍선 표시 (캘린더 매칭된 경우만)
   // ============================================================
   let activeBubbleTripId = null;
 
   function showTripBubble(trip, event) {
-    const container = document.getElementById('trip-bubble-container');
-    const content = document.getElementById('trip-bubble-content');
-    if (!container || !content) return;
-
-    // 이미 같은 트립의 말풍선이 열려있으면 닫기
-    if (activeBubbleTripId === trip.id) {
-      closeTripBubble();
-      return;
-    }
-
+    // 캘린더 매칭 확인
     const tripTime = new Date(trip.timestamp || trip.created_at);
-    const timeStr = formatTimeAmPm(tripTime);
-    const dist = (trip.moveKM || 0).toFixed(1);
-    const mins = trip.durationMin || 0;
-    const batUsed = Math.round(trip.useBattery || 0);
-    const batRemain = trip.endBattery || trip.end_battery || 
-      (trip.startBattery !== undefined ? Math.round(trip.startBattery - batUsed) : '-');
-    const temp = (trip.outsideTemp !== undefined && trip.outsideTemp !== null) ? `${Math.round(Number(trip.outsideTemp))}°C` : '—';
-
-    // 캘린더 매칭
     const d = new Date(tripTime);
     const ymd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const dayEvents = (window.calendarEvents || []).filter(evt => {
@@ -1860,27 +1881,45 @@
     const usedEventIds = new Set();
     const matchedEvt = matchCalendarToTrip(trip, dayEvents, usedEventIds);
 
-    let html = `
+    // 매칭된 캘린더가 없으면 팝업 표시 안함
+    if (!matchedEvt) {
+      closeTripBubble();
+      return;
+    }
+
+    const container = document.getElementById('trip-bubble-container');
+    const content = document.getElementById('trip-bubble-content');
+    if (!container || !content) return;
+
+    // 이미 같은 트립의 말풍선이 열려있으면 닫기
+    if (activeBubbleTripId === trip.id) {
+      closeTripBubble();
+      return;
+    }
+
+    const tripTimeStr = formatTimeAmPm(tripTime);
+    const dist = (trip.moveKM || 0).toFixed(1);
+    const mins = trip.durationMin || 0;
+    const batUsed = Math.round(trip.useBattery || 0);
+    const batRemain = trip.endBattery || trip.end_battery || 
+      (trip.startBattery !== undefined ? Math.round(trip.startBattery - batUsed) : '-');
+    const temp = (trip.outsideTemp !== undefined && trip.outsideTemp !== null) ? `${Math.round(Number(trip.outsideTemp))}°C` : '—';
+
+    content.innerHTML = `
       <div class="flex justify-between items-start mb-1">
         <span class="font-bold text-blue-300 text-xs">${trip.startDong || '출발지'} → ${trip.endDong || '도착지'}</span>
-        <span class="text-gray-400 text-[10px]">${timeStr}</span>
+        <span class="text-gray-400 text-[10px]">${tripTimeStr}</span>
       </div>
-      <div class="flex gap-2 text-[10px] text-gray-300">
+      <div class="flex gap-2 text-[10px] text-gray-300 flex-wrap">
         <span>🚗 ${dist}km (${mins}분)</span>
-        <span>🔋 -${batUsed}% (잔량 ${batRemain}%)</span>
+        <span>🔋 -${batUsed}% (${batRemain}%)</span>
         <span>🌡️ ${temp}</span>
+      </div>
+      <div class="bubble-calendar mt-1">
+        📅 ${matchedEvt.summary || '일정'}
       </div>
     `;
 
-    if (matchedEvt) {
-      html += `
-        <div class="mt-1 pt-1 border-t border-blue-500/20 text-[10px] text-purple-300">
-          📅 <strong>${matchedEvt.summary || '일정'}</strong>
-        </div>
-      `;
-    }
-
-    content.innerHTML = html;
     container.classList.remove('hidden');
     activeBubbleTripId = trip.id;
 
@@ -1889,8 +1928,10 @@
     if (bubble && event) {
       const rect = event.target.getBoundingClientRect();
       bubble.style.position = 'fixed';
-      bubble.style.top = Math.min(rect.top - 10, window.innerHeight - 200) + 'px';
-      bubble.style.left = Math.max(10, Math.min(rect.left + rect.width/2 - 150, window.innerWidth - 320)) + 'px';
+      const topPos = Math.max(10, Math.min(rect.top - 20, window.innerHeight - 220));
+      const leftPos = Math.max(10, Math.min(rect.left + rect.width/2 - 150, window.innerWidth - 330));
+      bubble.style.top = topPos + 'px';
+      bubble.style.left = leftPos + 'px';
       bubble.style.maxWidth = '300px';
     }
   }
@@ -2010,7 +2051,7 @@
       };
     }
 
-    // 📌 개별 운행 목록 (클릭 시 말풍선)
+    // 📌 개별 운행 목록 (캘린더 매칭된 경우에만 팝업)
     const singleContainer = document.getElementById('single-trips-container');
     if (!singleContainer) return;
 
@@ -2027,11 +2068,20 @@
       const timeStr = formatTimeAmPm(tripTime);
       const temp = (trip.outsideTemp !== undefined && trip.outsideTemp !== null) ? `${Math.round(Number(trip.outsideTemp))}°C` : '—';
 
-      // 캘린더 매칭
-      const matchedEvt = matchCalendarToTrip(trip, dayCalendarEvents, usedEventIds);
+      // 캘린더 매칭 확인 (팝업 표시 여부 결정)
+      const dayEventsForMatch = (calendarEvents || []).filter(evt => {
+        if (!evt.start_time) return false;
+        const d = new Date(evt.start_time);
+        return d.getFullYear() === latestDate.getFullYear() &&
+               d.getMonth() === latestDate.getMonth() &&
+               d.getDate() === latestDate.getDate();
+      });
+      const tempUsedIds = new Set();
+      const matchedEvt = matchCalendarToTrip(trip, dayEventsForMatch, tempUsedIds);
+      const hasCalendarMatch = !!matchedEvt;
 
       return `
-        <div onclick="showTripBubble(${JSON.stringify(trip).replace(/"/g, '&quot;')}, event)" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99] overflow-hidden">
+        <div onclick="${hasCalendarMatch ? `showTripBubble(${JSON.stringify(trip).replace(/"/g, '&quot;')}, event)` : 'closeTripBubble()'}" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs ${hasCalendarMatch ? 'cursor-pointer hover:border-blue-500/60' : 'cursor-default'} transition shadow-md active:scale-[0.99] overflow-hidden">
           <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
             <span class="address-tag text-blue-300 font-bold">${trip.startDong || '출발지'}</span>
             <span class="text-indigo-400 font-extrabold">→</span>
@@ -2042,10 +2092,10 @@
             <span>주행 ${dist}km (${mins}분) | 🔋 사용 -${batUsed}% (잔량 ${batRemain}%)</span>
             <span class="text-amber-400 font-bold">🌡️ ${temp}</span>
           </div>
-          ${matchedEvt ? `
+          ${hasCalendarMatch ? `
             <div class="mt-1 text-[10px] text-purple-300/70">📅 ${matchedEvt.summary || '일정'}</div>
+            <div class="text-[10px] text-blue-400/50 text-right">👆 터치하여 정보 보기</div>
           ` : ''}
-          <div class="text-[10px] text-blue-400/50 text-right">👆 터치하여 정보 보기</div>
         </div>
       `;
     }).join('');
@@ -2271,6 +2321,8 @@
   // ============================================================
   function setFilterMode(mode) {
     currentFilterMode = mode;
+    localStorage.setItem('tesla_filter_mode', mode);
+    
     ['single', 'daily', 'weekly', 'monthly', 'quarterly', 'half', 'yearly'].forEach(m => {
       const btn = document.getElementById(`btn-mode-${m}`);
       if (btn) {
@@ -2290,7 +2342,6 @@
     if (years.length === 0) years.push(new Date().getFullYear());
     const yearOpts = years.map(y => `<option value="${y}">${y}년</option>`).join('');
 
-    // 🔥 기본값: 가장 최근 날짜로 설정 (daily 모드)
     if (mode === 'daily') {
       const days = [...new Set(allTrips.map(t => {
         const d = new Date(t.timestamp || t.created_at);
@@ -2298,7 +2349,6 @@
       }))].sort().reverse();
       const opts = days.map(d => `<option value="${d}">${d}</option>`).join('');
       container.innerHTML = `<select id="ctrl-sub-select" onchange="renderDrivingData()" class="w-full bg-gray-900 text-white rounded-xl p-2.5 text-xs border border-gray-800 font-extrabold focus:border-blue-500 outline-none">${opts}</select>`;
-      // 가장 최근 날짜 선택
       if (days.length > 0) {
         const sel = document.getElementById('ctrl-sub-select');
         if (sel) sel.value = days[0];
@@ -2317,7 +2367,6 @@
           </select>
         </div>
       `;
-      // 기본값: 가장 최근 데이터의 연/월/주차
       const latest = allTrips[0];
       if (latest) {
         const d = new Date(latest.timestamp || latest.created_at);
@@ -2383,6 +2432,78 @@
       }
     }
     renderDrivingData();
+  }
+
+  // 📌 리셋 버튼: 가장 최근 날짜로 초기화 (현재 모드 유지)
+  function resetDrivingFilter() {
+    if (!allTrips || allTrips.length === 0) return;
+    
+    const mode = currentFilterMode;
+    const latestTrip = allTrips[0];
+    const latestDate = new Date(latestTrip.timestamp || latestTrip.created_at);
+    
+    if (mode === 'daily') {
+      const sel = document.getElementById('ctrl-sub-select');
+      if (sel) {
+        const ymd = `${latestDate.getFullYear()}-${String(latestDate.getMonth()+1).padStart(2,'0')}-${String(latestDate.getDate()).padStart(2,'0')}`;
+        // 옵션에 해당 날짜가 있는지 확인
+        const options = Array.from(sel.options);
+        const exists = options.some(opt => opt.value === ymd);
+        if (exists) {
+          sel.value = ymd;
+        } else {
+          // 없으면 가장 최근 옵션 선택
+          sel.selectedIndex = 0;
+        }
+        renderDrivingData();
+      }
+    } else if (mode === 'weekly') {
+      const ySel = document.getElementById('ctrl-year');
+      const mSel = document.getElementById('ctrl-month');
+      const wSel = document.getElementById('ctrl-week');
+      if (ySel && mSel && wSel) {
+        ySel.value = latestDate.getFullYear();
+        mSel.value = latestDate.getMonth() + 1;
+        wSel.value = Math.ceil(latestDate.getDate() / 7);
+        renderDrivingData();
+      }
+    } else if (mode === 'monthly') {
+      const ySel = document.getElementById('ctrl-year');
+      const mSel = document.getElementById('ctrl-month');
+      if (ySel && mSel) {
+        ySel.value = latestDate.getFullYear();
+        mSel.value = latestDate.getMonth() + 1;
+        renderDrivingData();
+      }
+    } else if (mode === 'quarterly') {
+      const ySel = document.getElementById('ctrl-year');
+      const qSel = document.getElementById('ctrl-quarter');
+      if (ySel && qSel) {
+        ySel.value = latestDate.getFullYear();
+        qSel.value = Math.floor(latestDate.getMonth() / 3) + 1;
+        renderDrivingData();
+      }
+    } else if (mode === 'half') {
+      const ySel = document.getElementById('ctrl-year');
+      const hSel = document.getElementById('ctrl-half');
+      if (ySel && hSel) {
+        ySel.value = latestDate.getFullYear();
+        hSel.value = latestDate.getMonth() < 6 ? 1 : 2;
+        renderDrivingData();
+      }
+    } else if (mode === 'yearly') {
+      const ySel = document.getElementById('ctrl-year');
+      if (ySel) {
+        ySel.value = latestDate.getFullYear();
+        renderDrivingData();
+      }
+    } else if (mode === 'single') {
+      const sel = document.getElementById('ctrl-select');
+      if (sel) {
+        sel.selectedIndex = 0;
+        renderDrivingData();
+      }
+    }
   }
 
   function shiftDrivingFilter(offset) {
@@ -2536,7 +2657,7 @@
               (t.startBattery !== undefined ? Math.round(t.startBattery - (t.useBattery || 0)) : '-');
 
             return `
-              <div onclick="showTripBubble(${JSON.stringify(t).replace(/"/g, '&quot;')}, event)" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 cursor-pointer hover:border-blue-500/60 transition shadow-md text-xs active:scale-[0.99] overflow-hidden">
+              <div class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs overflow-hidden">
                 <div class="flex justify-between items-center border-b border-gray-800/80 pb-1">
                   <span class="font-extrabold text-blue-400">#${idx + 1} 운행 (${timeStr})</span>
                   <span class="font-bold text-gray-200">${(t.moveKM || 0).toFixed(1)} km / ${t.durationMin || 0}분</span>
@@ -2550,7 +2671,6 @@
                   <span>🔋 사용 -${Math.round(t.useBattery || 0)}% (잔량 ${batRemain}%) | 🌡️ 외기: ${temp}</span>
                   <span class="font-bold text-indigo-400">⚡ 전비: ${eff} km/kWh</span>
                 </div>
-                <div class="text-[10px] text-blue-400/50 text-right">👆 터치하여 정보 보기</div>
               </div>
             `;
           }).join('');
@@ -2707,7 +2827,7 @@
     }
   }
 
-  // 📌 지난달 보기: 현재 월의 바로 이전 달로만 이동 (연속 이동 아님)
+  // 📌 지난달 보기: 현재 월의 바로 이전 달로만 이동
   function selectPrevMonthOnly() {
     const ySel = document.getElementById('m-select-year');
     const mSel = document.getElementById('m-select-month');
@@ -2727,18 +2847,6 @@
       mSel.value = m;
       if (typeof updateMonthlyReportView === 'function') {
         updateMonthlyReportView();
-      }
-    } else {
-      // 해당 년도가 없으면 가장 최근 년도로
-      const years = Array.from(ySel.options).map(opt => Number(opt.value)).filter(n => !isNaN(n));
-      if (years.length > 0) {
-        ySel.value = years[0];
-        // 해당 년도의 마지막 월로 설정
-        const maxMonth = new Date(years[0], 11, 1).getMonth() + 1;
-        mSel.value = Math.min(m, maxMonth);
-        if (typeof updateMonthlyReportView === 'function') {
-          updateMonthlyReportView();
-        }
       }
     }
   }
@@ -3322,14 +3430,14 @@
   }
 
   // ============================================================
-  // 📌 지도 초기화 후 기본 모드 설정
+  // 📌 초기화: 저장된 모드 복원
   // ============================================================
-  // 지도 초기화 후 일간 모드로 설정
   setTimeout(() => {
+    const savedMode = localStorage.getItem('tesla_filter_mode') || 'daily';
     if (typeof setFilterMode === 'function') {
-      setFilterMode('daily');
+      setFilterMode(savedMode);
     }
-  }, 1000);
+  }, 1500);
 
   console.log('🚗 Tesla Command Hub v1.45 로드 완료');
 </script>
