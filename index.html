@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -72,71 +73,7 @@
     to { opacity: 1; transform: scale(1) translateY(0); }
   }
 
-  /* 말풍선 스타일 */
-  .info-toast {
-    position: relative;
-    background: rgba(17, 24, 39, 0.97);
-    border: 1px solid rgba(59, 130, 246, 0.4);
-    border-radius: 16px;
-    padding: 12px 16px;
-    width: 100%;
-    max-width: 340px;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
-    animation: toastIn 0.18s ease-out;
-  }
-  @keyframes toastIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .speech-bubble {
-    position: relative;
-    background: rgba(59, 130, 246, 0.15);
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    border-radius: 12px;
-    padding: 10px 14px;
-    margin-top: 6px;
-    max-width: 320px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-  }
-  .speech-bubble::before {
-    content: '';
-    position: absolute;
-    top: -8px;
-    left: 20px;
-    border-left: 8px solid transparent;
-    border-right: 8px solid transparent;
-    border-bottom: 8px solid rgba(59, 130, 246, 0.15);
-  }
-  .speech-bubble::after {
-    content: '';
-    position: absolute;
-    top: -6px;
-    left: 21px;
-    border-left: 7px solid transparent;
-    border-right: 7px solid transparent;
-    border-bottom: 7px solid rgba(59, 130, 246, 0.3);
-  }
-  .bubble-text {
-    color: #93c5fd;
-    font-size: 11px;
-    font-weight: 500;
-    line-height: 1.5;
-  }
-  .bubble-text strong {
-    color: #60a5fa;
-    font-weight: 700;
-  }
-  .bubble-calendar {
-    display: inline-block;
-    background: rgba(139, 92, 246, 0.25);
-    border: 1px solid rgba(139, 92, 246, 0.35);
-    border-radius: 8px;
-    padding: 4px 10px;
-    color: #c4b5fd;
-    font-weight: 600;
-    font-size: 11px;
-    margin-top: 4px;
-  }
+  /* 캘린더 매칭 뱃지 (정적 표시용, 팝업 없음) */
   .bubble-calendar-tag {
     display: block;
     background: rgba(139, 92, 246, 0.18);
@@ -146,35 +83,6 @@
     color: #c4b5fd;
     font-weight: 700;
     font-size: 10.5px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .bubble-calendar-tag:hover {
-    background: rgba(139, 92, 246, 0.3);
-  }
-  .bubble-calendar-tag:active {
-    transform: scale(0.98);
-  }
-  .bubble-close {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: #1f2937;
-    border: 1px solid #4b5563;
-    color: #9ca3af;
-    font-size: 11px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .bubble-close:hover {
-    background: #374151;
-    color: #fff;
   }
   </style>
 </head>
@@ -671,13 +579,7 @@
     </div>
   </div>
 
-  <!-- 📍 도착지 정보 말풍선 (캘린더 매칭된 경우만 표시) -->
-  <div id="trip-bubble-container" class="fixed inset-x-0 bottom-20 z-50 pointer-events-none hidden flex justify-center px-4">
-    <div id="trip-bubble" class="info-toast pointer-events-auto shadow-xl">
-      <div id="trip-bubble-content" class="bubble-text text-xs"></div>
-      <button onclick="closeTripBubble()" class="bubble-close">✕</button>
-    </div>
-  </div>
+
 
 </body>
 </html>
@@ -713,6 +615,11 @@
   let selectedSingleTripId = null; // 일간 목록에서 선택된 단일 운행 (지도 하이라이트용)
   let lastDailySelection = null; // 마지막으로 본 일간 날짜 (모드 전환 시 유지)
   let lastWeeklySelection = null; // 마지막으로 본 주간 {year, month, week} (모드 전환 시 유지)
+  let lastMonthlySelection = null; // {year, month}
+  let lastQuarterlySelection = null; // {year, quarter}
+  let lastHalfSelection = null; // {year, half}
+  let lastYearlySelection = null; // {year}
+  let lastSingleSelection = null; // tripId
   let currentFilterMode = localStorage.getItem('tesla_filter_mode') || 'daily';
   
   let addressCache = {};
@@ -2013,97 +1920,6 @@
   }
 
   // ============================================================
-  // 📌 도착지 정보 말풍선 표시 (캘린더 매칭된 경우만)
-  // ============================================================
-  let activeBubbleTripId = null;
-
-  function showTripBubble(trip, event) {
-    // 캘린더 매칭 확인
-    const tripTime = new Date(trip.timestamp || trip.created_at);
-    const d = new Date(tripTime);
-    const ymd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    const dayEvents = (window.calendarEvents || []).filter(evt => {
-      if (!evt.start_time) return false;
-      const evtDate = new Date(evt.start_time);
-      return evtDate.getFullYear() === d.getFullYear() &&
-             evtDate.getMonth() === d.getMonth() &&
-             evtDate.getDate() === d.getDate();
-    });
-    const usedEventIds = new Set();
-    const matchedEvt = matchCalendarToTrip(trip, dayEvents, usedEventIds);
-
-    // 매칭된 캘린더가 없으면 팝업 표시 안함
-    if (!matchedEvt) {
-      closeTripBubble();
-      return;
-    }
-
-    const container = document.getElementById('trip-bubble-container');
-    const content = document.getElementById('trip-bubble-content');
-    if (!container || !content) return;
-
-    if (event && event.stopPropagation) event.stopPropagation();
-
-    // 이미 같은 트립의 말풍선이 열려있으면 닫기
-    if (activeBubbleTripId === trip.id) {
-      closeTripBubble();
-      return;
-    }
-
-    const placeName = cleanCalendarSummary(matchedEvt.summary) || '일정';
-    const hasPath = Array.isArray(trip.path) && trip.path.length > 0;
-    const safeTripId = String(trip.id).replace(/'/g, "\\'");
-
-    content.innerHTML = `
-      <div class="flex items-center gap-2 pr-4">
-        <span class="text-base">📍</span>
-        <span class="font-extrabold text-white text-sm break-keep leading-snug">${placeName}</span>
-      </div>
-      <button
-        onclick="${hasPath ? `viewTripOnMapFromBubble('${safeTripId}')` : ''}"
-        class="mt-2.5 w-full text-center text-[11px] font-bold py-2 rounded-lg transition ${hasPath ? 'bg-blue-600 text-white hover:bg-blue-500 active:scale-[0.98] cursor-pointer' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}"
-        ${hasPath ? '' : 'disabled'}>
-        ${hasPath ? '🗺️ 지도에서 이 구간 보기' : '🗺️ 경로 정보 없음'}
-      </button>
-    `;
-
-    container.classList.remove('hidden');
-    activeBubbleTripId = trip.id;
-    // 위치는 항상 화면 하단 중앙 고정 (탭한 카드 위에 겹치지 않도록)
-  }
-
-  // 📌 말풍선의 "지도에서 보기" 탭 → 주행지도 탭으로 이동 + 해당 구간 하이라이트
-  function viewTripOnMapFromBubble(tripId) {
-    closeTripBubble();
-    if (typeof switchMainTab === 'function') switchMainTab('monitor', true);
-    if (typeof switchSubTab === 'function') switchSubTab('driving', true);
-
-    const trip = allTrips.find(t => t.id === tripId);
-    if (!trip) return;
-    const d = new Date(trip.timestamp || trip.created_at);
-    const ymd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-
-    setTimeout(() => {
-      if (typeof setFilterMode === 'function') setFilterMode('daily');
-      const subSelect = document.getElementById('ctrl-sub-select');
-      if (subSelect) {
-        subSelect.value = ymd;
-        lastDailySelection = ymd;
-      }
-      if (typeof renderDrivingData === 'function') renderDrivingData();
-      setTimeout(() => {
-        if (typeof showSingleTripOnMap === 'function') showSingleTripOnMap(tripId);
-      }, 150);
-    }, 150);
-  }
-
-  function closeTripBubble() {
-    const container = document.getElementById('trip-bubble-container');
-    if (container) container.classList.add('hidden');
-    activeBubbleTripId = null;
-  }
-
-  // ============================================================
   // 📌 최근 운행일 + 캘린더 표시
   // ============================================================
   function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
@@ -2242,7 +2058,7 @@
       const hasCalendarMatch = !!matchedEvt;
 
       return `
-        <div onclick="${hasCalendarMatch ? `showTripBubble(${JSON.stringify(trip).replace(/"/g, '&quot;')}, event)` : 'closeTripBubble()'}" class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs ${hasCalendarMatch ? 'cursor-pointer hover:border-blue-500/60' : 'cursor-default'} transition shadow-md active:scale-[0.99] overflow-hidden">
+        <div class="bg-gray-900/80 p-3 rounded-xl border border-gray-800 space-y-1.5 text-xs transition shadow-md overflow-hidden">
           <div class="font-bold text-gray-100 flex items-center gap-1.5 flex-wrap break-keep">
             <span class="address-tag text-blue-300 font-bold">${trip.startDong || '출발지'}</span>
             <span class="text-indigo-400 font-extrabold">→</span>
@@ -2255,7 +2071,6 @@
           </div>
           ${hasCalendarMatch ? `
             <div class="bubble-calendar-tag mt-1">📅 ${cleanCalendarSummary(matchedEvt.summary) || '일정'}</div>
-            <div class="text-[10px] text-blue-400/50 text-right">👆 터치하여 정보 보기</div>
           ` : ''}
         </div>
       `;
@@ -2520,7 +2335,13 @@
       }
     } else if (mode === 'single') {
       const opts = allTrips.map(t => `<option value="${t.id}">${new Date(t.timestamp || t.created_at).toLocaleString('ko-KR')} (${(t.moveKM || 0).toFixed(1)}km)</option>`).join('');
-      container.innerHTML = `<select id="ctrl-select" onchange="renderDrivingData()" class="w-full bg-gray-900 text-white rounded-xl p-2.5 text-xs border border-gray-800 font-bold focus:border-blue-500 outline-none">${opts}</select>`;
+      container.innerHTML = `<select id="ctrl-select" onchange="lastSingleSelection=this.value; renderDrivingData()" class="w-full bg-gray-900 text-white rounded-xl p-2.5 text-xs border border-gray-800 font-bold focus:border-blue-500 outline-none">${opts}</select>`;
+      const sel = document.getElementById('ctrl-select');
+      if (sel) {
+        const exists = allTrips.some(t => t.id === lastSingleSelection);
+        sel.value = exists ? lastSingleSelection : (allTrips[0]?.id || '');
+        lastSingleSelection = sel.value;
+      }
     } else if (mode === 'weekly') {
       const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
       const weeklyOnchange = "lastWeeklySelection={year:document.getElementById('ctrl-year').value, month:document.getElementById('ctrl-month').value, week:document.getElementById('ctrl-week').value}; renderDrivingData()";
@@ -2550,59 +2371,84 @@
       }
     } else if (mode === 'monthly') {
       const monthOpts = Array.from({length:12}, (_,i) => `<option value="${i+1}">${i+1}월</option>`).join('');
+      const monthlyOnchange = "lastMonthlySelection={year:document.getElementById('ctrl-year').value, month:document.getElementById('ctrl-month').value}; renderDrivingData()";
       container.innerHTML = `
         <div class="flex gap-2 text-xs">
-          <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
-          <select id="ctrl-month" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${monthOpts}</select>
+          <select id="ctrl-year" onchange="${monthlyOnchange}" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
+          <select id="ctrl-month" onchange="${monthlyOnchange}" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${monthOpts}</select>
         </div>
       `;
-      const latest = allTrips[0];
-      if (latest) {
-        const d = new Date(latest.timestamp || latest.created_at);
-        if (document.getElementById('ctrl-year')) document.getElementById('ctrl-year').value = d.getFullYear();
-        if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = d.getMonth() + 1;
+      if (lastMonthlySelection) {
+        if (document.getElementById('ctrl-year')) document.getElementById('ctrl-year').value = lastMonthlySelection.year;
+        if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = lastMonthlySelection.month;
+      } else {
+        const latest = allTrips[0];
+        if (latest) {
+          const d = new Date(latest.timestamp || latest.created_at);
+          if (document.getElementById('ctrl-year')) document.getElementById('ctrl-year').value = d.getFullYear();
+          if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = d.getMonth() + 1;
+          lastMonthlySelection = { year: d.getFullYear(), month: d.getMonth() + 1 };
+        }
       }
     } else if (mode === 'quarterly') {
+      const quarterlyOnchange = "lastQuarterlySelection={year:document.getElementById('ctrl-year').value, quarter:document.getElementById('ctrl-quarter').value}; renderDrivingData()";
       container.innerHTML = `
         <div class="flex gap-2 text-xs">
-          <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
-          <select id="ctrl-quarter" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">
+          <select id="ctrl-year" onchange="${quarterlyOnchange}" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
+          <select id="ctrl-quarter" onchange="${quarterlyOnchange}" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">
             <option value="1">1분기 (1~3월)</option><option value="2">2분기 (4~6월)</option><option value="3">3분기 (7~9월)</option><option value="4">4분기 (10~12월)</option>
           </select>
         </div>
       `;
-      const latest = allTrips[0];
-      if (latest) {
-        const d = new Date(latest.timestamp || latest.created_at);
-        if (document.getElementById('ctrl-year')) document.getElementById('ctrl-year').value = d.getFullYear();
-        if (document.getElementById('ctrl-quarter')) {
-          const q = Math.floor((d.getMonth()) / 3) + 1;
-          document.getElementById('ctrl-quarter').value = q;
+      if (lastQuarterlySelection) {
+        if (document.getElementById('ctrl-year')) document.getElementById('ctrl-year').value = lastQuarterlySelection.year;
+        if (document.getElementById('ctrl-quarter')) document.getElementById('ctrl-quarter').value = lastQuarterlySelection.quarter;
+      } else {
+        const latest = allTrips[0];
+        if (latest) {
+          const d = new Date(latest.timestamp || latest.created_at);
+          const q = Math.floor(d.getMonth() / 3) + 1;
+          if (document.getElementById('ctrl-year')) document.getElementById('ctrl-year').value = d.getFullYear();
+          if (document.getElementById('ctrl-quarter')) document.getElementById('ctrl-quarter').value = q;
+          lastQuarterlySelection = { year: d.getFullYear(), quarter: q };
         }
       }
     } else if (mode === 'half') {
+      const halfOnchange = "lastHalfSelection={year:document.getElementById('ctrl-year').value, half:document.getElementById('ctrl-half').value}; renderDrivingData()";
       container.innerHTML = `
         <div class="flex gap-2 text-xs">
-          <select id="ctrl-year" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
-          <select id="ctrl-half" onchange="renderDrivingData()" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">
+          <select id="ctrl-year" onchange="${halfOnchange}" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>
+          <select id="ctrl-half" onchange="${halfOnchange}" class="flex-1 bg-gray-900 text-white p-2.5 rounded-xl border border-gray-800 font-bold focus:border-blue-500 outline-none">
             <option value="1">상반기 (1~6월)</option><option value="2">하반기 (7~12월)</option>
           </select>
         </div>
       `;
-      const latest = allTrips[0];
-      if (latest) {
-        const d = new Date(latest.timestamp || latest.created_at);
-        if (document.getElementById('ctrl-year')) document.getElementById('ctrl-year').value = d.getFullYear();
-        if (document.getElementById('ctrl-half')) {
-          document.getElementById('ctrl-half').value = d.getMonth() < 6 ? 1 : 2;
+      if (lastHalfSelection) {
+        if (document.getElementById('ctrl-year')) document.getElementById('ctrl-year').value = lastHalfSelection.year;
+        if (document.getElementById('ctrl-half')) document.getElementById('ctrl-half').value = lastHalfSelection.half;
+      } else {
+        const latest = allTrips[0];
+        if (latest) {
+          const d = new Date(latest.timestamp || latest.created_at);
+          const half = d.getMonth() < 6 ? 1 : 2;
+          if (document.getElementById('ctrl-year')) document.getElementById('ctrl-year').value = d.getFullYear();
+          if (document.getElementById('ctrl-half')) document.getElementById('ctrl-half').value = half;
+          lastHalfSelection = { year: d.getFullYear(), half };
         }
       }
     } else if (mode === 'yearly') {
-      container.innerHTML = `<select id="ctrl-year" onchange="renderDrivingData()" class="w-full bg-gray-900 text-white rounded-xl p-2.5 text-xs border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>`;
-      const latest = allTrips[0];
-      if (latest && document.getElementById('ctrl-year')) {
-        const d = new Date(latest.timestamp || latest.created_at);
-        document.getElementById('ctrl-year').value = d.getFullYear();
+      container.innerHTML = `<select id="ctrl-year" onchange="lastYearlySelection={year:this.value}; renderDrivingData()" class="w-full bg-gray-900 text-white rounded-xl p-2.5 text-xs border border-gray-800 font-bold focus:border-blue-500 outline-none">${yearOpts}</select>`;
+      const yearSel = document.getElementById('ctrl-year');
+      if (yearSel) {
+        if (lastYearlySelection) {
+          yearSel.value = lastYearlySelection.year;
+        } else {
+          const latest = allTrips[0];
+          if (latest) {
+            yearSel.value = new Date(latest.timestamp || latest.created_at).getFullYear();
+          }
+          lastYearlySelection = { year: yearSel.value };
+        }
       }
     }
     renderDrivingData();
@@ -2650,6 +2496,7 @@
       if (ySel && mSel) {
         ySel.value = latestDate.getFullYear();
         mSel.value = latestDate.getMonth() + 1;
+        lastMonthlySelection = { year: ySel.value, month: mSel.value };
         renderDrivingData();
       }
     } else if (mode === 'quarterly') {
@@ -2658,6 +2505,7 @@
       if (ySel && qSel) {
         ySel.value = latestDate.getFullYear();
         qSel.value = Math.floor(latestDate.getMonth() / 3) + 1;
+        lastQuarterlySelection = { year: ySel.value, quarter: qSel.value };
         renderDrivingData();
       }
     } else if (mode === 'half') {
@@ -2666,18 +2514,21 @@
       if (ySel && hSel) {
         ySel.value = latestDate.getFullYear();
         hSel.value = latestDate.getMonth() < 6 ? 1 : 2;
+        lastHalfSelection = { year: ySel.value, half: hSel.value };
         renderDrivingData();
       }
     } else if (mode === 'yearly') {
       const ySel = document.getElementById('ctrl-year');
       if (ySel) {
         ySel.value = latestDate.getFullYear();
+        lastYearlySelection = { year: ySel.value };
         renderDrivingData();
       }
     } else if (mode === 'single') {
       const sel = document.getElementById('ctrl-select');
       if (sel) {
         sel.selectedIndex = 0;
+        lastSingleSelection = sel.value;
         renderDrivingData();
       }
     }
@@ -2930,7 +2781,6 @@
             });
             const matchedEvt = matchCalendarToTrip(t, dayEventsForMatch, new Set());
             const placeName = matchedEvt ? cleanCalendarSummary(matchedEvt.summary) : '';
-            const tripJson = JSON.stringify(t).replace(/"/g, '&quot;');
 
             return `
               <div onclick="showSingleTripOnMap('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border ${isSelected ? 'border-amber-500/80 ring-1 ring-amber-500/40' : 'border-gray-800'} space-y-1.5 text-xs overflow-hidden cursor-pointer hover:border-amber-500/50 transition active:scale-[0.99]">
@@ -2948,7 +2798,7 @@
                   <span class="font-bold text-indigo-400">⚡ 전비: ${eff} km/kWh</span>
                 </div>
                 ${matchedEvt ? `
-                  <div onclick="event.stopPropagation(); showTripBubble(${tripJson}, event)" class="bubble-calendar-tag">📅 ${placeName}</div>
+                  <div class="bubble-calendar-tag">📅 ${placeName}</div>
                 ` : ''}
                 <div class="text-[10px] ${isSelected ? 'text-amber-400' : 'text-blue-400/50'} text-right">👆 터치하여 지도에서 이 구간 보기</div>
               </div>
@@ -3722,4 +3572,4 @@
   console.log('🚗 Tesla Command Hub v1.45 로드 완료');
 </script>
 </body>
-              </html>
+  </html>
