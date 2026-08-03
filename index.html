@@ -73,6 +73,21 @@
   }
 
   /* 말풍선 스타일 */
+  .info-toast {
+    position: relative;
+    background: rgba(17, 24, 39, 0.97);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    border-radius: 16px;
+    padding: 12px 16px;
+    width: 100%;
+    max-width: 340px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    animation: toastIn 0.18s ease-out;
+  }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
   .speech-bubble {
     position: relative;
     background: rgba(59, 130, 246, 0.15);
@@ -121,6 +136,24 @@
     font-weight: 600;
     font-size: 11px;
     margin-top: 4px;
+  }
+  .bubble-calendar-tag {
+    display: block;
+    background: rgba(139, 92, 246, 0.18);
+    border: 1px solid rgba(139, 92, 246, 0.35);
+    border-radius: 8px;
+    padding: 5px 10px;
+    color: #c4b5fd;
+    font-weight: 700;
+    font-size: 10.5px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .bubble-calendar-tag:hover {
+    background: rgba(139, 92, 246, 0.3);
+  }
+  .bubble-calendar-tag:active {
+    transform: scale(0.98);
   }
   .bubble-close {
     position: absolute;
@@ -639,8 +672,8 @@
   </div>
 
   <!-- 📍 도착지 정보 말풍선 (캘린더 매칭된 경우만 표시) -->
-  <div id="trip-bubble-container" class="fixed inset-0 z-50 pointer-events-none hidden p-4">
-    <div id="trip-bubble" class="speech-bubble pointer-events-auto mx-auto shadow-xl">
+  <div id="trip-bubble-container" class="fixed inset-x-0 bottom-20 z-50 pointer-events-none hidden flex justify-center px-4">
+    <div id="trip-bubble" class="info-toast pointer-events-auto shadow-xl">
       <div id="trip-bubble-content" class="bubble-text text-xs"></div>
       <button onclick="closeTripBubble()" class="bubble-close">✕</button>
     </div>
@@ -1836,6 +1869,25 @@
   }
 
   // ============================================================
+  // 📌 캘린더 일정 제목에서 지역명 접두어 제거 (예: "고양 덕양 달인대보칼국수 향동점" → "달인대보칼국수 향동점")
+  // ============================================================
+  const CALENDAR_REGION_PREFIXES = [
+    '서울', '경기', '인천', '고양', '덕양', '일산', '파주', '포천', '의정부', '시흥', '김포', '양주', '동두천',
+    '강남', '강동', '강북', '강서', '관악', '광진', '구로', '금천', '노원', '도봉', '동대문', '동작', '마포',
+    '서대문', '서초', '성동', '성북', '송파', '양천', '영등포', '용산', '은평', '종로', '중구', '중랑',
+    '수원', '성남', '안양', '부천', '안산', '평택', '화성', '남양주', '구리', '오산', '이천', '양평', '여주', '가평', '연천'
+  ];
+
+  function cleanCalendarSummary(summary) {
+    if (!summary) return '';
+    const tokens = summary.trim().split(/\s+/);
+    while (tokens.length > 1 && CALENDAR_REGION_PREFIXES.includes(tokens[0])) {
+      tokens.shift();
+    }
+    return tokens.join(' ') || summary.trim();
+  }
+
+  // ============================================================
   // 📌 캘린더-주행 매칭 함수 (GPS 우선 + 텍스트 매칭 폴백)
   // ============================================================
   function matchCalendarToTrip(trip, dayEvents, usedEventIds = new Set()) {
@@ -1990,49 +2042,59 @@
     const content = document.getElementById('trip-bubble-content');
     if (!container || !content) return;
 
+    if (event && event.stopPropagation) event.stopPropagation();
+
     // 이미 같은 트립의 말풍선이 열려있으면 닫기
     if (activeBubbleTripId === trip.id) {
       closeTripBubble();
       return;
     }
 
-    const tripTimeStr = formatTimeAmPm(tripTime);
-    const dist = (trip.moveKM || 0).toFixed(1);
-    const mins = trip.durationMin || 0;
-    const batUsed = Math.round(trip.useBattery || 0);
-    const { endBattery: estEndBat } = estimateTripBattery(trip);
-    const batRemain = estEndBat !== null ? estEndBat : '-';
-    const temp = (trip.outsideTemp !== undefined && trip.outsideTemp !== null) ? `${Math.round(Number(trip.outsideTemp))}°C` : '—';
+    const placeName = cleanCalendarSummary(matchedEvt.summary) || '일정';
+    const hasPath = Array.isArray(trip.path) && trip.path.length > 0;
+    const safeTripId = String(trip.id).replace(/'/g, "\\'");
 
     content.innerHTML = `
-      <div class="flex justify-between items-start mb-1">
-        <span class="font-bold text-blue-300 text-xs">${trip.startDong || '출발지'} → ${trip.endDong || '도착지'}</span>
-        <span class="text-gray-400 text-[10px]">${tripTimeStr}</span>
+      <div class="flex items-center gap-2 pr-4">
+        <span class="text-base">📍</span>
+        <span class="font-extrabold text-white text-sm break-keep leading-snug">${placeName}</span>
       </div>
-      <div class="flex gap-2 text-[10px] text-gray-300 flex-wrap">
-        <span>🚗 ${dist}km (${mins}분)</span>
-        <span>🔋 -${batUsed}% (${batRemain}%)</span>
-        <span>🌡️ ${temp}</span>
-      </div>
-      <div class="bubble-calendar mt-1">
-        📅 ${matchedEvt.summary || '일정'}
-      </div>
+      <button
+        onclick="${hasPath ? `viewTripOnMapFromBubble('${safeTripId}')` : ''}"
+        class="mt-2.5 w-full text-center text-[11px] font-bold py-2 rounded-lg transition ${hasPath ? 'bg-blue-600 text-white hover:bg-blue-500 active:scale-[0.98] cursor-pointer' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}"
+        ${hasPath ? '' : 'disabled'}>
+        ${hasPath ? '🗺️ 지도에서 이 구간 보기' : '🗺️ 경로 정보 없음'}
+      </button>
     `;
 
     container.classList.remove('hidden');
     activeBubbleTripId = trip.id;
+    // 위치는 항상 화면 하단 중앙 고정 (탭한 카드 위에 겹치지 않도록)
+  }
 
-    // 클릭 위치에 말풍선 배치
-    const bubble = document.getElementById('trip-bubble');
-    if (bubble && event) {
-      const rect = event.target.getBoundingClientRect();
-      bubble.style.position = 'fixed';
-      const topPos = Math.max(10, Math.min(rect.top - 20, window.innerHeight - 220));
-      const leftPos = Math.max(10, Math.min(rect.left + rect.width/2 - 150, window.innerWidth - 330));
-      bubble.style.top = topPos + 'px';
-      bubble.style.left = leftPos + 'px';
-      bubble.style.maxWidth = '300px';
-    }
+  // 📌 말풍선의 "지도에서 보기" 탭 → 주행지도 탭으로 이동 + 해당 구간 하이라이트
+  function viewTripOnMapFromBubble(tripId) {
+    closeTripBubble();
+    if (typeof switchMainTab === 'function') switchMainTab('monitor', true);
+    if (typeof switchSubTab === 'function') switchSubTab('driving', true);
+
+    const trip = allTrips.find(t => t.id === tripId);
+    if (!trip) return;
+    const d = new Date(trip.timestamp || trip.created_at);
+    const ymd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+    setTimeout(() => {
+      if (typeof setFilterMode === 'function') setFilterMode('daily');
+      const subSelect = document.getElementById('ctrl-sub-select');
+      if (subSelect) {
+        subSelect.value = ymd;
+        lastDailySelection = ymd;
+      }
+      if (typeof renderDrivingData === 'function') renderDrivingData();
+      setTimeout(() => {
+        if (typeof showSingleTripOnMap === 'function') showSingleTripOnMap(tripId);
+      }, 150);
+    }, 150);
   }
 
   function closeTripBubble() {
@@ -2192,7 +2254,7 @@
             <span class="text-amber-400 font-bold">🌡️ ${temp}</span>
           </div>
           ${hasCalendarMatch ? `
-            <div class="mt-1 text-[10px] text-purple-300/70">📅 ${matchedEvt.summary || '일정'}</div>
+            <div class="bubble-calendar-tag mt-1">📅 ${cleanCalendarSummary(matchedEvt.summary) || '일정'}</div>
             <div class="text-[10px] text-blue-400/50 text-right">👆 터치하여 정보 보기</div>
           ` : ''}
         </div>
@@ -2859,6 +2921,17 @@
             const batRemain = estEndBat4 !== null ? estEndBat4 : '-';
             const isSelected = selectedSingleTripId === t.id;
 
+            // 캘린더 매칭 확인 (뱃지 표시 여부)
+            const dList = new Date(t.timestamp || t.created_at);
+            const dayEventsForMatch = (window.calendarEvents || []).filter(evt => {
+              if (!evt.start_time) return false;
+              const ed = new Date(evt.start_time);
+              return ed.getFullYear() === dList.getFullYear() && ed.getMonth() === dList.getMonth() && ed.getDate() === dList.getDate();
+            });
+            const matchedEvt = matchCalendarToTrip(t, dayEventsForMatch, new Set());
+            const placeName = matchedEvt ? cleanCalendarSummary(matchedEvt.summary) : '';
+            const tripJson = JSON.stringify(t).replace(/"/g, '&quot;');
+
             return `
               <div onclick="showSingleTripOnMap('${t.id}')" class="bg-gray-900/80 p-3 rounded-xl border ${isSelected ? 'border-amber-500/80 ring-1 ring-amber-500/40' : 'border-gray-800'} space-y-1.5 text-xs overflow-hidden cursor-pointer hover:border-amber-500/50 transition active:scale-[0.99]">
                 <div class="flex justify-between items-center border-b border-gray-800/80 pb-1">
@@ -2874,6 +2947,9 @@
                   <span>🔋 사용 -${Math.round(t.useBattery || 0)}% (잔량 ${batRemain}%) | 🌡️ 외기: ${temp}</span>
                   <span class="font-bold text-indigo-400">⚡ 전비: ${eff} km/kWh</span>
                 </div>
+                ${matchedEvt ? `
+                  <div onclick="event.stopPropagation(); showTripBubble(${tripJson}, event)" class="bubble-calendar-tag">📅 ${placeName}</div>
+                ` : ''}
                 <div class="text-[10px] ${isSelected ? 'text-amber-400' : 'text-blue-400/50'} text-right">👆 터치하여 지도에서 이 구간 보기</div>
               </div>
             `;
