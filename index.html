@@ -1948,7 +1948,7 @@
   // ============================================================
   // 📌 최근 운행일 + 캘린더 표시
   // ============================================================
-  function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
+  async function renderDaySummaryAndSingleTrips(vehicleData, calendarEvents = []) {
     const tripsData = (Array.isArray(vehicleData) && vehicleData.length > 0)
       ? vehicleData
       : (typeof allTrips !== 'undefined' && Array.isArray(allTrips) && allTrips.length > 0)
@@ -2056,6 +2056,11 @@
     const singleContainer = document.getElementById('single-trips-container');
     if (!singleContainer) return;
 
+    // 📌 GPS 매칭 정확도를 위해, 오늘 트립들의 location_list를 먼저 불러온다.
+    // (백그라운드 전체 히스토리 로드는 용량 때문에 location_list를 비워두므로,
+    // 여기서 그날 트립 몇 개만 targeted로 채워야 GPS 매칭이 제대로 동작한다)
+    await Promise.all(sameDayTrips.map(t => ensureTripPath(t)));
+
     const usedEventIds = new Set();
     const orderedTrips = [...sameDayTrips].reverse();
 
@@ -2130,7 +2135,7 @@
   // ============================================================
   // 📌 최근 상태 히스토리
   // ============================================================
-  function renderVehicleStateHistory(vehicleHistoryRecords) {
+  async function renderVehicleStateHistory(vehicleHistoryRecords) {
     const container = document.getElementById('state-history-container');
     if (!container) return;
 
@@ -2182,6 +2187,15 @@
 
     // 📌 이 날짜 그룹에 속한 캘린더 일정 (히스토리에서도 최근 운행일 카드와 동일하게 매칭 표시)
     const allCalendarEvents = window.calendarEvents || window.calendarEventsList || [];
+
+    // 📌 GPS 매칭 정확도를 위해, 화면에 표시될 driving 항목들의 location_list를 먼저 채운다.
+    const drivingItemsToMatch = [];
+    sortedDates.forEach(dateStr => {
+      grouped[dateStr].forEach(item => {
+        if (item.type === 'driving') drivingItemsToMatch.push(item.data);
+      });
+    });
+    await Promise.all(drivingItemsToMatch.map(t => ensureTripPath(t)));
 
     let html = '';
     sortedDates.forEach(dateStr => {
