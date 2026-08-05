@@ -3,6 +3,7 @@ package com.example.tesladash  // 👈 본인의 패키지명으로 유지
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -55,6 +56,10 @@ class MainActivity : AppCompatActivity() {
             builtInZoomControls = true
         }
 
+        // 👇 서드파티 쿠키 허용 (테슬라 OAuth 인증 완료 단계에서 필요)
+        CookieManager.getInstance().setAcceptCookie(true)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+
         // 2. JavaScript Bridge 등록 (HTML에서 window.AndroidBridge로 접근)
         webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
 
@@ -62,7 +67,12 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
-                Log.d(TAG, "🌐 URL 로딩 시도: $url")  // 👈 디버그용 로그
+
+                // 👇 화면(가디언 탭 로그창)에 URL을 직접 출력 (Logcat 대체용 디버그)
+                view?.evaluateJavascript(
+                    "if (typeof addLog === 'function') addLog('🌐 URL: ' + '${url.replace("'", "\\'")}');",
+                    null
+                )
 
                 // OAuth 콜백 감지: BASE_URL로 code 파라미터와 함께 돌아오는 경우
                 if (url.startsWith(BASE_URL) && url.contains("code=")) {
@@ -70,11 +80,15 @@ class MainActivity : AppCompatActivity() {
                     if (code != null) {
                         Log.d(TAG, "🔐 OAuth code 감지: ${code.take(10)}...")
                         view?.evaluateJavascript(
+                            "if (typeof addLog === 'function') addLog('🔐 code 감지: ${code.take(10)}...');" +
                             "window.handleOAuthCode('$code');",
                             null
                         )
                     } else {
-                        Log.w(TAG, "⚠️ code 파라미터를 찾지 못함: $url")
+                        view?.evaluateJavascript(
+                            "if (typeof addLog === 'function') addLog('⚠️ code 파라미터 없음');",
+                            null
+                        )
                     }
                     return true  // 실제 페이지 이동 차단 (origin/상태 유지)
                 }
@@ -98,7 +112,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        
         webView.webChromeClient = WebChromeClient()
 
         // 4. HTML 로드: 로컬 asset을 https origin(BASE_URL)으로 로드
