@@ -1,9 +1,11 @@
 package com.example.tesladash  // 👈 본인의 패키지명으로 유지
 
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -22,6 +24,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "TeslaDash"
         private const val RENDER_BASE_URL = "https://tesla-sentry.onrender.com"
+        private const val BASE_URL = "https://mdkdw1-ui.github.io/tesla-dash"
         private var mainActivityInstance: MainActivity? = null
 
         // FCM 서비스에서 호출할 토큰 주입 함수
@@ -55,10 +58,24 @@ class MainActivity : AppCompatActivity() {
         // 2. JavaScript Bridge 등록 (HTML에서 window.AndroidBridge로 접근)
         webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
 
-        // 3. WebViewClient (OAuth 리다이렉트를 WebView 내에서 처리)
+        // 3. WebViewClient (OAuth 리다이렉트를 WebView 내에서 가로채기)
         webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                // 모든 URL을 WebView에서 직접 처리 (외부 브라우저로 열지 않음)
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val url = request?.url?.toString() ?: return false
+
+                // OAuth 콜백 감지: BASE_URL로 code 파라미터와 함께 돌아오는 경우
+                if (url.startsWith("$BASE_URL?code=") || url.startsWith("$BASE_URL/?code=")) {
+                    val code = Uri.parse(url).getQueryParameter("code")
+                    if (code != null) {
+                        Log.d(TAG, "🔐 OAuth code 감지: ${code.take(10)}...")
+                        view?.evaluateJavascript(
+                            "window.handleOAuthCode('$code');",
+                            null
+                        )
+                    }
+                    return true  // 실제 페이지 이동 차단 (origin/상태 유지)
+                }
+                // 그 외 URL(테슬라 로그인 페이지 이동 등)은 WebView 내에서 정상 처리
                 return false
             }
 
@@ -80,8 +97,19 @@ class MainActivity : AppCompatActivity() {
 
         webView.webChromeClient = WebChromeClient()
 
-        // 4. HTML 로드 (assets/index.html)
-        webView.loadUrl("file:///android_asset/index.html")
+        // 4. HTML 로드: 로컬 asset을 https origin(BASE_URL)으로 로드
+        //    -> localStorage가 GitHub Pages와 동일 origin으로 취급되어 유지됨
+        val htmlContent = assets.open("index.html")
+            .bufferedReader(Charsets.UTF_8)
+            .use { it.readText() }
+
+        webView.loadDataWithBaseURL(
+            BASE_URL,
+            htmlContent,
+            "text/html",
+            "UTF-8",
+            BASE_URL
+        )
 
         // 5. 초기 FCM 토큰 가져오기 (onPageFinished에서도 하지만 미리 한 번)
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
