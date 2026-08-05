@@ -41,6 +41,9 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     
-    // ✅ FCM (푸시 알림) 추가
+    // FCM (푸시 알림)
     implementation("com.google.firebase:firebase-messaging-ktx:23.4.0")
+    
+    // ✅ Custom Tabs (OAuth 로그인용) - 새로 추가!
+    implementation("androidx.browser:browser:1.8.0")
 }
