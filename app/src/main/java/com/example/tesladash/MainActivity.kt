@@ -44,7 +44,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         mainActivityInstance = this
 
-        // 🔥 딥링크로 실행된 경우 code 처리
+        // 딥링크로 실행된 경우 code 처리
         intent?.data?.let { uri ->
             handleDeepLink(uri)
         }
@@ -67,27 +67,20 @@ class MainActivity : AppCompatActivity() {
 
         webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
 
-        // 🔥 수정된 WebViewClient
         webView.webViewClient = object : WebViewClient() {
             
-            // 👇 커스텀 스킴(딥링크) 처리
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
                 
-                // tesladashk:// 스킴 감지
                 if (url.startsWith("tesladashk://")) {
                     try {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                         startActivity(intent)
-                        Log.d(TAG, "✅ 딥링크 실행: $url")
+                        Log.d(TAG, "✅ Deep link: $url")
                     } catch (e: Exception) {
-                        Log.e(TAG, "❌ 딥링크 실행 실패: ${e.message}")
-                        view?.evaluateJavascript(
-                            "if (typeof addLog === 'function') addLog('⚠️ 딥링크 실패: ${url}');",
-                            null
-                        )
+                        Log.e(TAG, "❌ Deep link failed: ${e.message}")
                     }
-                    return true  // WebView가 직접 로드하지 않도록 차단
+                    return true
                 }
                 
                 return false
@@ -111,7 +104,6 @@ class MainActivity : AppCompatActivity() {
 
         webView.webChromeClient = WebChromeClient()
 
-        // HTML 로드
         val htmlContent = assets.open("index.html")
             .bufferedReader(Charsets.UTF_8)
             .use { it.readText() }
@@ -124,7 +116,6 @@ class MainActivity : AppCompatActivity() {
             null
         )
 
-        // 초기 FCM 토큰 주입
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (task.isSuccessful) {
                 task.result?.let { token ->
@@ -137,7 +128,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 🔥 새로운 Intent로 실행될 때 (딥링크)
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         intent?.data?.let { uri ->
@@ -145,7 +135,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 🔥 딥링크 처리
     private fun handleDeepLink(uri: Uri) {
         val code = uri.getQueryParameter("code")
         if (code != null) {
@@ -175,6 +164,18 @@ class MainActivity : AppCompatActivity() {
         fun stopGuardianService() {
             Log.d(TAG, "🛑 Guardian STOP")
             stopKeepAlive()
+        }
+
+        @JavascriptInterface
+        fun sendOAuthCode(code: String) {
+            Log.d(TAG, "🔐 OAuth from Vercel: ${code.take(10)}...")
+            runOnUiThread {
+                webView.evaluateJavascript(
+                    "if (typeof addLog === 'function') addLog('🔐 code 수신: ${code.take(10)}...');" +
+                    "window.handleOAuthCode('$code');",
+                    null
+                )
+            }
         }
     }
 
