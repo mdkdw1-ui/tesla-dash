@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -507,9 +506,13 @@
           <input type="number" id="guardianPollInterval" value="5" min="2" class="w-full bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-white font-mono focus:border-blue-500 outline-none">
         </div>
 
-        <div class="flex gap-2 text-xs pt-1">
-          <button type="button" onclick="testFlashLights()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2.5 rounded-xl transition shadow-md">⚡ 전조등 테스트</button>
-          <button type="button" onclick="testNtfy()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2.5 rounded-xl transition shadow-md">📱 ntfy 테스트</button>
+        <!-- 👇 블루투스 인사 버튼 추가 -->
+        <div class="flex gap-2 text-xs pt-1 flex-wrap">
+          <button type="button" onclick="testFlashLights()" class="flex-1 min-w-[80px] bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2.5 rounded-xl transition shadow-md">⚡ 전조등 테스트</button>
+          <button type="button" onclick="testNtfy()" class="flex-1 min-w-[80px] bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2.5 rounded-xl transition shadow-md">📱 ntfy 테스트</button>
+          <button type="button" onclick="triggerBluetoothGreeting()" class="flex-1 min-w-[80px] bg-blue-800/50 hover:bg-blue-700 text-blue-200 border border-blue-500/50 font-bold py-2.5 rounded-xl transition shadow-md">
+            🚗 블루투스 인사
+          </button>
         </div>
 
         <div class="space-y-1.5">
@@ -579,8 +582,6 @@
     </div>
   </div>
 
-
-
 </body>
 </html>
 
@@ -595,12 +596,17 @@
     ntfyTopic: 'MJYAz6ZyjXiujaTDpJ' 
   };
 
+  // ============================================================
+  // 👇 Render.com 서버 URL (실제 앱 주소로 변경 필수)
+  // ============================================================
+  const RENDER_BASE_URL = "https://tesla-sentry.onrender.com";
+
   let supabaseClient = null;
   let currentMainTab = localStorage.getItem('tesla_main_tab') || 'monitor';
   let currentSubTab = localStorage.getItem('tesla_sub_tab') || 'vehicle';
   
-  const VERCEL_BACKEND_URL = "https://tesla-sync-api.vercel.app/api/exchange";
-    const CLIENT_ID = "272ac00a-248e-4fa7-8027-1fc06e8e9a24";
+  const VERCEL_BACKEND_URL = "https://my-tesla-app-six.vercel.app/api/exchange";
+  const CLIENT_ID = "272ac00a-248e-4fa7-8027-1fc06e8e9a24";
   const REDIRECT_URI = "https://mdkdw1-ui.github.io/tesla-dash";
 
   let accessToken = localStorage.getItem('tesla_access_token') || "";
@@ -612,14 +618,14 @@
   let map = null, geocoder = null;
   let allTrips = [], vehicleRows = [];
   let currentPolylines = [], currentInfoWindow = null;
-  let selectedSingleTripId = null; // 일간 목록에서 선택된 단일 운행 (지도 하이라이트용)
-  let lastDailySelection = null; // 마지막으로 본 일간 날짜 (모드 전환 시 유지)
-  let lastWeeklySelection = null; // 마지막으로 본 주간 {year, month, week} (모드 전환 시 유지)
-  let lastMonthlySelection = null; // {year, month}
-  let lastQuarterlySelection = null; // {year, quarter}
-  let lastHalfSelection = null; // {year, half}
-  let lastYearlySelection = null; // {year}
-  let lastSingleSelection = null; // tripId
+  let selectedSingleTripId = null;
+  let lastDailySelection = null;
+  let lastWeeklySelection = null;
+  let lastMonthlySelection = null;
+  let lastQuarterlySelection = null;
+  let lastHalfSelection = null;
+  let lastYearlySelection = null;
+  let lastSingleSelection = null;
   let currentFilterMode = localStorage.getItem('tesla_filter_mode') || 'daily';
   
   let addressCache = {};
@@ -629,6 +635,73 @@
   } catch(e) {}
 
   let chartDegRec = null, chartRangeRec = null;
+
+  // ============================================================
+  // Render 연동 함수들
+  // ============================================================
+  async function syncTokensToRender(accessToken, refreshToken) {
+    if (!RENDER_BASE_URL || RENDER_BASE_URL.includes("<YOUR-RENDER-APP>")) {
+      addLog('⚠️ Render URL이 설정되지 않았습니다. 토큰 동기화를 건너뜁니다.');
+      return;
+    }
+    try {
+      const res = await fetch(`${RENDER_BASE_URL}/api/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken, refreshToken })
+      });
+      if (res.ok) {
+        addLog('✅ Tesla tokens synced to Render server');
+      } else {
+        addLog('⚠️ Render token sync failed: ' + res.status);
+      }
+    } catch (e) {
+      addLog('⚠️ Render token sync error: ' + e.message);
+    }
+  }
+
+  async function syncGuardianState(active) {
+    if (!RENDER_BASE_URL || RENDER_BASE_URL.includes("<YOUR-RENDER-APP>")) {
+      addLog('⚠️ Render URL이 설정되지 않아 가디언 상태 동기화를 건너뜁니다.');
+      return;
+    }
+    try {
+      const res = await fetch(`${RENDER_BASE_URL}/api/guardian`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active })
+      });
+      if (res.ok) {
+        addLog(`✅ Guardian state synced to Render: ${active ? 'ON' : 'OFF'}`);
+      } else {
+        addLog('⚠️ Guardian state sync failed: ' + res.status);
+      }
+    } catch (e) {
+      addLog('⚠️ Guardian state sync error: ' + e.message);
+    }
+  }
+
+  async function triggerBluetoothGreeting() {
+    if (!RENDER_BASE_URL || RENDER_BASE_URL.includes("<YOUR-RENDER-APP>")) {
+      addLog('⚠️ Render URL이 설정되지 않아 블루투스 인사를 보낼 수 없습니다.');
+      return;
+    }
+    addLog('🚗 블루투스 인사 신호 전송 중...');
+    try {
+      const res = await fetch(`${RENDER_BASE_URL}/api/sentry/warning`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        addLog('✅ 전조등 점멸 및 알림 발송 완료');
+      } else {
+        addLog('⚠️ 인사 신호 실패: ' + (data.message || 'unknown'));
+      }
+    } catch (e) {
+      addLog('❌ 인사 신호 오류: ' + e.message);
+    }
+  }
 
   // ============================================================
   // Supabase 클라이언트 초기화
@@ -643,7 +716,7 @@
   }
 
   // ============================================================
-  // 토큰 교환 함수
+  // 토큰 교환 함수 (Render 동기화 추가)
   // ============================================================
   async function exchangeCodeWithBackend(code) {
     if (typeof addLog === 'function') addLog('🔄 Vercel 백엔드로 인증 코드 전송 중...');
@@ -661,6 +734,9 @@
         accessToken = data.access_token || data.token;
         localStorage.setItem('tesla_access_token', accessToken);
        
+        // 👇 Render 서버로 토큰 동기화
+        await syncTokensToRender(accessToken, data.refresh_token);
+
         const el = document.getElementById('displayAccessToken');
         if (el) el.innerText = accessToken;
        
@@ -1067,7 +1143,7 @@
   }
 
   // ============================================================
-  // 가디언 모드 관련 함수
+  // 가디언 모드 관련 함수 (Render 상태 동기화 추가)
   // ============================================================
   async function handleToggleChange(checkbox) {
     const labelText = document.getElementById('toggleLabelText');
@@ -1079,6 +1155,10 @@
       if (sentryResult.isActive) {
         if (labelText) { labelText.innerText = '기능 ON'; labelText.style.color = '#10b981'; }
         if (typeof addLog === 'function') addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언 서비스를 시작합니다.');
+        
+        // 👇 Render에 가디언 ON 동기화
+        await syncGuardianState(true);
+        
         if (typeof checkGuardianVehicleState === 'function') checkGuardianVehicleState();
 
         if (window.AndroidBridge) {
@@ -1110,6 +1190,8 @@
       if (labelText) { labelText.innerText = '기능 OFF'; labelText.style.color = '#aaa'; }
       if (window.AndroidBridge) window.AndroidBridge.stopGuardianService();
       if (typeof stopMonitoring === 'function') stopMonitoring();
+      // 👇 Render에 가디언 OFF 동기화
+      await syncGuardianState(false);
       updateGuardianStatusUI('sleep', '❓ 로그인/데이터 필요');
     }
   }
@@ -1517,10 +1599,6 @@
         try {
           console.log("🔄 [2단계 시작] 백그라운드 전체 히스토리 로드 중... (경량 컬럼만)");
 
-          // 📌 location_list/raw_data는 용량이 커서 전체 히스토리 로드 때는 제외한다.
-          // - driving의 location_list는 지도에 그릴 때 ensureTripPath()로 그때그때 가져온다.
-          // - vehicle의 raw_data는 최근 100건만 유지(실시간 상태 표시용 폴백),
-          //   그 이전 기록은 배터리 추정(estimateTripBattery)에 필요한 battery_level/updated_at만 있으면 된다.
           const DRIVING_LIGHT_SELECT = 'id,vehicle_id,created_at,start_time,end_time,move_km,distance_km,use_battery,duration_min,driving_time,start_dong,end_dong,start_address,end_address,outside_temp';
           const CHARGING_LIGHT_SELECT = 'id,vehicle_id,date,created_at,now_battery,added_battery_level,start_battery,added_charging,added_battery_range';
           const VEHICLE_LIGHT_SELECT = 'id,vehicle_id,state,battery_level,battery_range,added_charging,outside_temp,duration_min,start_time,end_time,est_battery_range,use_battery_level,odometer,tpms_fl,tpms_fr,tpms_rl,tpms_rr,updated_at';
@@ -1552,7 +1630,7 @@
             startDong: r.start_dong || '출발지',
             endDong: r.end_dong || '도착지',
             outsideTemp: r.outside_temp ?? null,
-            path: [], // 📌 location_list는 지도에서 필요할 때 ensureTripPath()로 불러온다
+            path: [],
             endAddress: r.end_address || r.endAddress || '',
             startAddress: r.start_address || r.startAddress || '',
             endBattery: r.end_battery || null,
@@ -1592,19 +1670,16 @@
     const latest = vehicleRows[0];
     const currentBattery = Number(latest.battery_level ?? 0);
     
-    // vehicle-range-card에 배터리 잔량 표시
     const batEl = document.getElementById('v-battery-val');
     if (batEl && currentBattery > 0) {
       batEl.innerText = `${Math.round(currentBattery)}%`;
     }
     
-    // odometer 표시
     const odoEl = document.getElementById('v-odometer-val');
     if (odoEl && latest.odometer) {
       odoEl.innerText = `${Math.round(Number(latest.odometer)).toLocaleString()} km`;
     }
     
-    // 예상 주행거리 계산
     if (currentBattery > 0) {
       const estEl = document.getElementById('v-est-range-val');
       if (estEl) {
@@ -1736,7 +1811,6 @@
       if (extra) extra.innerText = "";
     }
 
-    // 배터리 잔량 업데이트 (vehicle 테이블 기준)
     const batEl = document.getElementById('v-battery-val');
     if (batEl && batVal > 0) {
       batEl.innerText = `${Math.round(batVal)}%`;
@@ -1790,7 +1864,6 @@
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  // 📌 트립의 도착 좌표 추출 (location_list/path의 마지막 지점)
   function getTripEndCoords(trip) {
     const path = trip.path || trip.location_list;
     if (!Array.isArray(path) || path.length === 0) return { lat: null, lng: null };
@@ -1801,7 +1874,7 @@
   }
 
   // ============================================================
-  // 📌 캘린더 일정 제목에서 지역명 접두어 제거 (예: "고양 덕양 달인대보칼국수 향동점" → "달인대보칼국수 향동점")
+  // 📌 캘린더 일정 제목에서 지역명 접두어 제거
   // ============================================================
   const CALENDAR_REGION_PREFIXES = [
     '서울', '경기', '인천', '고양', '덕양', '일산', '파주', '포천', '의정부', '시흥', '김포', '양주', '동두천',
@@ -1820,36 +1893,19 @@
   }
 
   // ============================================================
-  // 📌 캘린더-주행 매칭 함수 (GPS 우선 + 텍스트 매칭 폴백)
+  // 📌 캘린더-주행 매칭 함수 (GPS 우선 + 텍스트 매칭 폴백) - 전역 최적 배정
   // ============================================================
-  function matchCalendarToTrip(trip, dayEvents, usedEventIds = new Set()) {
-    if (!trip || !dayEvents || dayEvents.length === 0) return null;
-
-    // ① GPS 매칭 우선: 도착지 기준 1km 이내 + 당일 가장 빠른(이른 시간) 일정부터
+  function getGpsMatchCandidatesForTrip(trip, events) {
     const { lat: endLat, lng: endLng } = getTripEndCoords(trip);
-    if (endLat !== null && endLng !== null) {
-      const GPS_MATCH_RADIUS_KM = 1;
-      const gpsCandidates = dayEvents
-        .filter(evt => {
-          const evtId = evt.id || `${evt.summary}_${evt.location}`;
-          if (usedEventIds.has(evtId)) return false;
-          if (evt.gps_lat === null || evt.gps_lat === undefined || evt.gps_lng === null || evt.gps_lng === undefined) return false;
-          return getDistanceKm(endLat, endLng, Number(evt.gps_lat), Number(evt.gps_lng)) <= GPS_MATCH_RADIUS_KM;
-        })
-        .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+    if (endLat === null || endLng === null) return [];
+    const GPS_MATCH_RADIUS_KM = 1;
+    return events
+      .filter(evt => evt.gps_lat !== null && evt.gps_lat !== undefined && evt.gps_lng !== null && evt.gps_lng !== undefined)
+      .map(evt => ({ evt, dist: getDistanceKm(endLat, endLng, Number(evt.gps_lat), Number(evt.gps_lng)) }))
+      .filter(x => x.dist <= GPS_MATCH_RADIUS_KM);
+  }
 
-      if (gpsCandidates.length > 0) {
-        const matched = gpsCandidates[0];
-        const evtId = matched.id || `${matched.summary}_${matched.location}`;
-        usedEventIds.add(evtId);
-        return matched;
-      }
-    }
-
-    // ② 텍스트 매칭 (GPS 매칭 실패 시 폴백)
-    // 📌 endDong/endAddress(도착지)만 사용한다. startDong(출발지)은 매칭에서 제외 —
-    // 왕복 운행에서 출발지가 우연히 얼마 전 방문했던 장소와 같으면, 그 장소의
-    // 캘린더 일정이 "돌아오는 길" 트립에도 잘못 매칭되는 문제가 있었다.
+  function textMatchTrip(trip, dayEvents, usedEventIds) {
     const endDong = (trip.endDong || '').toLowerCase();
     const endAddress = (trip.endAddress || trip.end_address || '').toLowerCase();
 
@@ -1862,15 +1918,14 @@
 
       const evtText = `${evt.summary || ''} ${evt.location || ''}`.toLowerCase();
       const evtLoc = (evt.location || '').toLowerCase();
-      
-      let score = 0;
 
+      let score = 0;
       if (endDong && evtText.includes(endDong)) score += 10;
       if (endAddress && evtLoc && (evtLoc.includes(endAddress) || endAddress.includes(evtLoc))) score += 8;
-      
+
       const cleanSummary = (evt.summary || '').replace(/\s*\([^)]*\)/g, '').toLowerCase();
       if (endAddress && cleanSummary && (cleanSummary.includes(endAddress) || endAddress.includes(cleanSummary))) score += 6;
-      
+
       if (/\d/.test(evtText) && endAddress) {
         const numbers = evtText.match(/\d+/g) || [];
         const targetNumbers = endAddress.match(/\d+/g) || [];
@@ -1890,16 +1945,72 @@
       usedEventIds.add(evtId);
       return bestMatch;
     }
-
     return null;
   }
 
+  // 하루치 트립 배열 + 이벤트 배열을 받아서, 트립 → 매칭된 이벤트(Map)를 돌려준다.
+  function matchCalendarEventsForDay(trips, events) {
+    const result = new Map();
+    if (!events || events.length === 0 || !trips || trips.length === 0) return result;
+
+    const usedEventIds = new Set();
+    const usedTrips = new Set();
+
+    // GPS 매칭: 모든 트립-이벤트 후보쌍을 거리 오름차순 정렬
+    const pairs = [];
+    trips.forEach(trip => {
+      getGpsMatchCandidatesForTrip(trip, events).forEach(({ evt, dist }) => {
+        pairs.push({ trip, evt, dist });
+      });
+    });
+    pairs.sort((a, b) => a.dist - b.dist);
+
+    pairs.forEach(({ trip, evt }) => {
+      if (usedTrips.has(trip)) return;
+      const evtId = evt.id || `${evt.summary}_${evt.location}`;
+      if (usedEventIds.has(evtId)) return;
+      result.set(trip, evt);
+      usedEventIds.add(evtId);
+      usedTrips.add(trip);
+    });
+
+    // 텍스트 매칭 폴백
+    trips.forEach(trip => {
+      if (usedTrips.has(trip)) return;
+      const evt = textMatchTrip(trip, events, usedEventIds);
+      if (evt) {
+        result.set(trip, evt);
+        usedTrips.add(trip);
+      }
+    });
+
+    return result;
+  }
+
+  function matchCalendarToTrip(trip, dayEvents, usedEventIds = new Set()) {
+    if (!trip || !dayEvents || dayEvents.length === 0) return null;
+
+    const candidates = getGpsMatchCandidatesForTrip(trip, dayEvents)
+      .filter(({ evt }) => {
+        const evtId = evt.id || `${evt.summary}_${evt.location}`;
+        return !usedEventIds.has(evtId);
+      })
+      .sort((a, b) => a.dist - b.dist);
+
+    if (candidates.length > 0) {
+      const matched = candidates[0].evt;
+      const evtId = matched.id || `${matched.summary}_${matched.location}`;
+      usedEventIds.add(evtId);
+      return matched;
+    }
+
+    return textMatchTrip(trip, dayEvents, usedEventIds);
+  }
+
   // ============================================================
-  // 📌 트립 배터리 잔량 추정 (driving 테이블엔 start/end_battery 컬럼이
-  // 없으므로, vehicle 테이블의 실제 battery_level 이력을 트립 시작/종료
-  // 시각과 가장 가까운 기록으로 매칭해서 계산한다)
+  // 📌 트립 배터리 잔량 추정
   // ============================================================
-  const MAX_BATTERY_MATCH_GAP_MS = 3 * 60 * 60 * 1000; // 3시간 이내 기록만 신뢰
+  const MAX_BATTERY_MATCH_GAP_MS = 3 * 60 * 60 * 1000;
 
   function findClosestBatteryLevel(targetTime) {
     if (!targetTime || !vehicleRows || vehicleRows.length === 0) return null;
@@ -1932,7 +2043,6 @@
     let endBattery = findClosestBatteryLevel(endTime);
     const batUsed = Math.round(Number(trip.useBattery ?? trip.use_battery ?? 0));
 
-    // 둘 중 하나만 있으면 사용량으로 나머지를 역산
     if (startBattery === null && endBattery !== null) {
       startBattery = Math.round(endBattery + batUsed);
     } else if (endBattery === null && startBattery !== null) {
@@ -1972,7 +2082,6 @@
 
     const latestTrip = sortedTrips[0];
     const latestDate = new Date(latestTrip.timestamp || latestTrip.created_at);
-    // 📌 새벽 5시 이전 운행은 전날로 묶는다 (예: 8/3 00:19 운행 → "8/2" 운행일로 표시)
     const targetYmd = getLogicalDayKey(latestDate);
     const [targetYear, targetMonth, targetDay] = targetYmd.split('-').map(Number);
 
@@ -2005,7 +2114,7 @@
     setText('v-day-time', `${totalDriveMins}분`);
     setText('v-day-kwh', `${totalKwh.toFixed(1)} kWh`);
 
-    // 📌 당일 캘린더 일정 - summary만 표시 (운행일과 동일한 새벽 5시 경계 기준)
+    // 당일 캘린더 일정
     const calContainer = document.getElementById('calendar-events-container');
     const calList = document.getElementById('calendar-events-list');
     
@@ -2029,7 +2138,7 @@
       }
     }
 
-    // 📌 당일 이동 경로
+    // 당일 이동 경로
     const pathContainer = document.getElementById('day-path-container');
     const pathText = document.getElementById('day-path-text');
     if (pathContainer && pathText && sameDayTrips.length > 0) {
@@ -2050,19 +2159,14 @@
       };
     }
 
-    // 📌 개별 운행 목록 (캘린더 매칭된 경우에만 팝업)
-    // 같은 날의 여러 트립이 하나의 캘린더 일정을 중복으로 매칭하지 않도록
-    // usedEventIds를 이 날짜의 모든 트립에서 공유한다.
+    // 개별 운행 목록
     const singleContainer = document.getElementById('single-trips-container');
     if (!singleContainer) return;
 
-    // 📌 GPS 매칭 정확도를 위해, 오늘 트립들의 location_list를 먼저 불러온다.
-    // (백그라운드 전체 히스토리 로드는 용량 때문에 location_list를 비워두므로,
-    // 여기서 그날 트립 몇 개만 targeted로 채워야 GPS 매칭이 제대로 동작한다)
     await Promise.all(sameDayTrips.map(t => ensureTripPath(t)));
 
-    const usedEventIds = new Set();
     const orderedTrips = [...sameDayTrips].reverse();
+    const dayMatchMap = matchCalendarEventsForDay(sameDayTrips, dayCalendarEvents);
 
     singleContainer.innerHTML = orderedTrips.map((trip, idx) => {
       const mins = trip.durationMin ?? trip.duration_min ?? 0;
@@ -2074,7 +2178,7 @@
       const timeStr = formatTimeAmPm(tripTime);
       const temp = (trip.outsideTemp !== undefined && trip.outsideTemp !== null) ? `${Math.round(Number(trip.outsideTemp))}°C` : '—';
 
-      const matchedEvt = matchCalendarToTrip(trip, dayCalendarEvents, usedEventIds);
+      const matchedEvt = dayMatchMap.get(trip) || null;
       const hasCalendarMatch = !!matchedEvt;
 
       return `
@@ -2185,10 +2289,8 @@
       return;
     }
 
-    // 📌 이 날짜 그룹에 속한 캘린더 일정 (히스토리에서도 최근 운행일 카드와 동일하게 매칭 표시)
     const allCalendarEvents = window.calendarEvents || window.calendarEventsList || [];
 
-    // 📌 GPS 매칭 정확도를 위해, 화면에 표시될 driving 항목들의 location_list를 먼저 채운다.
     const drivingItemsToMatch = [];
     sortedDates.forEach(dateStr => {
       grouped[dateStr].forEach(item => {
@@ -2204,7 +2306,8 @@
         if (!evt.start_time) return false;
         return getLogicalDayKey(evt.start_time) === dateStr;
       });
-      const historyUsedEventIds = new Set();
+      const dayDrivingTrips = grouped[dateStr].filter(item => item.type === 'driving').map(item => item.data);
+      const historyMatchMap = matchCalendarEventsForDay(dayDrivingTrips, dayCalendarEventsForHistory);
 
       html += `
         <div class="glass-card p-3.5 rounded-2xl space-y-2.5 shadow-lg overflow-hidden">
@@ -2226,7 +2329,7 @@
           const { endBattery: estEndBat3 } = estimateTripBattery(t);
           const batRemain = estEndBat3 !== null ? estEndBat3 : '-';
           const temp = (t.outsideTemp !== undefined && t.outsideTemp !== null) ? `${Math.round(Number(t.outsideTemp))}°C` : '—';
-          const matchedHistEvt = matchCalendarToTrip(t, dayCalendarEventsForHistory, historyUsedEventIds);
+          const matchedHistEvt = historyMatchMap.get(t) || null;
 
           html += `
             <div class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800/90 space-y-1 text-xs cursor-pointer hover:border-blue-500/60 transition shadow-md active:scale-[0.99] overflow-hidden">
@@ -2318,7 +2421,7 @@
         startDong: r.start_dong || '출발지',
         endDong: r.end_dong || '도착지',
         outsideTemp: r.outside_temp ?? null,
-        path: [], // 📌 location_list는 지도에서 필요할 때 ensureTripPath()로 불러온다
+        path: [],
         endAddress: r.end_address || r.endAddress || '',
         startAddress: r.start_address || r.startAddress || '',
         endBattery: r.end_battery || null,
@@ -2373,7 +2476,6 @@
       if (days.length > 0) {
         const sel = document.getElementById('ctrl-sub-select');
         if (sel) {
-          // 이전에 보던 날짜가 여전히 존재하면 복원, 없으면 최신 날짜
           sel.value = (lastDailySelection && days.includes(lastDailySelection)) ? lastDailySelection : days[0];
           lastDailySelection = sel.value;
         }
@@ -2400,7 +2502,6 @@
         </div>
       `;
       if (lastWeeklySelection) {
-        // 이전에 보던 주간이 있으면 복원
         if (document.getElementById('ctrl-year')) document.getElementById('ctrl-year').value = lastWeeklySelection.year;
         if (document.getElementById('ctrl-month')) document.getElementById('ctrl-month').value = lastWeeklySelection.month;
         if (document.getElementById('ctrl-week')) document.getElementById('ctrl-week').value = lastWeeklySelection.week;
@@ -2499,29 +2600,26 @@
     renderDrivingData();
   }
 
-  // 📌 리셋 버튼: 가장 최근 날짜로 초기화 (현재 모드 유지)
   function resetDrivingFilter() {
     if (!allTrips || allTrips.length === 0) return;
     
     const mode = currentFilterMode;
     const latestTrip = allTrips[0];
     const latestDate = new Date(latestTrip.timestamp || latestTrip.created_at);
-    selectedSingleTripId = null; // 리셋 시 지도 하이라이트도 초기화
+    selectedSingleTripId = null;
 
     if (mode === 'daily') {
       const sel = document.getElementById('ctrl-sub-select');
       if (sel) {
         const ymd = getLogicalDayKey(latestDate);
-        // 옵션에 해당 날짜가 있는지 확인
         const options = Array.from(sel.options);
         const exists = options.some(opt => opt.value === ymd);
         if (exists) {
           sel.value = ymd;
         } else {
-          // 없으면 가장 최근 옵션 선택
           sel.selectedIndex = 0;
         }
-        lastDailySelection = sel.value; // 리셋 = 최신값으로 기억 갱신
+        lastDailySelection = sel.value;
         renderDrivingData();
       }
     } else if (mode === 'weekly') {
@@ -2532,7 +2630,7 @@
         ySel.value = latestDate.getFullYear();
         mSel.value = latestDate.getMonth() + 1;
         wSel.value = Math.ceil(latestDate.getDate() / 7);
-        lastWeeklySelection = { year: ySel.value, month: mSel.value, week: wSel.value }; // 리셋 = 최신값으로 기억 갱신
+        lastWeeklySelection = { year: ySel.value, month: mSel.value, week: wSel.value };
         renderDrivingData();
       }
     } else if (mode === 'monthly') {
@@ -2579,9 +2677,6 @@
     }
   }
 
-  // 📌 각 모드(일간/주간/월간/분기/반년/년/단일)별로 마지막으로 보던 위치를
-  // lastXXXSelection에 반드시 기록한다. 이걸 빠뜨리면 다른 모드로 갔다가
-  // 돌아왔을 때 "오늘/이번주/이번분기"로 되돌아가 버린다.
   function shiftDrivingFilter(offset) {
     if (currentFilterMode === 'daily') {
       const sel = document.getElementById('ctrl-sub-select');
@@ -2648,7 +2743,7 @@
   }
 
   // ============================================================
-  // 📌 지도에서 경로(폴리라인)를 탭하면 해당 운행의 간단한 정보를 보여준다.
+  // 📌 지도 폴리라인 및 인포윈도우
   // ============================================================
   function buildTripInfoWindowHtml(t) {
     const dist = Number(t.moveKM ?? t.move_km ?? 0).toFixed(1);
@@ -2689,9 +2784,7 @@
   }
 
   // ============================================================
-  // 📌 트립의 경로(location_list)를 필요할 때만 Supabase에서 가져온다.
-  // 백그라운드 전체 히스토리 로드는 용량이 큰 location_list/raw_data를
-  // 제외하고 가져오므로, 지도에 그릴 때 이 함수로 그때그때 보충한다.
+  // 📌 트립 경로 로딩 (location_list)
   // ============================================================
   window.tripPathCache = window.tripPathCache || {};
   async function ensureTripPath(trip) {
@@ -2711,8 +2804,7 @@
   }
 
   // ============================================================
-  // 📌 일간 목록에서 개별 운행 클릭 시 → 지도에서 그 구간만 하이라이트
-  // 같은 항목을 다시 누르면 선택 해제되고 당일 전체 경로로 복귀
+  // 📌 일간 목록에서 개별 운행 클릭 시 지도 하이라이트
   // ============================================================
   async function showSingleTripOnMap(tripId) {
     if (selectedSingleTripId === tripId) {
@@ -2728,7 +2820,6 @@
 
     let path = await ensureTripPath(trip);
     if (!Array.isArray(path) || path.length === 0 || !map || !window.kakao || !kakao.maps) {
-      // 좌표 없어도 목록 선택 표시는 갱신
       const dailyList = document.getElementById('daily-trips-list');
       if (dailyList) renderDrivingData();
       return;
@@ -2757,7 +2848,6 @@
     currentPolylines.push(polyline);
     map.setBounds(bounds);
 
-    // 목록의 선택 표시(테두리)만 갱신 (지도는 다시 지우지 않도록 목록 HTML만 새로 그림)
     const dailyList = document.getElementById('daily-trips-list');
     if (dailyList && currentFilterMode === 'daily') {
       const selectedDay = document.getElementById('ctrl-sub-select')?.value || '';
@@ -2840,7 +2930,6 @@
       matched = allTrips.filter(t => new Date(t.timestamp || t.created_at).getFullYear() === selY);
     }
 
-    // 통계 수치 업데이트
     const totalCount = matched.length;
     const totalDist = matched.reduce((sum, t) => sum + (t.moveKM || 0), 0);
     const totalBat = matched.reduce((sum, t) => sum + (t.useBattery || 0), 0);
@@ -2857,7 +2946,6 @@
     if (statEnergy) statEnergy.innerText = `-${totalBat.toFixed(1)}% (${totalKwh.toFixed(1)}kWh)`;
     if (statEff) statEff.innerText = `${avgEff} km/kWh`;
 
-    // 일간 선택 시 상세 목록
     const dailyContainer = document.getElementById('daily-trips-container');
     const dailyList = document.getElementById('daily-trips-list');
     const dailyTitle = document.getElementById('daily-trips-title');
@@ -2873,11 +2961,11 @@
         if (matched.length === 0) {
           dailyList.innerHTML = `<span class="text-gray-500">해당 일자의 운행 기록이 없습니다.</span>`;
         } else {
-          const dailyUsedEventIds = new Set();
           const dayEventsForMatch = (window.calendarEvents || []).filter(evt => {
             if (!evt.start_time) return false;
             return getLogicalDayKey(evt.start_time) === selectedDay;
           });
+          const dailyMatchMap = matchCalendarEventsForDay(matched, dayEventsForMatch);
 
           dailyList.innerHTML = matched.map((t, idx) => {
             const tripDate = new Date(t.timestamp || t.created_at);
@@ -2889,8 +2977,7 @@
             const batRemain = estEndBat4 !== null ? estEndBat4 : '-';
             const isSelected = selectedSingleTripId === t.id;
 
-            // 📌 같은 날의 트립들이 usedEventIds를 공유해서 한 캘린더 일정을 중복 매칭하지 않는다.
-            const matchedEvt = matchCalendarToTrip(t, dayEventsForMatch, dailyUsedEventIds);
+            const matchedEvt = dailyMatchMap.get(t) || null;
             const placeName = matchedEvt ? cleanCalendarSummary(matchedEvt.summary) : '';
 
             return `
@@ -2921,7 +3008,6 @@
       if (dailyContainer) dailyContainer.classList.add('hidden');
     }
 
-    // TOP 5
     const top5Container = document.getElementById('top5-container');
     const top5List = document.getElementById('top5-list');
     if (currentFilterMode !== 'single' && currentFilterMode !== 'daily') {
@@ -2966,7 +3052,6 @@
       if (top5Container) top5Container.classList.add('hidden');
     }
 
-    // 지도 폴리라인 (필요한 경로만 그때그때 불러온다)
     if (matched.length > 0 && typeof map !== 'undefined' && map && window.kakao && kakao.maps) {
       await Promise.all(matched.map(t => ensureTripPath(t)));
 
@@ -3070,7 +3155,6 @@
     }
   }
 
-  // 📌 지난달 보기: 현재 월의 바로 이전 달로만 이동
   function selectPrevMonthOnly() {
     const ySel = document.getElementById('m-select-year');
     const mSel = document.getElementById('m-select-month');
@@ -3443,7 +3527,6 @@
       return;
     }
 
-    // KPI 업데이트
     const lastSoh = sohData[sohData.length - 1];
     const lastMaxRange = maxRangeData[maxRangeData.length - 1];
     const lastCap = capacityData[capacityData.length - 1];
@@ -3669,7 +3752,7 @@
     }
   }, 1500);
 
-  console.log('🚗 Tesla Command Hub v1.45 로드 완료');
+  console.log('🚗 Tesla Command Hub v1.45 로드 완료 (Render 연동 포함)');
 </script>
 </body>
   </html>
