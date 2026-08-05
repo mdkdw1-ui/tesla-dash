@@ -7,6 +7,7 @@ import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -66,7 +67,32 @@ class MainActivity : AppCompatActivity() {
 
         webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
 
+        // 🔥 수정된 WebViewClient
         webView.webViewClient = object : WebViewClient() {
+            
+            // 👇 커스텀 스킴(딥링크) 처리
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val url = request?.url?.toString() ?: return false
+                
+                // tesladashk:// 스킴 감지
+                if (url.startsWith("tesladashk://")) {
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                        startActivity(intent)
+                        Log.d(TAG, "✅ 딥링크 실행: $url")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ 딥링크 실행 실패: ${e.message}")
+                        view?.evaluateJavascript(
+                            "if (typeof addLog === 'function') addLog('⚠️ 딥링크 실패: ${url}');",
+                            null
+                        )
+                    }
+                    return true  // WebView가 직접 로드하지 않도록 차단
+                }
+                
+                return false
+            }
+
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
 
@@ -85,7 +111,7 @@ class MainActivity : AppCompatActivity() {
 
         webView.webChromeClient = WebChromeClient()
 
-        // HTML 로드 (BASE_URL origin으로 고정)
+        // HTML 로드
         val htmlContent = assets.open("index.html")
             .bufferedReader(Charsets.UTF_8)
             .use { it.readText() }
