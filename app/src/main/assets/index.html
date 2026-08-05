@@ -93,7 +93,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 2026</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -1104,7 +1104,7 @@ window.handleOAuthCode = function(code) {
 
     if (typeof addLog === 'function') addLog(`🔐 이동 주소: ${teslaAuthUrl}`);
 
-    if (!CLIENT_ID || CLIENT_ID === "272ac00a-248e-4fa7-8027-1fc06e8e9a24") {
+    if (!CLIENT_ID || CLIENT_ID === "") {
         alert("코드 안의 CLIENT_ID를 테슬라 개발자 콘솔에서 발급받은 값으로 변경해주세요.");
         return;
     }
@@ -3774,4 +3774,4 @@ window.handleOAuthCode = function(code) {
   console.log('🚗 Tesla Command Hub v1.45 로드 완료 (Render 연동 포함)');
 </script>
 </body>
-  </html>
+            </html>
