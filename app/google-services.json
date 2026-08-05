@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "246766153687",
+    "project_id": "teslaapp-a6415",
+    "storage_bucket": "teslaapp-a6415.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:246766153687:android:f46171355dc7fce1a72592",
+        "android_client_info": {
+          "package_name": "com.example.tesladash"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD34BOhi8x3OUtj4yAIZsXeh8ZfMeYKr7I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
