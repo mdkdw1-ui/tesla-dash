@@ -62,9 +62,10 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
+                Log.d(TAG, "🌐 URL 로딩 시도: $url")  // 👈 디버그용 로그
 
                 // OAuth 콜백 감지: BASE_URL로 code 파라미터와 함께 돌아오는 경우
-                if (url.startsWith("$BASE_URL?code=") || url.startsWith("$BASE_URL/?code=")) {
+                if (url.startsWith(BASE_URL) && url.contains("code=")) {
                     val code = Uri.parse(url).getQueryParameter("code")
                     if (code != null) {
                         Log.d(TAG, "🔐 OAuth code 감지: ${code.take(10)}...")
@@ -72,6 +73,8 @@ class MainActivity : AppCompatActivity() {
                             "window.handleOAuthCode('$code');",
                             null
                         )
+                    } else {
+                        Log.w(TAG, "⚠️ code 파라미터를 찾지 못함: $url")
                     }
                     return true  // 실제 페이지 이동 차단 (origin/상태 유지)
                 }
@@ -95,6 +98,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        
         webView.webChromeClient = WebChromeClient()
 
         // 4. HTML 로드: 로컬 asset을 https origin(BASE_URL)으로 로드
