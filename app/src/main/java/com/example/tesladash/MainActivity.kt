@@ -24,6 +24,11 @@ class MainActivity : AppCompatActivity() {
     private var keepAliveJob: Thread? = null
     private var isKeepAliveRunning = false
 
+    // 🔽 OAuth code 처리용 상태
+    private var cachedHtmlContent: String? = null
+    private var pendingOAuthCode: String? = null
+    private var lastProcessedCode: String? = null
+
     companion object {
         private const val TAG = "TeslaDash"
         private const val RENDER_BASE_URL = "https://tesla-sentry.onrender.com"
@@ -44,11 +49,6 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         mainActivityInstance = this
-
-        // 딥링크로 실행된 경우 code 처리
-        intent?.data?.let { uri ->
-            handleDeepLink(uri)
-        }
 
         webView = WebView(this)
         setContentView(webView)
@@ -76,10 +76,9 @@ class MainActivity : AppCompatActivity() {
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
-
                 Log.d(TAG, "🌐 shouldOverrideUrlLoading: $url")
 
-                // 🔥 커스텀 스킴 (딥링크) 처리
+                // 🔥 커스텀 스킴(딥링크) — OAuth 콜백의 정상 경로
                 if (url.startsWith("tesladashk://")) {
                     Log.d(TAG, "✅ Custom scheme detected: $url")
                     try {
@@ -88,33 +87,15 @@ class MainActivity : AppCompatActivity() {
                         Log.d(TAG, "✅ Deep link intent launched")
                         return true
                     } catch (e: Exception) {
-                        Log.e(TAG, "❌ Deep link failed: ${e.message}")
-                        // fallback: code 추출해서 직접 처리
-                        val code = Uri.parse(url).getQueryParameter("code")
-                        if (code != null) {
-                            view?.evaluateJavascript(
-                                "window.handleOAuthCode('$code');",
-                                null
-                            )
-                        }
+                        Log.e(TAG, "❌ Deep link intent failed: ${e.message}, fallback으로 직접 처리")
+                        handleDeepLink(Uri.parse(url))
                         return true
                     }
                 }
 
-                // 🔥 Vercel callback에서 code 감지 (보험)
-                if (url.contains("code=") && url.contains("tesla-sync-api.vercel.app")) {
-                    val code = Uri.parse(url).getQueryParameter("code")
-                    if (code != null) {
-                        Log.d(TAG, "🔐 Code in Vercel URL: ${code.take(10)}...")
-                        view?.evaluateJavascript(
-                            "if (typeof addLog === 'function') addLog('🔐 Vercel code: ${code.take(10)}...');" +
-                            "window.handleOAuthCode('$code');",
-                            null
-                        )
-                        return true
-                    }
-                }
-
+                // ⚠️ auth.tesla.com, Vercel callback 등 나머지는 절대 여기서 가로채지 않는다.
+                // 여기서 취소하면 Tesla → callback.js 로의 실제 이동이 막혀
+                // "인증완료 / 로딩중..." 화면에서 멈춘다. code 회수는 onPageFinished에서.
                 return false
             }
 
@@ -122,20 +103,28 @@ class MainActivity : AppCompatActivity() {
                 super.onPageFinished(view, url)
                 Log.d(TAG, "📄 onPageFinished: $url")
 
-                // URL에 code가 있으면 직접 처리 (최종 안전장치)
-                if (url != null && url.contains("code=")) {
+                // 🛟 안전장치: Vercel 콜백 페이지가 실제로 로드된 경우, code를 바로 회수
+                if (url != null && url.contains("code=") && url.contains("tesla-sync-api.vercel.app")) {
                     val code = Uri.parse(url).getQueryParameter("code")
                     if (code != null) {
-                        Log.d(TAG, "🔐 Code in onPageFinished: ${code.take(10)}...")
-                        view?.evaluateJavascript(
-                            "if (typeof addLog === 'function') addLog('🔐 onPageFinished code: ${code.take(10)}...');" +
-                            "window.handleOAuthCode('$code');",
-                            null
-                        )
+                        Log.d(TAG, "🔐 [Fallback] Vercel 콜백 URL에서 code 회수: ${code.take(10)}...")
+                        processOAuthCode(code)
+                        return
                     }
                 }
 
-                // FCM 토큰 재주입
+                // index.html이 (재)로드 완료된 시점에 대기 중인 code를 주입
+                pendingOAuthCode?.let { code ->
+                    Log.d(TAG, "🔐 대기 중이던 code 주입: ${code.take(10)}...")
+                    webView.evaluateJavascript(
+                        "if (typeof addLog === 'function') addLog('🔐 로그인 코드 처리 중: ${code.take(10)}...');" +
+                        "if (typeof window.handleOAuthCode === 'function') { window.handleOAuthCode('$code'); } " +
+                        "else { console.error('handleOAuthCode 함수를 찾을 수 없습니다.'); }",
+                        null
+                    )
+                    pendingOAuthCode = null
+                }
+
                 FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
                     if (task.isSuccessful) {
                         task.result?.let { token ->
@@ -151,13 +140,13 @@ class MainActivity : AppCompatActivity() {
 
         webView.webChromeClient = WebChromeClient()
 
-        val htmlContent = assets.open("index.html")
+        cachedHtmlContent = assets.open("index.html")
             .bufferedReader(Charsets.UTF_8)
             .use { it.readText() }
 
         webView.loadDataWithBaseURL(
             BASE_URL,
-            htmlContent,
+            cachedHtmlContent,
             "text/html",
             "UTF-8",
             null
@@ -173,6 +162,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        // 콜드 스타트(딥링크로 앱이 처음 실행된 경우) — webView 준비 이후 처리
+        intent?.data?.let { uri -> handleDeepLink(uri) }
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -185,13 +177,32 @@ class MainActivity : AppCompatActivity() {
     private fun handleDeepLink(uri: Uri) {
         val code = uri.getQueryParameter("code")
         if (code != null) {
-            Log.d(TAG, "🔐 Deep Link code: ${code.take(10)}...")
-            showToast("✅ code 수신: ${code.take(10)}...")
-            webView.evaluateJavascript(
-                "if (typeof addLog === 'function') addLog('🔐 Deep Link code: ${code.take(10)}...');" +
-                "window.handleOAuthCode('$code');",
-                null
-            )
+            processOAuthCode(code)
+        }
+    }
+
+    // 🔽 OAuth code 처리 공통 로직
+    // WebView가 Tesla/Vercel 페이지로 이동해 있어 index.html의 JS 컨텍스트
+    // (window.handleOAuthCode)가 사라진 상태이므로, index.html을 다시 로드한 뒤
+    // onPageFinished에서 code를 주입한다.
+    private fun processOAuthCode(code: String) {
+        if (code == lastProcessedCode) {
+            Log.d(TAG, "⏭️ 이미 처리된 code, 중복 스킵: ${code.take(10)}...")
+            return
+        }
+        lastProcessedCode = code
+
+        Log.d(TAG, "🔐 OAuth code 처리 시작: ${code.take(10)}...")
+        showToast("✅ 로그인 코드 수신, 처리 중...")
+
+        pendingOAuthCode = code
+        val html = cachedHtmlContent
+        if (html != null) {
+            webView.post {
+                webView.loadDataWithBaseURL(BASE_URL, html, "text/html", "UTF-8", null)
+            }
+        } else {
+            Log.e(TAG, "❌ cachedHtmlContent가 아직 준비되지 않았습니다.")
         }
     }
 
@@ -224,15 +235,8 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun sendOAuthCode(code: String) {
-            Log.d(TAG, "🔐 OAuth from Vercel: ${code.take(10)}...")
-            showToast("✅ code 수신: ${code.take(10)}...")
-            runOnUiThread {
-                webView.evaluateJavascript(
-                    "if (typeof addLog === 'function') addLog('🔐 code 수신: ${code.take(10)}...');" +
-                    "window.handleOAuthCode('$code');",
-                    null
-                )
-            }
+            Log.d(TAG, "🔐 OAuth from JS bridge: ${code.take(10)}...")
+            runOnUiThread { processOAuthCode(code) }
         }
     }
 
