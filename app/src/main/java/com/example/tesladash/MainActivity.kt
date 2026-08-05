@@ -1,4 +1,4 @@
-package com.example.tesladash  // 👈 본인의 패키지명으로 유지
+package com.example.tesladash
 
 import android.net.Uri
 import android.os.Bundle
@@ -28,7 +28,6 @@ class MainActivity : AppCompatActivity() {
         private const val BASE_URL = "https://mdkdw1-ui.github.io/tesla-dash"
         private var mainActivityInstance: MainActivity? = null
 
-        // FCM 서비스에서 호출할 토큰 주입 함수
         fun injectFcmToken(token: String) {
             mainActivityInstance?.runOnUiThread {
                 mainActivityInstance?.webView?.evaluateJavascript(
@@ -44,7 +43,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         mainActivityInstance = this
 
-        // 1. WebView 설정
         webView = WebView(this)
         setContentView(webView)
 
@@ -54,28 +52,27 @@ class MainActivity : AppCompatActivity() {
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             setSupportZoom(true)
             builtInZoomControls = true
+            // file:// → 외부 fetch 허용
+            allowUniversalAccessFromFileURLs = true
         }
 
-        // 👇 서드파티 쿠키 허용 (테슬라 OAuth 인증 완료 단계에서 필요)
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
 
-        // 2. JavaScript Bridge 등록 (HTML에서 window.AndroidBridge로 접근)
         webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
 
-        // 3. WebViewClient (OAuth 리다이렉트를 WebView 내에서 가로채기)
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
 
-                // 👇 화면(가디언 탭 로그창)에 URL을 직접 출력 (Logcat 대체용 디버그)
+                // 디버그 로그
                 view?.evaluateJavascript(
                     "if (typeof addLog === 'function') addLog('🌐 URL: ' + '${url.replace("'", "\\'")}');",
                     null
                 )
 
-                // OAuth 콜백 감지: BASE_URL로 code 파라미터와 함께 돌아오는 경우
-                if (url.startsWith(BASE_URL) && url.contains("code=")) {
+                // ✅ OAuth 콜백 감지 (code 파라미터가 있으면 무조건 감지)
+                if (url.contains("code=")) {
                     val code = Uri.parse(url).getQueryParameter("code")
                     if (code != null) {
                         Log.d(TAG, "🔐 OAuth code 감지: ${code.take(10)}...")
@@ -90,15 +87,28 @@ class MainActivity : AppCompatActivity() {
                             null
                         )
                     }
-                    return true  // 실제 페이지 이동 차단 (origin/상태 유지)
+                    return true
                 }
-                // 그 외 URL(테슬라 로그인 페이지 이동 등)은 WebView 내에서 정상 처리
+
+                // 테슬라 로그인 페이지 등은 WebView 내에서 정상 처리
                 return false
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                // 페이지 로드 완료 시 FCM 토큰 재주입 (안전장치)
+
+                // 🔥 안전장치: 페이지 로드 후에도 URL에 code가 있으면 처리
+                if (url != null && url.contains("code=")) {
+                    val code = Uri.parse(url).getQueryParameter("code")
+                    if (code != null) {
+                        view?.evaluateJavascript(
+                            "window.handleOAuthCode('$code');",
+                            null
+                        )
+                    }
+                }
+
+                // FCM 토큰 재주입
                 FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
                     if (task.isSuccessful) {
                         task.result?.let { token ->
@@ -114,8 +124,7 @@ class MainActivity : AppCompatActivity() {
 
         webView.webChromeClient = WebChromeClient()
 
-        // 4. HTML 로드: 로컬 asset을 https origin(BASE_URL)으로 로드
-        //    -> localStorage가 GitHub Pages와 동일 origin으로 취급되어 유지됨
+        // HTML 로드 (BASE_URL origin으로 고정)
         val htmlContent = assets.open("index.html")
             .bufferedReader(Charsets.UTF_8)
             .use { it.readText() }
@@ -125,10 +134,10 @@ class MainActivity : AppCompatActivity() {
             htmlContent,
             "text/html",
             "UTF-8",
-            BASE_URL
+            null
         )
 
-        // 5. 초기 FCM 토큰 가져오기 (onPageFinished에서도 하지만 미리 한 번)
+        // 초기 FCM 토큰 주입
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (task.isSuccessful) {
                 task.result?.let { token ->
@@ -147,14 +156,10 @@ class MainActivity : AppCompatActivity() {
         mainActivityInstance = null
     }
 
-    // ============================================================
-    // JavaScript Interface (HTML에서 호출 가능)
-    // ============================================================
     inner class AndroidBridge {
         @JavascriptInterface
         fun startGuardianService(accessToken: String, vehicleId: String, interval: Int, topic: String) {
             Log.d(TAG, "🚀 Guardian START | Token: ${accessToken.take(20)}... Vehicle: $vehicleId")
-            // Keep-Alive 시작 (Render 서버 수면 방지)
             startKeepAlive()
         }
 
@@ -165,9 +170,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ============================================================
-    // Keep-Alive (8분마다 /health 핑)
-    // ============================================================
     private fun startKeepAlive() {
         if (isKeepAliveRunning) return
         isKeepAliveRunning = true
@@ -183,7 +185,7 @@ class MainActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     Log.e(TAG, "⚠️ Keep-Alive failed: ${e.message}")
                 }
-                Thread.sleep(8 * 60 * 1000L) // 8분
+                Thread.sleep(8 * 60 * 1000L)
             }
         }.apply { start() }
     }
