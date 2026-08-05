@@ -1,208 +1,161 @@
-package com.example.tesladash
+export default function handler(req, res) {
+  const { code } = req.query;
 
-import android.content.Intent
-import android.net.Uri
-import android.os.Bundle
-import android.util.Log
-import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.messaging.FirebaseMessaging
-import okhttp3.*
-import java.io.IOException
+  if (!code) {
+    return res.status(400).send('Authorization code missing');
+  }
 
-class MainActivity : AppCompatActivity() {
+  const safeCode = encodeURIComponent(code);
 
-    private lateinit var webView: WebView
-    private val client = OkHttpClient()
-    private var keepAliveJob: Thread? = null
-    private var isKeepAliveRunning = false
-
-    companion object {
-        private const val TAG = "TeslaDash"
-        private const val RENDER_BASE_URL = "https://tesla-sentry.onrender.com"
-        private const val BASE_URL = "https://mdkdw1-ui.github.io/tesla-dash"
-        private var mainActivityInstance: MainActivity? = null
-
-        fun injectFcmToken(token: String) {
-            mainActivityInstance?.runOnUiThread {
-                mainActivityInstance?.webView?.evaluateJavascript(
-                    "window.fcmToken = '$token'; console.log('✅ FCM Token injected');",
-                    null
-                )
-                Log.d(TAG, "✅ FCM Token injected: $token")
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.status(200).send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Tesla Login Redirect</title>
+        <style>
+            body {
+                background-color: #0b0c10;
+                color: #f3f4f6;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+                margin: 0;
+                padding: 20px;
+                text-align: center;
             }
-        }
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        mainActivityInstance = this
-
-        // 딥링크로 실행된 경우 code 처리
-        intent?.data?.let { uri ->
-            handleDeepLink(uri)
-        }
-
-        webView = WebView(this)
-        setContentView(webView)
-
-        webView.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            setSupportZoom(true)
-            builtInZoomControls = true
-            allowUniversalAccessFromFileURLs = true
-            cacheMode = WebSettings.LOAD_NO_CACHE
-        }
-
-        CookieManager.getInstance().setAcceptCookie(true)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
-
-        webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
-
-        webView.webViewClient = object : WebViewClient() {
+            .card {
+                background: linear-gradient(145deg, rgba(22, 24, 32, 0.95), rgba(15, 17, 23, 0.9));
+                backdrop-filter: blur(12px);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 24px;
+                padding: 40px 30px;
+                max-width: 400px;
+                width: 100%;
+                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            }
+            .icon {
+                font-size: 64px;
+                margin-bottom: 20px;
+            }
+            h1 {
+                font-size: 20px;
+                font-weight: 700;
+                margin-bottom: 12px;
+            }
+            p {
+                color: #9ca3af;
+                font-size: 14px;
+                margin-bottom: 24px;
+                line-height: 1.6;
+            }
+            .btn {
+                display: inline-block;
+                background: linear-gradient(to right, #3b82f6, #6366f1);
+                color: white;
+                font-weight: 700;
+                padding: 14px 32px;
+                border-radius: 12px;
+                text-decoration: none;
+                font-size: 16px;
+                transition: opacity 0.2s;
+                border: none;
+                cursor: pointer;
+            }
+            .btn:active {
+                opacity: 0.8;
+            }
+            .spinner {
+                display: inline-block;
+                width: 24px;
+                height: 24px;
+                border: 3px solid rgba(255,255,255,0.1);
+                border-top-color: #3b82f6;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+                margin: 0 auto 16px;
+            }
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+            .status {
+                font-size: 13px;
+                color: #6b7280;
+                margin-top: 12px;
+            }
+            .hidden {
+                display: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <div class="icon">✅</div>
+            <h1>로그인 인증 완료</h1>
+            <p>테슬라 계정 인증이 성공적으로 완료되었습니다.<br>앱으로 돌아가는 중입니다...</p>
             
-            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val url = request?.url?.toString() ?: return false
+            <div id="loading">
+                <div class="spinner"></div>
+                <div class="status">잠시만 기다려주세요...</div>
+            </div>
+            
+            <div id="manualLink" class="hidden">
+                <p style="color:#f59e0b;font-size:13px;">⚠️ 자동으로 이동하지 않으면 아래 버튼을 눌러주세요</p>
+                <a href="tesladashk://oauth-callback?code=${safeCode}" class="btn">
+                    🔗 앱으로 돌아가기
+                </a>
+            </div>
+        </div>
+
+        <script>
+            console.log('🔐 Vercel Callback: code received');
+            console.log('📋 Code: ${safeCode.substring(0, 20)}...');
+            
+            // 1️⃣ Android Bridge로 전달 시도
+            function tryAndroidBridge() {
+                if (window.AndroidBridge && window.AndroidBridge.sendOAuthCode) {
+                    console.log('✅ Android Bridge found, sending code...');
+                    window.AndroidBridge.sendOAuthCode('${safeCode}');
+                    return true;
+                }
+                console.log('⚠️ Android Bridge not found');
+                return false;
+            }
+
+            // 2️⃣ 딥링크로 이동
+            function tryDeepLink() {
+                console.log('🔗 Trying deep link...');
+                var deepLinkUrl = "tesladashk://oauth-callback?code=${safeCode}";
+                window.location.href = deepLinkUrl;
+            }
+
+            // 실행: Bridge 먼저 시도, 실패하면 딥링크
+            var bridgeSuccess = tryAndroidBridge();
+            
+            if (!bridgeSuccess) {
+                // Bridge 실패 → 딥링크 시도
+                setTimeout(function() {
+                    tryDeepLink();
+                }, 500);
                 
-                if (url.startsWith("tesladashk://")) {
-                    try {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                        startActivity(intent)
-                        Log.d(TAG, "✅ Deep link: $url")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "❌ Deep link failed: ${e.message}")
-                    }
-                    return true
-                }
-                
-                return false
+                // 3초 후에도 안 돌아가면 수동 링크 표시
+                setTimeout(function() {
+                    document.getElementById('loading').classList.add('hidden');
+                    document.getElementById('manualLink').classList.remove('hidden');
+                }, 3000);
+            } else {
+                // Bridge 성공 → 2초 후 자동 닫힘
+                setTimeout(function() {
+                    document.getElementById('loading').innerHTML = '<div class="status">✅ 앱으로 복귀 완료</div>';
+                }, 1500);
             }
-
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-
-                FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        task.result?.let { token ->
-                            view?.evaluateJavascript(
-                                "window.fcmToken = '$token'; console.log('🔄 FCM Token re-injected');",
-                                null
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        webView.webChromeClient = WebChromeClient()
-
-        val htmlContent = assets.open("index.html")
-            .bufferedReader(Charsets.UTF_8)
-            .use { it.readText() }
-
-        webView.loadDataWithBaseURL(
-            BASE_URL,
-            htmlContent,
-            "text/html",
-            "UTF-8",
-            null
-        )
-
-        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (task.isSuccessful) {
-                task.result?.let { token ->
-                    webView.evaluateJavascript(
-                        "window.fcmToken = '$token'; console.log('🔑 FCM Token pre-injected');",
-                        null
-                    )
-                }
-            }
-        }
-    }
-
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        intent?.data?.let { uri ->
-            handleDeepLink(uri)
-        }
-    }
-
-    private fun handleDeepLink(uri: Uri) {
-        val code = uri.getQueryParameter("code")
-        if (code != null) {
-            Log.d(TAG, "🔐 Deep Link code: ${code.take(10)}...")
-            webView.evaluateJavascript(
-                "if (typeof addLog === 'function') addLog('🔐 Deep Link code: ${code.take(10)}...');" +
-                "window.handleOAuthCode('$code');",
-                null
-            )
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        stopKeepAlive()
-        mainActivityInstance = null
-    }
-
-    inner class AndroidBridge {
-        @JavascriptInterface
-        fun startGuardianService(accessToken: String, vehicleId: String, interval: Int, topic: String) {
-            Log.d(TAG, "🚀 Guardian START")
-            startKeepAlive()
-        }
-
-        @JavascriptInterface
-        fun stopGuardianService() {
-            Log.d(TAG, "🛑 Guardian STOP")
-            stopKeepAlive()
-        }
-
-        @JavascriptInterface
-        fun sendOAuthCode(code: String) {
-            Log.d(TAG, "🔐 OAuth from Vercel: ${code.take(10)}...")
-            runOnUiThread {
-                webView.evaluateJavascript(
-                    "if (typeof addLog === 'function') addLog('🔐 code 수신: ${code.take(10)}...');" +
-                    "window.handleOAuthCode('$code');",
-                    null
-                )
-            }
-        }
-    }
-
-    private fun startKeepAlive() {
-        if (isKeepAliveRunning) return
-        isKeepAliveRunning = true
-
-        keepAliveJob = Thread {
-            while (isKeepAliveRunning) {
-                try {
-                    val request = Request.Builder()
-                        .url("$RENDER_BASE_URL/health")
-                        .build()
-                    client.newCall(request).execute().close()
-                    Log.d(TAG, "💓 Keep-Alive ping sent")
-                } catch (e: Exception) {
-                    Log.e(TAG, "⚠️ Keep-Alive failed: ${e.message}")
-                }
-                Thread.sleep(8 * 60 * 1000L)
-            }
-        }.apply { start() }
-    }
-
-    private fun stopKeepAlive() {
-        isKeepAliveRunning = false
-        keepAliveJob?.interrupt()
-        keepAliveJob = null
-        Log.d(TAG, "⏹️ Keep-Alive stopped")
-    }
+        </script>
+    </body>
+    </html>
+  `);
 }
