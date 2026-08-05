@@ -1,5 +1,6 @@
 package com.example.tesladash
 
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -52,7 +53,6 @@ class MainActivity : AppCompatActivity() {
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             setSupportZoom(true)
             builtInZoomControls = true
-            // file:// → 외부 fetch 허용
             allowUniversalAccessFromFileURLs = true
         }
 
@@ -62,42 +62,61 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
 
         webView.webViewClient = object : WebViewClient() {
+
+            // 🔥 핵심: 페이지 로드 시작 시 code 감지 (동일 origin 리다이렉트도 잡음)
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+
+                // 디버그 로그
+                view?.evaluateJavascript(
+                    "if (typeof addLog === 'function') addLog('🔄 onPageStarted: ' + '${url?.replace("'", "\\'") ?: ""}');",
+                    null
+                )
+
+                if (url != null && url.contains("code=")) {
+                    val code = Uri.parse(url).getQueryParameter("code")
+                    if (code != null) {
+                        Log.d(TAG, "🔐 OAuth code 감지 (onPageStarted): ${code.take(10)}...")
+                        view?.stopLoading() // 페이지 로드 중단!
+                        view?.evaluateJavascript(
+                            "if (typeof addLog === 'function') addLog('🔐 code 감지됨 (onPageStarted): ${code.take(10)}...');" +
+                            "window.handleOAuthCode('$code');",
+                            null
+                        )
+                    }
+                }
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
 
                 // 디버그 로그
                 view?.evaluateJavascript(
-                    "if (typeof addLog === 'function') addLog('🌐 URL: ' + '${url.replace("'", "\\'")}');",
+                    "if (typeof addLog === 'function') addLog('🌐 shouldOverrideUrlLoading: ' + '${url.replace("'", "\\'")}');",
                     null
                 )
 
-                // ✅ OAuth 콜백 감지 (code 파라미터가 있으면 무조건 감지)
+                // 혹시 여기서도 잡을 수 있으면 잡음 (보험)
                 if (url.contains("code=")) {
                     val code = Uri.parse(url).getQueryParameter("code")
                     if (code != null) {
-                        Log.d(TAG, "🔐 OAuth code 감지: ${code.take(10)}...")
+                        Log.d(TAG, "🔐 OAuth code 감지 (shouldOverride): ${code.take(10)}...")
                         view?.evaluateJavascript(
-                            "if (typeof addLog === 'function') addLog('🔐 code 감지: ${code.take(10)}...');" +
+                            "if (typeof addLog === 'function') addLog('🔐 code 감지됨 (shouldOverride): ${code.take(10)}...');" +
                             "window.handleOAuthCode('$code');",
-                            null
-                        )
-                    } else {
-                        view?.evaluateJavascript(
-                            "if (typeof addLog === 'function') addLog('⚠️ code 파라미터 없음');",
                             null
                         )
                     }
                     return true
                 }
 
-                // 테슬라 로그인 페이지 등은 WebView 내에서 정상 처리
                 return false
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
 
-                // 🔥 안전장치: 페이지 로드 후에도 URL에 code가 있으면 처리
+                // 🔥 안전장치: 페이지 로드 완료 후에도 code가 있으면 처리
                 if (url != null && url.contains("code=")) {
                     val code = Uri.parse(url).getQueryParameter("code")
                     if (code != null) {
