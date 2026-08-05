@@ -1,13 +1,12 @@
 package com.example.tesladash
 
-import android.graphics.Bitmap
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -44,6 +43,11 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         mainActivityInstance = this
 
+        // 🔥 딥링크로 실행된 경우 code 처리
+        intent?.data?.let { uri ->
+            handleDeepLink(uri)
+        }
+
         webView = WebView(this)
         setContentView(webView)
 
@@ -54,6 +58,7 @@ class MainActivity : AppCompatActivity() {
             setSupportZoom(true)
             builtInZoomControls = true
             allowUniversalAccessFromFileURLs = true
+            cacheMode = WebSettings.LOAD_NO_CACHE
         }
 
         CookieManager.getInstance().setAcceptCookie(true)
@@ -62,72 +67,9 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
 
         webView.webViewClient = object : WebViewClient() {
-
-            // 🔥 핵심: 페이지 로드 시작 시 code 감지 (동일 origin 리다이렉트도 잡음)
-            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                super.onPageStarted(view, url, favicon)
-
-                // 디버그 로그
-                view?.evaluateJavascript(
-                    "if (typeof addLog === 'function') addLog('🔄 onPageStarted: ' + '${url?.replace("'", "\\'") ?: ""}');",
-                    null
-                )
-
-                if (url != null && url.contains("code=")) {
-                    val code = Uri.parse(url).getQueryParameter("code")
-                    if (code != null) {
-                        Log.d(TAG, "🔐 OAuth code 감지 (onPageStarted): ${code.take(10)}...")
-                        view?.stopLoading() // 페이지 로드 중단!
-                        view?.evaluateJavascript(
-                            "if (typeof addLog === 'function') addLog('🔐 code 감지됨 (onPageStarted): ${code.take(10)}...');" +
-                            "window.handleOAuthCode('$code');",
-                            null
-                        )
-                    }
-                }
-            }
-
-            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val url = request?.url?.toString() ?: return false
-
-                // 디버그 로그
-                view?.evaluateJavascript(
-                    "if (typeof addLog === 'function') addLog('🌐 shouldOverrideUrlLoading: ' + '${url.replace("'", "\\'")}');",
-                    null
-                )
-
-                // 혹시 여기서도 잡을 수 있으면 잡음 (보험)
-                if (url.contains("code=")) {
-                    val code = Uri.parse(url).getQueryParameter("code")
-                    if (code != null) {
-                        Log.d(TAG, "🔐 OAuth code 감지 (shouldOverride): ${code.take(10)}...")
-                        view?.evaluateJavascript(
-                            "if (typeof addLog === 'function') addLog('🔐 code 감지됨 (shouldOverride): ${code.take(10)}...');" +
-                            "window.handleOAuthCode('$code');",
-                            null
-                        )
-                    }
-                    return true
-                }
-
-                return false
-            }
-
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
 
-                // 🔥 안전장치: 페이지 로드 완료 후에도 code가 있으면 처리
-                if (url != null && url.contains("code=")) {
-                    val code = Uri.parse(url).getQueryParameter("code")
-                    if (code != null) {
-                        view?.evaluateJavascript(
-                            "window.handleOAuthCode('$code');",
-                            null
-                        )
-                    }
-                }
-
-                // FCM 토큰 재주입
                 FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
                     if (task.isSuccessful) {
                         task.result?.let { token ->
@@ -169,6 +111,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 🔥 새로운 Intent로 실행될 때 (딥링크)
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        intent?.data?.let { uri ->
+            handleDeepLink(uri)
+        }
+    }
+
+    // 🔥 딥링크 처리
+    private fun handleDeepLink(uri: Uri) {
+        val code = uri.getQueryParameter("code")
+        if (code != null) {
+            Log.d(TAG, "🔐 Deep Link code: ${code.take(10)}...")
+            webView.evaluateJavascript(
+                "if (typeof addLog === 'function') addLog('🔐 Deep Link code: ${code.take(10)}...');" +
+                "window.handleOAuthCode('$code');",
+                null
+            )
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         stopKeepAlive()
@@ -178,7 +141,7 @@ class MainActivity : AppCompatActivity() {
     inner class AndroidBridge {
         @JavascriptInterface
         fun startGuardianService(accessToken: String, vehicleId: String, interval: Int, topic: String) {
-            Log.d(TAG, "🚀 Guardian START | Token: ${accessToken.take(20)}... Vehicle: $vehicleId")
+            Log.d(TAG, "🚀 Guardian START")
             startKeepAlive()
         }
 
