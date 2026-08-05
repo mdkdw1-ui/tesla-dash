@@ -1092,8 +1092,11 @@ window.handleOAuthCode = function(code) {
     return uri;
   }
 
-  function startTeslaLogin() {
-    const REDIRECT_URI_ENC = encodeURIComponent(REDIRECT_URI); // ← 여기 수정: getRedirectUri() 대신 상단에 정의된 고정 REDIRECT_URI 사용
+  
+ function startTeslaLogin() {
+    // 👇 Vercel Callback URL로 변경
+    const REDIRECT_URI = "https://tesla-sync-api.vercel.app/api/callback";
+    const REDIRECT_URI_ENC = encodeURIComponent(REDIRECT_URI);
     const SCOPE = encodeURIComponent("openid offline_access vehicle_device_data vehicle_cmds vehicle_charging_cmds");
     const STATE = Math.random().toString(36).substring(2, 15);
     
@@ -1101,13 +1104,15 @@ window.handleOAuthCode = function(code) {
 
     if (typeof addLog === 'function') addLog(`🔐 이동 주소: ${teslaAuthUrl}`);
 
-    if (!CLIENT_ID || CLIENT_ID === "본인의_실제_TESLA_CLIENT_ID") {
-      alert("코드 안의 CLIENT_ID를 테슬라 개발자 콘솔에서 발급받은 값으로 변경해주세요.");
-      return;
+    if (!CLIENT_ID || CLIENT_ID === "272ac00a-248e-4fa7-8027-1fc06e8e9a24") {
+        alert("코드 안의 CLIENT_ID를 테슬라 개발자 콘솔에서 발급받은 값으로 변경해주세요.");
+        return;
     }
 
     setTimeout(() => { window.location.href = teslaAuthUrl; }, 500);
-}
+} 
+  
+  
 
   async function fetchTeslaVehicles(token, isSilent = false) {
     if (!isSilent && typeof addLog === 'function') addLog('📡 차량 목록 및 VIN/ID 동기화 중...');
