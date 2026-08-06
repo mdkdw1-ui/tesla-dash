@@ -25,7 +25,11 @@ class MainActivity : AppCompatActivity() {
     private var isKeepAliveRunning = false
 
     // 🔽 OAuth code 처리용 상태
-    private var cachedHtmlContent: String? = null
+    private val cachedHtmlContent: String by lazy {
+        assets.open("index.html")
+            .bufferedReader(Charsets.UTF_8)
+            .use { it.readText() }
+    }
     private var pendingOAuthCode: String? = null
     private var lastProcessedCode: String? = null
 
@@ -94,8 +98,6 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // ⚠️ auth.tesla.com, Vercel callback 등 나머지는 절대 여기서 가로채지 않는다.
-                // 여기서 취소하면 Tesla → callback.js 로의 실제 이동이 막혀
-                // "인증완료 / 로딩중..." 화면에서 멈춘다. code 회수는 onPageFinished에서.
                 return false
             }
 
@@ -140,10 +142,7 @@ class MainActivity : AppCompatActivity() {
 
         webView.webChromeClient = WebChromeClient()
 
-        cachedHtmlContent = assets.open("index.html")
-            .bufferedReader(Charsets.UTF_8)
-            .use { it.readText() }
-
+        // 초기 HTML 로드
         webView.loadDataWithBaseURL(
             BASE_URL,
             cachedHtmlContent,
@@ -182,9 +181,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     // 🔽 OAuth code 처리 공통 로직
-    // WebView가 Tesla/Vercel 페이지로 이동해 있어 index.html의 JS 컨텍스트
-    // (window.handleOAuthCode)가 사라진 상태이므로, index.html을 다시 로드한 뒤
-    // onPageFinished에서 code를 주입한다.
     private fun processOAuthCode(code: String) {
         if (code == lastProcessedCode) {
             Log.d(TAG, "⏭️ 이미 처리된 code, 중복 스킵: ${code.take(10)}...")
@@ -196,13 +192,14 @@ class MainActivity : AppCompatActivity() {
         showToast("✅ 로그인 코드 수신, 처리 중...")
 
         pendingOAuthCode = code
-        val html = cachedHtmlContent
-        if (html != null) {
-            webView.post {
-                webView.loadDataWithBaseURL(BASE_URL, html, "text/html", "UTF-8", null)
-            }
-        } else {
-            Log.e(TAG, "❌ cachedHtmlContent가 아직 준비되지 않았습니다.")
+        webView.post {
+            webView.loadDataWithBaseURL(
+                BASE_URL,
+                cachedHtmlContent,
+                "text/html",
+                "UTF-8",
+                null
+            )
         }
     }
 
