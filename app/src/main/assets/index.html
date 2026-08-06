@@ -607,8 +607,8 @@
   
   const VERCEL_BACKEND_URL = "https://tesla-sync-api.vercel.app/api/exchange";
   const CLIENT_ID = "272ac00a-248e-4fa7-8027-1fc06e8e9a24";
-  const REDIRECT_URI = "https://mdkdw1-ui.github.io/tesla-dash";
-
+ const REDIRECT_URI = "https://tesla-sync-api.vercel.app/api/callback";
+ 
   let accessToken = localStorage.getItem('tesla_access_token') || "";
   let monitorTimer = null;
   let drivingSyncTimer = null;
@@ -3776,4 +3776,4 @@ window.handleOAuthCode = function(code) {
   console.log('🚗 Tesla Command Hub v1.45 로드 완료 (Render 연동 포함)');
 </script>
 </body>
-              </html>
+  </html>
