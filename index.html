@@ -732,42 +732,49 @@ window.handleOAuthCode = function(code) {
   // ============================================================
   // 토큰 교환 함수 (Render 동기화 추가)
   // ============================================================
+  
   async function exchangeCodeWithBackend(code) {
     if (typeof addLog === 'function') addLog('🔄 Vercel 백엔드로 인증 코드 전송 중...');
     try {
-      const response = await fetch(VERCEL_BACKEND_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: code, redirect_uri: REDIRECT_URI })
-      });
+        // 👇 명시적으로 Vercel callback URL 설정
+        const redirectUri = "https://tesla-sync-api.vercel.app/api/callback";
+        
+        const response = await fetch(VERCEL_BACKEND_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                code: code, 
+                redirect_uri: redirectUri   // 👈 명시적 전달
+            })
+        });
 
-      const data = await response.json();
-      window.history.replaceState({}, document.title, window.location.pathname);
+        const data = await response.json();
 
-      if (response.ok && (data.access_token || data.token)) {
-        accessToken = data.access_token || data.token;
-        localStorage.setItem('tesla_access_token', accessToken);
-       
-        // 👇 Render 서버로 토큰 동기화
-        await syncTokensToRender(accessToken, data.refresh_token);
+        // 🔥 Vercel 응답에서 access_token 추출 (Vercel /api/exchange 응답 구조 확인 필요)
+        if (response.ok && (data.access_token || data.token)) {
+            accessToken = data.access_token || data.token;
+            localStorage.setItem('tesla_access_token', accessToken);
+           
+            // Render 서버로 토큰 동기화
+            await syncTokensToRender(accessToken, data.refresh_token);
 
-        const el = document.getElementById('displayAccessToken');
-        if (el) el.innerText = accessToken;
-       
-        document.getElementById('loginSection')?.classList.add('hidden');
-        document.getElementById('tokenInfoSection')?.classList.remove('hidden');
-       
-        if (typeof addLog === 'function') addLog('✅ 테슬라 Access Token 교환 성공!');
-        if (typeof fetchTeslaVehicles === 'function') fetchTeslaVehicles(accessToken, true);
-      } else {
-        if (typeof addLog === 'function') addLog(`⚠️ 토큰 교환 실패: ${data.error || JSON.stringify(data)}`);
-      }
+            const el = document.getElementById('displayAccessToken');
+            if (el) el.innerText = accessToken;
+           
+            document.getElementById('loginSection')?.classList.add('hidden');
+            document.getElementById('tokenInfoSection')?.classList.remove('hidden');
+           
+            if (typeof addLog === 'function') addLog('✅ 테슬라 Access Token 교환 성공!');
+            if (typeof fetchTeslaVehicles === 'function') fetchTeslaVehicles(accessToken, true);
+        } else {
+            if (typeof addLog === 'function') addLog(`⚠️ 토큰 교환 실패: ${data.error || JSON.stringify(data)}`);
+        }
     } catch (err) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-      if (typeof addLog === 'function') addLog(`⚠️ 토큰 교환 요청 예외 발생: ${err.message}`);
-      console.error(err);
+        if (typeof addLog === 'function') addLog(`⚠️ 토큰 교환 요청 예외 발생: ${err.message}`);
+        console.error(err);
     }
-  }
+}
+  
 
   // ============================================================
   // DOM 초기화 및 로그인 상태 복원
@@ -1092,11 +1099,8 @@ window.handleOAuthCode = function(code) {
     return uri;
   }
 
-  
- function startTeslaLogin() {
-    // 👇 Vercel Callback URL로 변경
-    const REDIRECT_URI = "https://tesla-sync-api.vercel.app/api/callback";
-    const REDIRECT_URI_ENC = encodeURIComponent(REDIRECT_URI);
+  function startTeslaLogin() {
+    const REDIRECT_URI_ENC = encodeURIComponent(REDIRECT_URI); // ← 여기 수정: getRedirectUri() 대신 상단에 정의된 고정 REDIRECT_URI 사용
     const SCOPE = encodeURIComponent("openid offline_access vehicle_device_data vehicle_cmds vehicle_charging_cmds");
     const STATE = Math.random().toString(36).substring(2, 15);
     
@@ -1104,15 +1108,13 @@ window.handleOAuthCode = function(code) {
 
     if (typeof addLog === 'function') addLog(`🔐 이동 주소: ${teslaAuthUrl}`);
 
-    if (!CLIENT_ID || CLIENT_ID === "") {
-        alert("코드 안의 CLIENT_ID를 테슬라 개발자 콘솔에서 발급받은 값으로 변경해주세요.");
-        return;
+    if (!CLIENT_ID || CLIENT_ID === "본인의_실제_TESLA_CLIENT_ID") {
+      alert("코드 안의 CLIENT_ID를 테슬라 개발자 콘솔에서 발급받은 값으로 변경해주세요.");
+      return;
     }
 
     setTimeout(() => { window.location.href = teslaAuthUrl; }, 500);
-} 
-  
-  
+}
 
   async function fetchTeslaVehicles(token, isSilent = false) {
     if (!isSilent && typeof addLog === 'function') addLog('📡 차량 목록 및 VIN/ID 동기화 중...');
