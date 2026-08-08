@@ -40,14 +40,14 @@ class MainActivity : AppCompatActivity() {
         private var mainActivityInstance: MainActivity? = null
 
         fun injectFcmToken(token: String) {
-            mainActivityInstance?.runOnUiThread {
-                mainActivityInstance?.webView?.evaluateJavascript(
-                    "window.fcmToken = '$token'; console.log('✅ FCM Token injected');",
-                    null
-                )
-                Log.d(TAG, "✅ FCM Token injected: $token")
-            }
-        }
+    mainActivityInstance?.runOnUiThread {
+        mainActivityInstance?.webView?.evaluateJavascript(
+            "window.fcmToken = '$token'; console.log('✅ FCM Token injected'); if (typeof onFcmTokenReady === 'function') onFcmTokenReady();",
+            null
+        )
+        Log.d(TAG, "✅ FCM Token injected: $token")
+    }
+}
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -128,15 +128,15 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        task.result?.let { token ->
-                            view?.evaluateJavascript(
-                                "window.fcmToken = '$token'; console.log('🔄 FCM Token re-injected');",
-                                null
-                            )
-                        }
-                    }
-                }
+    if (task.isSuccessful) {
+        task.result?.let { token ->
+            view?.evaluateJavascript(
+                "window.fcmToken = '$token'; console.log('🔄 FCM Token re-injected'); if (typeof onFcmTokenReady === 'function') onFcmTokenReady();",
+                null
+            )
+        }
+    }
+}
             }
         }
 
@@ -152,15 +152,15 @@ class MainActivity : AppCompatActivity() {
         )
 
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (task.isSuccessful) {
-                task.result?.let { token ->
-                    webView.evaluateJavascript(
-                        "window.fcmToken = '$token'; console.log('🔑 FCM Token pre-injected');",
-                        null
-                    )
-                }
-            }
+    if (task.isSuccessful) {
+        task.result?.let { token ->
+            webView.evaluateJavascript(
+                "window.fcmToken = '$token'; console.log('🔑 FCM Token pre-injected'); if (typeof onFcmTokenReady === 'function') onFcmTokenReady();",
+                null
+            )
         }
+    }
+}
 
         // 콜드 스타트(딥링크로 앱이 처음 실행된 경우) — webView 준비 이후 처리
         intent?.data?.let { uri -> handleDeepLink(uri) }
