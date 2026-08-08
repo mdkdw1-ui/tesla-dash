@@ -48,12 +48,33 @@ dependencies {
     implementation("androidx.browser:browser:1.8.0")
 }
 
-// 📌 루트 폴더의 www/icon.png를 앱 아이콘(mipmap-hdpi/ic_launcher.png)으로 자동 복사
-val copyWwwIcon = tasks.register<Copy>("copyWwwIcon") {
-    from(rootProject.file("www/icon.png"))
-    into("src/main/res/mipmap-hdpi")
-    rename("icon.png", "ic_launcher.png")
+// 📌 www/icon.png를 모든 해상도에 복사하고, 기본 원형 아이콘(v26 XML)을 제거하는 태스크
+val copyWwwIcon = tasks.register("copyWwwIcon") {
+    doLast {
+        val iconFile = rootProject.file("www/icon.png")
+        if (iconFile.exists()) {
+            // 1. 모든 해상도 폴더에 PNG 복사 (각종 기기 대응)
+            val densities = listOf("mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi")
+            densities.forEach { density ->
+                val destDir = file("src/main/res/mipmap-$density")
+                destDir.mkdirs()
+                iconFile.copyTo(File(destDir, "ic_launcher.png"), overwrite = true)
+                iconFile.copyTo(File(destDir, "ic_launcher_round.png"), overwrite = true)
+            }
+
+            // 2. 안드로이드 기본 적응형 원형 아이콘(v26 XML) 삭제 (PNG가 우선 적용되도록 함)
+            val v26Dir = file("src/main/res/mipmap-anydpi-v26")
+            if (v26Dir.exists()) {
+                v26Dir.deleteRecursively()
+            }
+        }
+    }
 }
+
+tasks.named("preBuild") {
+    dependsOn(copyWwwIcon)
+}
+
 
 tasks.named("preBuild") {
     dependsOn(copyWwwIcon)
