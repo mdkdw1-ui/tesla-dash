@@ -83,6 +83,29 @@
     font-weight: 700;
     font-size: 10.5px;
   }
+  
+  /* 모달 애니메이션 */
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* input 포커스 효과 */
+input:focus {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* placeholder 스타일 */
+::placeholder {
+  color: #4b5563;
+  font-weight: 400;
+}
   </style>
 </head>
 <body class="min-h-screen flex flex-col pb-10 selection:bg-blue-500 selection:text-white">
@@ -93,7 +116,7 @@
         ⚡
       </div>
       <div>
-        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 1.45</h1>
+        <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Tesla Command Hub 2026</h1>
         <p class="text-[10px] text-gray-400 font-medium tracking-wide">Monitor & Guardian System</p>
       </div>
     </div>
@@ -528,42 +551,109 @@
   </main>
 
   <!-- 설정 모달 -->
-  <div id="modal-config" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-    <div class="glass-card rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-gray-800">
-      <h3 class="text-base font-extrabold text-white flex items-center gap-2"><i class="fa-solid fa-gear text-blue-400"></i> API 및 설정 정보</h3>
-      <form onsubmit="saveConfig(event)" class="space-y-3.5 text-xs">
-        <div>
-          <label class="block text-gray-400 mb-1 font-medium">카카오맵 API Key</label>
-          <input type="text" id="input-kakao-key" required class="w-full bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-white font-mono focus:border-blue-500 outline-none">
+<div id="modal-config" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+  <div class="glass-card rounded-2xl max-w-md w-full p-5 shadow-2xl border border-gray-700/50 animate-[modalFadeIn_0.3s_ease-out]">
+
+    <!-- 헤더 -->
+    <div class="flex items-center justify-between mb-5 pb-3 border-b border-gray-700/50">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-900/30">
+          <i class="fa-solid fa-sliders text-white text-sm"></i>
         </div>
-        <div>
-          <label class="block text-gray-400 mb-1 font-medium">Supabase URL</label>
-          <input type="url" id="input-supabase-url" required placeholder="https://xxx.supabase.co" class="w-full bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-white font-mono focus:border-blue-500 outline-none">
+        <div class="min-w-0">
+          <h3 class="text-sm font-extrabold text-white truncate">설정</h3>
+          <p class="text-[10px] text-gray-400 truncate">API 및 차량 연결 정보</p>
         </div>
-        <div>
-          <label class="block text-gray-400 mb-1 font-medium">Supabase Key (Anon 또는 Service Key)</label>
-          <input type="password" id="input-supabase-key" required class="w-full bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-white font-mono focus:border-blue-500 outline-none">
+      </div>
+      <button onclick="closeConfigModal()" class="shrink-0 p-1.5 rounded-lg hover:bg-gray-800/80 text-gray-400 hover:text-white transition-colors">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+
+    <form onsubmit="saveConfig(event)" class="space-y-3">
+
+      <!-- 카카오맵 API Key -->
+      <div>
+        <label class="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 mb-1 truncate">
+          <span class="w-1.5 h-1.5 rounded-full bg-yellow-500 shrink-0"></span> 카카오맵 API Key
+        </label>
+        <div class="relative">
+          <i class="fa-solid fa-map-location-dot absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs"></i>
+          <input type="text" id="input-kakao-key" required
+                 class="w-full bg-gray-900/80 border border-gray-700/60 rounded-xl pl-9 pr-3 py-2 text-white text-xs font-mono placeholder:text-gray-600 focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all truncate">
         </div>
+      </div>
+
+      <!-- Supabase URL + Key : 2열 배치 -->
+      <div class="grid grid-cols-2 gap-2.5">
         <div>
-          <label class="block text-gray-400 mb-1 font-medium">GitHub Personal Access Token</label>
-          <input type="password" id="input-gh-token" placeholder="ghp_xxxx..." class="w-full bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-white font-mono focus:border-blue-500 outline-none">
-        </div>
-        <div>
-          <label class="block text-gray-400 mb-1 font-medium">Tesla Vehicle ID / VIN</label>
-          <div class="flex gap-2">
-            <input type="text" id="input-vehicle-id" placeholder="차량 ID 입력" class="flex-1 bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-white font-mono focus:border-blue-500 outline-none">
-            <button type="button" onclick="autoFetchVehicleId()" class="px-3 py-2 bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 rounded-xl text-xs font-bold hover:bg-emerald-600/50 transition">⚡ 자동조회</button>
+          <label class="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 mb-1 truncate">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span> Supabase URL
+          </label>
+          <div class="relative">
+            <i class="fa-solid fa-database absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs"></i>
+            <input type="url" id="input-supabase-url" required placeholder="xxx.supabase.co"
+                   class="w-full bg-gray-900/80 border border-gray-700/60 rounded-xl pl-9 pr-2 py-2 text-white text-xs font-mono placeholder:text-gray-600 focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all truncate">
           </div>
         </div>
-               </div>
-        <div class="flex space-x-2 pt-3">
-          <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-blue-900/30">저장 및 적용</button>
-          <button type="button" onclick="closeConfigModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl transition">취소</button>
+        <div>
+          <label class="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 mb-1 truncate">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span> Supabase Key
+          </label>
+          <div class="relative">
+            <i class="fa-solid fa-key absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs"></i>
+            <input type="password" id="input-supabase-key" required
+                   class="w-full bg-gray-900/80 border border-gray-700/60 rounded-xl pl-9 pr-2 py-2 text-white text-xs font-mono placeholder:text-gray-600 focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all truncate">
+          </div>
         </div>
-      </form>
-    </div>
-  </div>
+      </div>
 
+      <!-- GitHub Token -->
+      <div>
+        <label class="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 mb-1 truncate">
+          <span class="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0"></span> GitHub Token
+          <span class="text-[9px] text-gray-500 font-normal">(선택)</span>
+        </label>
+        <div class="relative">
+          <i class="fa-brands fa-github absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs"></i>
+          <input type="password" id="input-gh-token" placeholder="ghp_xxxx..."
+                 class="w-full bg-gray-900/80 border border-gray-700/60 rounded-xl pl-9 pr-3 py-2 text-white text-xs font-mono placeholder:text-gray-600 focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all truncate">
+        </div>
+      </div>
+
+      <!-- Tesla Vehicle ID -->
+      <div>
+        <label class="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 mb-1 truncate">
+          <span class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span> Tesla Vehicle ID
+        </label>
+        <div class="flex gap-1.5">
+          <div class="relative flex-1 min-w-0">
+            <i class="fa-solid fa-car absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs"></i>
+            <input type="text" id="input-vehicle-id" placeholder="차량 ID"
+                   class="w-full bg-gray-900/80 border border-gray-700/60 rounded-xl pl-9 pr-2 py-2 text-white text-xs font-mono placeholder:text-gray-600 focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all truncate">
+          </div>
+          <button type="button" onclick="autoFetchVehicleId()"
+                  class="shrink-0 px-3 py-2 bg-gradient-to-r from-emerald-600/40 to-emerald-700/40 hover:from-emerald-600/60 hover:to-emerald-700/60 text-emerald-300 border border-emerald-500/40 rounded-xl text-[10px] font-bold transition-all whitespace-nowrap shadow-lg shadow-emerald-900/20 flex items-center gap-1">
+            <i class="fa-solid fa-rotate-right text-[9px]"></i> 조회
+          </button>
+        </div>
+      </div>
+
+      <!-- 버튼 -->
+      <div class="flex gap-2 pt-3 border-t border-gray-700/50">
+        <button type="submit"
+                class="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all shadow-lg shadow-blue-900/30 flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-check text-[11px]"></i> 저장
+        </button>
+        <button type="button" onclick="closeConfigModal()"
+                class="flex-1 bg-gray-800/80 hover:bg-gray-700/80 text-gray-300 hover:text-white font-bold py-2.5 rounded-xl text-xs transition-all border border-gray-700/50 flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-xmark text-[11px]"></i> 취소
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
   <!-- 📊 6개월 추세 모달 -->
   <div id="trend-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md hidden p-4">
     <div class="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-2xl p-5 shadow-2xl relative">
