@@ -664,9 +664,7 @@ input:focus {
     </form>
   </div>
 </div>
-    </form>
-  </div>
-</div>
+    
   <!-- 📊 6개월 추세 모달 -->
   <div id="trend-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md hidden p-4">
     <div class="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-2xl p-5 shadow-2xl relative">
@@ -2774,20 +2772,19 @@ function formatDateTimeAmPm(dateObj) {
   // 📌 지도 폴리라인 및 인포윈도우
   // ============================================================
   function buildTripInfoWindowHtml(t) {
-    function buildTripInfoWindowHtml(t) {
   const dist = Number(t.moveKM ?? t.move_km ?? 0).toFixed(1);
   const mins = t.durationMin ?? t.duration_min ?? 0;
   const batUsed = Math.round(Number(t.useBattery ?? t.use_battery ?? 0));
   const temp = (t.outsideTemp !== undefined && t.outsideTemp !== null) ? `${Math.round(Number(t.outsideTemp))}°C` : '—';
   const timeStr = formatDateTimeAmPm(new Date(t.timestamp || t.created_at));
-    return `
-      <div style="padding:9px 12px;font-size:12px;line-height:1.55;max-width:230px;background:#12141c;color:#f3f4f6;border-radius:10px;border:1px solid #374151;box-shadow:0 4px 14px rgba(0,0,0,0.4);">
-        <div style="font-weight:800;margin-bottom:3px;white-space:nowrap;">${t.startDong || '출발지'} → ${t.endDong || '도착지'}</div>
-        <div style="color:#9ca3af;">${timeStr} · ${dist}km / ${mins}분</div>
-        <div style="color:#9ca3af;">🔋 사용 -${batUsed}% · 🌡️ ${temp}</div>
-      </div>
-    `;
-  }
+  return `
+    <div style="padding:9px 12px;font-size:12px;line-height:1.55;max-width:230px;background:#12141c;color:#f3f4f6;border-radius:10px;border:1px solid #374151;box-shadow:0 4px 14px rgba(0,0,0,0.4);">
+      <div style="font-weight:800;margin-bottom:3px;white-space:nowrap;">${t.startDong || '출발지'} → ${t.endDong || '도착지'}</div>
+      <div style="color:#9ca3af;">${timeStr} · ${dist}km / ${mins}분</div>
+      <div style="color:#9ca3af;">🔋 사용 -${batUsed}% · 🌡️ ${temp}</div>
+    </div>
+  `;
+}
 
   function attachTripInfoWindow(polyline, trip) {
     if (!window.kakao || !kakao.maps || !polyline) return;
