@@ -509,8 +509,7 @@
         <!-- 👇 블루투스 인사 버튼 추가 -->
         <div class="flex gap-2 text-xs pt-1 flex-wrap">
           <button type="button" onclick="testFlashLights()" class="flex-1 min-w-[80px] bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2.5 rounded-xl transition shadow-md">⚡ 전조등 테스트</button>
-          <button type="button" onclick="testNtfy()" class="flex-1 min-w-[80px] bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-bold py-2.5 rounded-xl transition shadow-md">📱 ntfy 테스트</button>
-          <button type="button" onclick="triggerBluetoothGreeting()" class="flex-1 min-w-[80px] bg-blue-800/50 hover:bg-blue-700 text-blue-200 border border-blue-500/50 font-bold py-2.5 rounded-xl transition shadow-md">
+            <button type="button" onclick="triggerBluetoothGreeting()" class="flex-1 min-w-[80px] bg-blue-800/50 hover:bg-blue-700 text-blue-200 border border-blue-500/50 font-bold py-2.5 rounded-xl transition shadow-md">
             🚗 블루투스 인사
           </button>
         </div>
@@ -556,10 +555,7 @@
             <button type="button" onclick="autoFetchVehicleId()" class="px-3 py-2 bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 rounded-xl text-xs font-bold hover:bg-emerald-600/50 transition">⚡ 자동조회</button>
           </div>
         </div>
-        <div>
-          <label class="block text-gray-400 mb-1 font-medium">ntfy 알림 토픽</label>
-          <input type="text" id="input-ntfy-topic" placeholder="MJYAz6ZyjXiujaTDpJ" class="w-full bg-gray-900 border border-gray-800 rounded-xl p-2.5 text-white font-mono focus:border-blue-500 outline-none">
-        </div>
+               </div>
         <div class="flex space-x-2 pt-3">
           <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-blue-900/30">저장 및 적용</button>
           <button type="button" onclick="closeConfigModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl transition">취소</button>
@@ -593,7 +589,7 @@
     key: '', 
     ghToken: '', 
     vehicleId: '3744141651867089', 
-    ntfyTopic: 'MJYAz6ZyjXiujaTDpJ' 
+    
   };
 
   // ============================================================
@@ -661,25 +657,33 @@
   }
 
   async function syncGuardianState(active) {
-    if (!RENDER_BASE_URL || RENDER_BASE_URL.includes("<YOUR-RENDER-APP>")) {
-      addLog('⚠️ Render URL이 설정되지 않아 가디언 상태 동기화를 건너뜁니다.');
-      return;
-    }
-    try {
-      const res = await fetch(`${RENDER_BASE_URL}/api/guardian`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active })
-      });
-      if (res.ok) {
-        addLog(`✅ Guardian state synced to Render: ${active ? 'ON' : 'OFF'}`);
-      } else {
-        addLog('⚠️ Guardian state sync failed: ' + res.status);
-      }
-    } catch (e) {
-      addLog('⚠️ Guardian state sync error: ' + e.message);
-    }
+  if (!RENDER_BASE_URL || RENDER_BASE_URL.includes("<YOUR-RENDER-APP>")) {
+    addLog('⚠️ Render URL이 설정되지 않아 가디언 상태 동기화를 건너뜁니다.');
+    return;
   }
+  try {
+    const res = await fetch(`${RENDER_BASE_URL}/api/guardian`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active, fcmToken: window.fcmToken || null })
+    });
+    if (res.ok) {
+      addLog(`✅ Guardian state synced to Render: ${active ? 'ON' : 'OFF'}`);
+    } else {
+      addLog('⚠️ Guardian state sync failed: ' + res.status);
+    }
+  } catch (e) {
+    addLog('⚠️ Guardian state sync error: ' + e.message);
+  }
+}
+
+// FCM 토큰이 안드로이드에서 주입되는 즉시 서버로 재동기화
+window.onFcmTokenReady = function() {
+  addLog('📱 FCM 토큰 수신 → 서버 동기화');
+  const toggle = document.getElementById('appMainToggle');
+  syncGuardianState(toggle ? toggle.checked : false);
+};
+
 
   async function triggerBluetoothGreeting() {
     if (!RENDER_BASE_URL || RENDER_BASE_URL.includes("<YOUR-RENDER-APP>")) {
@@ -869,8 +873,7 @@ window.handleOAuthCode = function(code) {
       key: document.getElementById('input-supabase-key').value.trim(),
       ghToken: document.getElementById('input-gh-token').value.trim(),
       vehicleId: document.getElementById('input-vehicle-id').value.trim(),
-      ntfyTopic: document.getElementById('input-ntfy-topic').value.trim()
-    };
+          };
 
     localStorage.setItem('tesla_dashboard_config', CryptoJS.AES.encrypt(JSON.stringify(configObj), SECRET_SALT).toString());
     closeConfigModal();
@@ -886,8 +889,7 @@ window.handleOAuthCode = function(code) {
     if (configObj.key) document.getElementById('input-supabase-key').value = configObj.key;
     if (configObj.ghToken) document.getElementById('input-gh-token').value = configObj.ghToken;
     if (configObj.vehicleId) document.getElementById('input-vehicle-id').value = configObj.vehicleId;
-    if (configObj.ntfyTopic) document.getElementById('input-ntfy-topic').value = configObj.ntfyTopic;
-    document.getElementById('modal-config').classList.remove('hidden');
+        document.getElementById('modal-config').classList.remove('hidden');
   }
 
   function closeConfigModal() {
@@ -1167,92 +1169,36 @@ window.handleOAuthCode = function(code) {
   // 가디언 모드 관련 함수 (Render 상태 동기화 추가)
   // ============================================================
   async function handleToggleChange(checkbox) {
-    const labelText = document.getElementById('toggleLabelText');
+  const labelText = document.getElementById('toggleLabelText');
 
-    if (checkbox.checked) {
-      if (typeof addLog === 'function') addLog('🔍 차량 감시 모드(Sentry Mode) 상태 진단 중...');
-      const sentryResult = await checkIsVehicleSentryActiveWithDebug();
+  if (checkbox.checked) {
+    addLog('🛡️ 가디언 활성화 - Render 서버 동기화 중...');
+    await syncGuardianState(true);
 
-      if (sentryResult.isActive) {
-        if (labelText) { labelText.innerText = '기능 ON'; labelText.style.color = '#10b981'; }
-        if (typeof addLog === 'function') addLog('✅ 감시 모드 ON 확인됨. 백그라운드 가디언 서비스를 시작합니다.');
-        
-        // 👇 Render에 가디언 ON 동기화
-        await syncGuardianState(true);
-        
-        if (typeof checkGuardianVehicleState === 'function') checkGuardianVehicleState();
+    if (labelText) { labelText.innerText = '기능 ON'; labelText.style.color = '#10b981'; }
+    updateGuardianStatusUI('sentry', '🛡️ 가디언 대기 중 (Render 활성)');
 
-        if (window.AndroidBridge) {
-          const interval = parseInt(document.getElementById('guardianPollInterval')?.value, 10) || 5;
-          const topic = configObj.ntfyTopic || 'MJYAz6ZyjXiujaTDpJ';
-          const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '';
-
-          if (validToken) {
-            window.AndroidBridge.startGuardianService(accessToken, configObj.vehicleId || '3744141651867089', interval, topic);
-            if (typeof startMonitoring === 'function') startMonitoring();
-          } else {
-            checkbox.checked = false;
-            if (labelText) { labelText.innerText = '기능 OFF'; labelText.style.color = '#aaa'; }
-            console.warn('⚠️ 유효한 테슬라 Access Token이 없어 가디언 서비스를 시작할 수 없습니다.');
-            alert('테슬라 로그인이 먼저 필요합니다.');
-          }
-        } else {
-          if (typeof startMonitoring === 'function') startMonitoring();
-        }
-      } else {
-        checkbox.checked = false;
-        if (labelText) { labelText.innerText = '기능 OFF'; labelText.style.color = '#aaa'; }
-        if (typeof stopMonitoring === 'function') stopMonitoring();
-        if (window.AndroidBridge) window.AndroidBridge.stopGuardianService();
-        if (typeof addLog === 'function') addLog(`🛑 [감시모드 중단] 사유: ${sentryResult.errorMessage}`);
-        alert(`차량 감시 모드를 활성화할 수 없습니다.\n${sentryResult.errorMessage}`);
-      }
-    } else {
-      if (labelText) { labelText.innerText = '기능 OFF'; labelText.style.color = '#aaa'; }
-      if (window.AndroidBridge) window.AndroidBridge.stopGuardianService();
-      if (typeof stopMonitoring === 'function') stopMonitoring();
-      // 👇 Render에 가디언 OFF 동기화
-      await syncGuardianState(false);
-      updateGuardianStatusUI('sleep', '❓ 로그인/데이터 필요');
-    }
-  }
-
-  async function checkIsVehicleSentryActiveWithDebug() {
-    try {
-      if (typeof addLog === 'function') addLog('📡 1단계: Vercel 백엔드 Sentry API 확인 중...');
-      const res = await fetch('https://tesla-sync-api.vercel.app/api/sentry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: accessToken, vehicleId: configObj.vehicleId })
-      });
+    if (window.AndroidBridge) {
+      const validToken = accessToken && accessToken !== 'dummy_token' && accessToken.trim() !== '';
+      const interval = parseInt(document.getElementById('guardianPollInterval')?.value, 10) || 5;
       
-      if (res.ok) {
-        const data = await res.json();
-        if (data.sentry_mode === true) {
-          if (typeof addLog === 'function') addLog('✅ Vercel API: Sentry Mode [ON] 확인됨');
-          return { isActive: true, errorMessage: '성공' };
-        } else if (data.sentry_mode === false) {
-          return { isActive: false, errorMessage: '차량의 실제 감시 모드가 꺼져 있습니다.' };
-        }
-      }
-    } catch(e) {
-      if (typeof addLog === 'function') addLog(`⚠️ Vercel 통신 예외 발생: ${e.message}`);
-    }
-
-    if (typeof addLog === 'function') addLog('📡 2단계: DB 최신 차량 상태 확인 중...');
-    if (vehicleRows && vehicleRows.length > 0) {
-      const latest = vehicleRows[0];
-      let rawObj = latest.raw_data;
-      if (typeof rawObj === 'string') { try { rawObj = JSON.parse(rawObj); } catch(e){} }
-
-      if (latest.sentry_mode === true || latest.is_sentry === true || rawObj?.vehicle_state?.sentry_mode === true) {
-        if (typeof addLog === 'function') addLog('✅ Supabase DB: Sentry Mode [ON]');
-        return { isActive: true, errorMessage: '성공' };
+      if (validToken) {
+        window.AndroidBridge.startGuardianService(accessToken, configObj.vehicleId || '', interval, topic);
       }
     }
 
-    return { isActive: false, errorMessage: '감시 모드가 OFF이거나 상태를 불러올 수 없습니다.' };
+    if (typeof startMonitoring === 'function') startMonitoring();
+  } else {
+    if (labelText) { labelText.innerText = '기능 OFF'; labelText.style.color = '#aaa'; }
+    if (window.AndroidBridge) window.AndroidBridge.stopGuardianService();
+    if (typeof stopMonitoring === 'function') stopMonitoring();
+    await syncGuardianState(false);
+    updateGuardianStatusUI('sleep', '⏸️ 가디언 비활성');
   }
+}
+
+
+  
 
   function startMonitoring() {
     const inputEl = document.getElementById('guardianPollInterval');
@@ -1272,59 +1218,23 @@ window.handleOAuthCode = function(code) {
   }
 
   async function checkGuardianVehicleState() {
-    const vehicleId = (typeof configObj !== 'undefined' && configObj) ? configObj.vehicleId : null;
-    if (!vehicleId) return;
-
-    try {
-      const res = await fetch('https://tesla-sync-api.vercel.app/api/sentry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: (typeof accessToken !== 'undefined' ? accessToken : ''), vehicleId: vehicleId })
-      });
-
-      if (!res.ok) { 
-        if (typeof updateGuardianStatusUI === 'function') updateGuardianStatusUI('sleep', '🌙 응답 대기/오프라인'); 
-        return; 
-      }
-
+  try {
+    const res = await fetch(`${RENDER_BASE_URL}/health`);
+    if (res.ok) {
       const data = await res.json();
-      if (data.success) {
-        const sentryActive = data.sentry_mode;
-        const isLocked = data.locked ?? true;
-
-        if (!sentryActive) {
-          if (typeof addLog === 'function') addLog('⚠️ 감시 모드 OFF 전환 감지. 가디언을 정지합니다.');
-          const toggle = document.getElementById('appMainToggle');
-          if (toggle) { 
-            toggle.checked = false; 
-            if (typeof handleToggleChange === 'function') handleToggleChange(toggle); 
-          }
-          return;
-        }
-
-        if (typeof updateGuardianStatusUI === 'function') updateGuardianStatusUI('sentry', '🛡️ 가디언 가동 중');
-
-        const isDoorOpen = data.doors_open && (data.doors_open.df || data.doors_open.dr || data.doors_open.pf || data.doors_open.pr);
-        const isTrunkOpen = data.trunks_open && (data.trunks_open.ft || data.trunks_open.rt);
-
-        if (isLocked && (isDoorOpen || isTrunkOpen)) {
-          const targetName = isDoorOpen && isTrunkOpen ? '문/트렁크' : isDoorOpen ? '도어' : '트렁크';
-          if (typeof addLog === 'function') addLog(`🚨 [경고] 잠금 상태에서 ${targetName} 무단 열림 감지!`);
-          await sendNtfyNotification(`🚨 테슬라 ${targetName} 무단 열림`, `차량이 잠긴 상태에서 ${targetName}가 열렸습니다!`, 'high');
-        }
-
-        if (data.sentry_mode_type === 'Panic' || data.sentry_mode_type === 'Alarm') {
-          if (typeof addLog === 'function') addLog(`🚨🚨 [비상] 차량 충격/위협 경보 발생! (${data.sentry_mode_type})`);
-          await flashLights();
-          await sendNtfyNotification('‼️ 테슬라 긴급 충격 경보', '차량 충격 또는 경보 이벤트가 감지되었습니다!', 'urgent');
-        }
-
-        lastSentryState = sentryActive;
-      }
-    } catch (err) { 
-      if (typeof addLog === 'function') addLog(`❌ 가디언 에러: ${err.message}`); 
+      const active = data?.guardianState?.active;
+      updateGuardianStatusUI(
+        active ? 'sentry' : 'sleep',
+        active ? '🛡️ 가디언 대기 중 (Render 활성)' : '⏸️ 가디언 비활성'
+      );
+    } else {
+      updateGuardianStatusUI('sleep', '🌙 Render 응답 없음');
     }
+  } catch (err) {
+    addLog(`❌ 가디언 heartbeat 에러: ${err.message}`);
+    updateGuardianStatusUI('sleep', '🌙 Render 연결 실패');
   }
+}
 
   async function flashLights() {
     const vId = (typeof configObj !== 'undefined' && configObj) ? configObj.vehicleId : null;
@@ -1352,28 +1262,14 @@ window.handleOAuthCode = function(code) {
     }
   }
 
-  async function sendNtfyNotification(title, message, priority = 'high') {
-    const topic = (typeof configObj !== 'undefined' && configObj && configObj.ntfyTopic) ? configObj.ntfyTopic : 'MJYAz6ZyjXiujaTDpJ';
-    try {
-      const res = await fetch(`https://ntfy.sh/${topic}`, {
-        method: 'POST',
-        headers: { 'Title': title, 'Priority': priority, 'Tags': 'car,warning' },
-        body: message
-      });
-      if (res.ok && typeof addLog === 'function') addLog('📱 [자동] ntfy 푸시 알림 발송 완료');
-    } catch (err) { 
-      if (typeof addLog === 'function') addLog(`❌ ntfy 알림 오류: ${err.message}`); 
-    }
-  }
+  
 
   function testFlashLights() { 
     if (typeof accessToken !== 'undefined' && accessToken) flashLights(); 
     else alert('테슬라 로그인을 진행해 주세요.'); 
   }
   
-  function testNtfy() { 
-    sendNtfyNotification('Tesla Guardian Test', 'This is a test notification.'); 
-  }
+  
 
   // ============================================================
   // 대시보드 및 지도 초기화
