@@ -348,6 +348,16 @@ input:focus {
           <span id="m-stat-avg-eff" class="text-2xl font-black text-indigo-400 tracking-tight">- km/kWh</span>
         </div>
 
+
+<div class="glass-card p-4 rounded-2xl space-y-3 shadow-lg">
+  <div class="flex justify-between items-center">
+    <h4 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">🔌 이번 달 충전 내역</h4>
+    <span id="monthly-charging-count" class="text-[10px] text-gray-400 bg-gray-800 px-2 py-0.5 rounded-full font-mono">0건</span>
+  </div>
+  <div id="monthly-charging-container" class="space-y-2 max-h-96 overflow-y-auto pr-1"></div>
+</div>
+
+
         <div class="space-y-4 pt-2">
           <div class="glass-card p-4 rounded-2xl space-y-3 shadow-lg">
             <h4 class="text-xs font-bold text-gray-200 flex items-center gap-1.5">🏆 월간 최대 주행거리 Top 5</h4>
@@ -1847,6 +1857,14 @@ window.handleOAuthCode = function(code) {
     return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
   }
 
+function formatDateTimeAmPm(dateObj) {
+  if (!dateObj || isNaN(dateObj.getTime())) return '-';
+  const y = dateObj.getFullYear();
+  const m = dateObj.getMonth() + 1;
+  const d = dateObj.getDate();
+  return `${y}.${String(m).padStart(2, '0')}.${String(d).padStart(2, '0')} ${formatTimeAmPm(dateObj)}`;
+}
+
   // ============================================================
   // 📌 새벽 5시 이전 운행은 "전날"로 묶어서 표시 (하루 경계를 새벽 5시로 정의)
   // ============================================================
@@ -2756,11 +2774,12 @@ window.handleOAuthCode = function(code) {
   // 📌 지도 폴리라인 및 인포윈도우
   // ============================================================
   function buildTripInfoWindowHtml(t) {
-    const dist = Number(t.moveKM ?? t.move_km ?? 0).toFixed(1);
-    const mins = t.durationMin ?? t.duration_min ?? 0;
-    const batUsed = Math.round(Number(t.useBattery ?? t.use_battery ?? 0));
-    const temp = (t.outsideTemp !== undefined && t.outsideTemp !== null) ? `${Math.round(Number(t.outsideTemp))}°C` : '—';
-    const timeStr = formatTimeAmPm(new Date(t.timestamp || t.created_at));
+    function buildTripInfoWindowHtml(t) {
+  const dist = Number(t.moveKM ?? t.move_km ?? 0).toFixed(1);
+  const mins = t.durationMin ?? t.duration_min ?? 0;
+  const batUsed = Math.round(Number(t.useBattery ?? t.use_battery ?? 0));
+  const temp = (t.outsideTemp !== undefined && t.outsideTemp !== null) ? `${Math.round(Number(t.outsideTemp))}°C` : '—';
+  const timeStr = formatDateTimeAmPm(new Date(t.timestamp || t.created_at));
     return `
       <div style="padding:9px 12px;font-size:12px;line-height:1.55;max-width:230px;background:#12141c;color:#f3f4f6;border-radius:10px;border:1px solid #374151;box-shadow:0 4px 14px rgba(0,0,0,0.4);">
         <div style="font-weight:800;margin-bottom:3px;white-space:nowrap;">${t.startDong || '출발지'} → ${t.endDong || '도착지'}</div>
@@ -3219,6 +3238,11 @@ window.handleOAuthCode = function(code) {
       return ymd && ymd.startsWith(targetPrefix);
     });
 
+const chargeListEl = document.getElementById('monthly-charging-container');
+  if (chargeListEl) chargeListEl.innerHTML = renderMonthlyChargingListHtml(monthChargings);
+  const chargeCountEl = document.getElementById('monthly-charging-count');
+  if (chargeCountEl) chargeCountEl.innerText = `${monthChargings.length}건`;
+
     let totalDist = 0, totalDriveKwh = 0;
     const dayMap = {};
 
@@ -3299,6 +3323,48 @@ window.handleOAuthCode = function(code) {
     const timeEl = document.getElementById('monthly-top-time-container');
     if (timeEl) timeEl.innerHTML = renderTopListHtml(topTimeDays, 'time');
   }
+
+function renderMonthlyChargingListHtml(chargings) {
+  if (!chargings || chargings.length === 0) {
+    return `<div class="text-xs text-gray-500 py-3 text-center">이번 달 충전 기록이 없습니다.</div>`;
+  }
+
+  const sorted = [...chargings].sort((a, b) => {
+    const ta = new Date(a.date || a.created_at).getTime();
+    const tb = new Date(b.date || b.created_at).getTime();
+    return tb - ta;
+  });
+
+  return sorted.map(c => {
+    const d = new Date(c.date || c.created_at);
+    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
+    const timeStr = formatTimeAmPm(d);
+
+    const addedPct = Math.round(Number(c.added_battery_level || 0));
+    const nowBat = Number(c.now_battery ?? 0);
+    const startBat = c.start_battery !== undefined && c.start_battery !== null
+      ? Number(c.start_battery)
+      : Math.max(0, nowBat - addedPct);
+    const endBat = nowBat || (startBat + addedPct);
+
+    const addedKwh = Number(c.added_charging || 0).toFixed(1);
+    const addedRange = Math.round(Number(c.added_battery_range || 0));
+    const isDC = Number(c.added_charging || 0) > 20;
+
+    return `
+      <div class="bg-gray-800/80 p-3 rounded-xl border border-gray-700/60">
+        <div class="flex justify-between items-center mb-1.5">
+          <span class="font-bold text-white text-xs">📅 ${dateStr} <span class="text-gray-400 font-mono text-[10px]">${timeStr}</span></span>
+          <span class="text-[10px] font-bold px-2 py-0.5 rounded ${isDC ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}">${isDC ? '급속(DC)' : '완속(AC)'}</span>
+        </div>
+        <div class="flex justify-between items-center text-[11px]">
+          <span class="text-gray-300">${Math.round(startBat)}% → ${Math.round(endBat)}% <span class="text-emerald-400 font-bold">(+${addedPct}%)</span></span>
+          <span class="text-gray-400">+${addedKwh} kWh · +${addedRange} km</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
 
   // ============================================================
   // 📌 6개월 추세 모달
